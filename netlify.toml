@@ -1,0 +1,22 @@
+[build]
+  publish = "."
+
+# Redirect bare domain to www
+[[redirects]]
+  from = "https://secvisiontech.com/*"
+  to = "https://www.secvisiontech.com/:splat"
+  status = 301
+  force = true
+
+# Redirect Netlify subdomain to custom domain
+[[redirects]]
+  from = "https://secvisiontech.netlify.app/*"
+  to = "https://www.secvisiontech.com/:splat"
+  status = 301
+  force = true
+
+# Custom 404
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
