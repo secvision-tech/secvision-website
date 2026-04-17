@@ -409,34 +409,36 @@ footer a{color:rgba(255,255,255,.4);text-decoration:none;transition:color .3s}fo
     </div>
     <div class="modal-body" id="formBody">
       <p style="font-size:.88rem;color:var(--tl);margin-bottom:1rem">Fill in the details below and our team will reach out within 24 hours with a tailored deployment plan.</p>
-      <form id="contactForm" onsubmit="return submitForm(event)">
+      <form id="contactForm" name="briefing-request" method="POST" data-netlify="true" netlify-honeypot="bot-field" onsubmit="return submitForm(event)">
+        <input type="hidden" name="form-name" value="briefing-request">
+        <p style="display:none"><label>Don't fill this out: <input name="bot-field"></label></p>
         <div class="form-row">
-          <div class="form-group"><label>First Name *</label><input type="text" id="fFirstName" required placeholder="John"></div>
-          <div class="form-group"><label>Last Name *</label><input type="text" id="fLastName" required placeholder="Smith"></div>
+          <div class="form-group"><label>First Name *</label><input type="text" name="firstName" id="fFirstName" required placeholder="John"></div>
+          <div class="form-group"><label>Last Name *</label><input type="text" name="lastName" id="fLastName" required placeholder="Smith"></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>Business Email *</label><input type="email" id="fEmail" required placeholder="john@company.com"></div>
-          <div class="form-group"><label>Phone</label><input type="tel" id="fPhone" placeholder="+1 (555) 000-0000"></div>
+          <div class="form-group"><label>Business Email *</label><input type="email" name="email" id="fEmail" required placeholder="john@company.com"></div>
+          <div class="form-group"><label>Phone</label><input type="tel" name="phone" id="fPhone" placeholder="+1 (555) 000-0000"></div>
         </div>
         <div class="form-row">
-          <div class="form-group"><label>Company Name *</label><input type="text" id="fCompany" required placeholder="Your company"></div>
-          <div class="form-group"><label>Job Title</label><input type="text" id="fTitle" placeholder="SOC Manager"></div>
+          <div class="form-group"><label>Company Name *</label><input type="text" name="company" id="fCompany" required placeholder="Your company"></div>
+          <div class="form-group"><label>Job Title</label><input type="text" name="jobTitle" id="fTitle" placeholder="SOC Manager"></div>
         </div>
         <div class="form-row">
           <div class="form-group"><label>Company Type *</label>
-            <select id="fType" required><option value="">Select...</option><option>MSSP / MDR Provider</option><option>Microsoft Security Partner</option><option>Enterprise SOC</option><option>Cybersecurity Startup</option><option>IT Services / Consulting</option><option>Other</option></select>
+            <select name="companyType" id="fType" required><option value="">Select...</option><option>MSSP / MDR Provider</option><option>Microsoft Security Partner</option><option>Enterprise SOC</option><option>Cybersecurity Startup</option><option>IT Services / Consulting</option><option>Other</option></select>
           </div>
           <div class="form-group"><label>Team Size Needed</label>
-            <select id="fSize"><option value="">Select...</option><option>1–2 Analysts</option><option>3–5 Analysts</option><option>6–10 Analysts</option><option>10+ Analysts</option><option>Not Sure Yet</option></select>
+            <select name="teamSize" id="fSize"><option value="">Select...</option><option>1–2 Analysts</option><option>3–5 Analysts</option><option>6–10 Analysts</option><option>10+ Analysts</option><option>Not Sure Yet</option></select>
           </div>
         </div>
         <div class="form-row">
           <div class="form-group full"><label>Services Interested In</label>
-            <select id="fService"><option value="">Select...</option><option>Microsoft Sentinel SOC Monitoring</option><option>Microsoft Defender XDR Operations</option><option>Azure Cloud Security</option><option>Incident Response & Threat Hunting</option><option>Embedded SOC Staffing</option><option>Multi-SIEM/XDR Support</option><option>Multiple Services</option></select>
+            <select name="services" id="fService"><option value="">Select...</option><option>Microsoft Sentinel SOC Monitoring</option><option>Microsoft Defender XDR Operations</option><option>Azure Cloud Security</option><option>Incident Response & Threat Hunting</option><option>Embedded SOC Staffing</option><option>Multi-SIEM/XDR Support</option><option>Multiple Services</option></select>
           </div>
         </div>
         <div class="form-row">
-          <div class="form-group full"><label>Additional Details</label><textarea id="fDetails" placeholder="Tell us about your current SOC needs, platforms used, and timeline..."></textarea></div>
+          <div class="form-group full"><label>Additional Details</label><textarea name="details" id="fDetails" placeholder="Tell us about your current SOC needs, platforms used, and timeline..."></textarea></div>
         </div>
         <button type="submit" class="form-submit">Submit Request</button>
         <div class="form-note">We'll respond within 24 hours. No spam, no obligations.</div>
@@ -445,7 +447,7 @@ footer a{color:rgba(255,255,255,.4);text-decoration:none;transition:color .3s}fo
     <div class="form-success" id="formSuccess">
       <div style="font-size:3rem;margin-bottom:.5rem">✅</div>
       <h3>Thank You!</h3>
-      <p>Your email client should have opened with the briefing request. Please click Send to deliver it. We'll respond within 24 hours.</p>
+      <p>We've received your briefing request and will respond within 24 hours with a tailored deployment plan.</p>
       <button class="bp" onclick="closeModal()" style="margin-top:1rem">Close</button>
     </div>
   </div>
@@ -456,25 +458,32 @@ function openModal(){document.getElementById('modalOverlay').classList.add('open
 function closeModal(){document.getElementById('modalOverlay').classList.remove('open');document.body.style.overflow=''}
 function submitForm(e){
   e.preventDefault();
-  var v=function(id){var el=document.getElementById(id);return el&&el.value?encodeURIComponent(el.value):'Not%20provided'};
-  var nl='%0D%0A';
-  var body='SECVISION TECHNOLOGIES - BRIEFING REQUEST'+nl;
-  body+='========================================='+nl+nl;
-  body+='First Name: '+v('fFirstName')+nl;
-  body+='Last Name: '+v('fLastName')+nl;
-  body+='Business Email: '+v('fEmail')+nl;
-  body+='Phone: '+v('fPhone')+nl;
-  body+='Company: '+v('fCompany')+nl;
-  body+='Job Title: '+v('fTitle')+nl;
-  body+='Company Type: '+v('fType')+nl;
-  body+='Team Size Needed: '+v('fSize')+nl;
-  body+='Services Interested In: '+v('fService')+nl;
-  body+='Additional Details: '+v('fDetails')+nl+nl;
-  body+='========================================='+nl;
-  body+='Submitted from SecVision Website'+nl;
-  var subject=encodeURIComponent('SecVision Briefing Request - '+v('fFirstName')+' '+v('fLastName')+' - '+v('fCompany'));
-  window.location.href='mailto:sunil_shilimkar@hotmail.com?subject='+subject+'&body='+body;
-  setTimeout(function(){document.getElementById('formBody').style.display='none';document.getElementById('formSuccess').style.display='block'},800);
+  var form = document.getElementById('contactForm');
+  var formData = new FormData(form);
+  var submitBtn = form.querySelector('.form-submit');
+  var originalText = submitBtn.textContent;
+  submitBtn.textContent = 'Submitting...';
+  submitBtn.disabled = true;
+  fetch('/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(formData).toString()
+  })
+  .then(function(response){
+    if(response.ok){
+      document.getElementById('formBody').style.display='none';
+      document.getElementById('formSuccess').style.display='block';
+    } else {
+      alert('There was an error submitting the form. Please email sales@secvisiontech.com directly.');
+      submitBtn.textContent = originalText;
+      submitBtn.disabled = false;
+    }
+  })
+  .catch(function(){
+    alert('Network error. Please email sales@secvisiontech.com directly.');
+    submitBtn.textContent = originalText;
+    submitBtn.disabled = false;
+  });
   return false;
 }
 document.querySelectorAll('a[href^="#"]').forEach(a=>{a.addEventListener('click',e=>{e.preventDefault();const t=document.querySelector(a.getAttribute('href'));if(t)t.scrollIntoView({behavior:'smooth'});document.getElementById('nm').classList.remove('open')})});
