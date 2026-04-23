@@ -341,18 +341,9 @@ function login() {
   var loginBtn = document.getElementById('loginBtn');
   loginBtn.textContent = 'Signing in...';
   loginBtn.disabled = true;
-  msalInstance.loginPopup({
+  msalInstance.loginRedirect({
     scopes: ['openid', 'profile', 'email', 'User.Read'],
     prompt: 'select_account'
-  }).then(function(response) {
-    handleLogin(response);
-  }).catch(function(err) {
-    console.error('Login failed:', err);
-    loginBtn.innerHTML = '<svg viewBox="0 0 21 21" width="20" height="20" fill="#fff"><path d="M0 0h10v10H0zM11 0h10v10H11zM0 11h10v10H0zM11 11h10v10H11z"/></svg> Sign in with Microsoft';
-    loginBtn.disabled = false;
-    if (err.errorCode !== 'user_cancelled') {
-      alert('Sign-in failed: ' + err.message);
-    }
   });
 }
 
@@ -407,16 +398,8 @@ function showUserProfile() {
 }
 
 function logout() {
-  msalInstance.logoutPopup({ account: currentUser }).then(function() {
-    currentUser = null;
-    document.getElementById('loginPage').style.display = 'flex';
-    document.getElementById('appHeader').style.display = 'none';
-    document.getElementById('appPage').classList.remove('active');
-  }).catch(function(err) {
-    console.error('Logout error:', err);
-    sessionStorage.clear();
-    window.location.reload();
-  });
+  sessionStorage.clear();
+  msalInstance.logoutRedirect({ account: currentUser });
 }
 
 function toggleDateInputs() {
