@@ -11,17 +11,14 @@
 :root{--pri:#0F2341;--pm:#1B3A5C;--ac:#0891B2;--al:#22D3EE;--w:#FFF;--off:#F7F9FC;--g100:#DDE4ED;--g3:#8FA0B8;--g5:#5A6F87;--g7:#344054;--tx:#1D2939;--tl:#475467;--bd:rgba(8,145,178,.1);--sh:0 4px 20px rgba(15,35,65,.06)}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:var(--off);color:var(--tx);min-height:100vh;display:flex;flex-direction:column}
-
 .header{background:var(--pri);padding:.6rem 1.5rem;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50}
 .header-left{display:flex;align-items:center;gap:.5rem}
 .header-logo svg{width:28px;height:28px}
 .header-title{font-family:'Playfair Display',serif;font-size:1.1rem;font-weight:700;color:#fff}
 .header-sub{font-size:.6rem;color:var(--al);letter-spacing:.5px}
-.header-right{display:flex;align-items:center;gap:.8rem}
 .user-menu{position:relative;display:flex;align-items:center;gap:.5rem;cursor:pointer;padding:.3rem .5rem;border-radius:8px;transition:background .2s}
 .user-menu:hover{background:rgba(255,255,255,.08)}
-.user-avatar{width:34px;height:34px;border-radius:50%;background:var(--ac);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.8rem;font-weight:700;overflow:hidden}
-.user-avatar img{width:100%;height:100%;object-fit:cover}
+.user-avatar{width:34px;height:34px;border-radius:50%;background:var(--ac);display:flex;align-items:center;justify-content:center;color:#fff;font-size:.8rem;font-weight:700}
 .user-name{color:rgba(255,255,255,.85);font-size:.82rem;font-weight:500}
 .user-dropdown{position:absolute;top:100%;right:0;background:#fff;border-radius:10px;box-shadow:0 12px 40px rgba(15,35,65,.15);min-width:280px;display:none;overflow:hidden;margin-top:.4rem;z-index:100}
 .user-dropdown.open{display:block}
@@ -50,579 +47,375 @@ body{font-family:'DM Sans',sans-serif;background:var(--off);color:var(--tx);min-
 
 .app-page{flex:1;display:none;flex-direction:column}
 .app-page.active{display:flex}
-.main-content{flex:1;max-width:1280px;width:100%;margin:0 auto;padding:1.2rem 1.5rem}
-
-.search-panel{background:#fff;border-radius:12px;box-shadow:var(--sh);padding:1.2rem;margin-bottom:1rem;border:1px solid var(--bd)}
-.search-title{font-size:.85rem;font-weight:700;color:var(--pri);margin-bottom:.8rem;display:flex;align-items:center;gap:.4rem}
+.main-content{flex:1;max-width:1400px;width:100%;margin:0 auto;padding:1rem 1.2rem}
+.search-panel{background:#fff;border-radius:12px;box-shadow:var(--sh);padding:1rem;margin-bottom:.8rem;border:1px solid var(--bd)}
+.search-title{font-size:.85rem;font-weight:700;color:var(--pri);margin-bottom:.6rem;display:flex;align-items:center;gap:.4rem}
 .search-title svg{width:18px;height:18px;fill:var(--ac)}
-.search-grid{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.8rem;align-items:end}
-.search-group{display:flex;flex-direction:column;gap:.25rem}
-.search-group label{font-size:.72rem;font-weight:600;color:var(--g5);text-transform:uppercase;letter-spacing:.5px}
-.search-group select,.search-group input{border:1px solid var(--g100);border-radius:8px;padding:.45rem .6rem;font-size:.82rem;font-family:'DM Sans',sans-serif;color:var(--tx);outline:none;transition:border .2s;background:#fff;min-height:36px}
-.search-group select:focus,.search-group input:focus{border-color:var(--ac)}
-.search-group select[multiple]{min-height:70px}
-.search-btn{padding:.5rem 1.2rem;background:var(--ac);color:#fff;border:none;border-radius:8px;font-size:.82rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;height:36px;white-space:nowrap}
-.search-btn:hover{background:var(--pri)}
-.search-btn:disabled{background:var(--g100);cursor:not-allowed}
-.search-row2{display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.8rem;margin-top:.6rem;align-items:end}
-.date-row{display:flex;gap:.4rem;align-items:center}
-.date-row input{width:130px}
-.date-row span{font-size:.75rem;color:var(--g3)}
+.sf{display:grid;grid-template-columns:repeat(5,1fr) auto;gap:.6rem;align-items:end}
+.sg{display:flex;flex-direction:column;gap:.2rem}
+.sg label{font-size:.68rem;font-weight:600;color:var(--g5);text-transform:uppercase;letter-spacing:.5px}
+.sg select,.sg input{border:1px solid var(--g100);border-radius:6px;padding:.4rem .5rem;font-size:.78rem;font-family:'DM Sans',sans-serif;color:var(--tx);outline:none;transition:border .2s;background:#fff;min-height:34px}
+.sg select:focus,.sg input:focus{border-color:var(--ac)}
+.sg select[multiple]{min-height:62px;font-size:.72rem}
+.sbtn{padding:.45rem 1rem;background:var(--ac);color:#fff;border:none;border-radius:6px;font-size:.78rem;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s;height:34px;white-space:nowrap}
+.sbtn:hover{background:var(--pri)}
+.sbtn:disabled{background:var(--g100);cursor:not-allowed}
+.sf2{display:none;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:.6rem;margin-top:.5rem;align-items:end}
+.sf2.show{display:grid}
+.api-info{font-size:.65rem;color:var(--g3);margin-top:.4rem;text-align:right}
 
-.results-panel{background:#fff;border-radius:12px;box-shadow:var(--sh);border:1px solid var(--bd);overflow:hidden;flex:1;display:flex;flex-direction:column}
-.results-header{padding:.8rem 1.2rem;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center}
-.results-count{font-size:.82rem;color:var(--g5)}
-.results-count strong{color:var(--pri)}
-.table-wrap{overflow-x:auto;flex:1}
-table{width:100%;border-collapse:collapse;font-size:.78rem}
-thead{background:var(--off);position:sticky;top:0}
-th{padding:.6rem .7rem;text-align:left;font-weight:600;color:var(--g5);font-size:.7rem;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--g100);white-space:nowrap}
-td{padding:.55rem .7rem;border-bottom:1px solid var(--off);color:var(--tx);vertical-align:top}
-tr:hover{background:rgba(8,145,178,.02)}
-.td-title{font-weight:600;color:var(--pri);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.td-company{color:var(--ac);font-weight:500}
-.td-skills{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.td-source{display:inline-block;padding:.12rem .4rem;background:var(--off);border:1px solid var(--bd);border-radius:4px;font-size:.65rem;color:var(--ac);font-weight:600}
-.view-btn{padding:.25rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:5px;font-size:.7rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;transition:background .2s;white-space:nowrap}
-.view-btn:hover{background:var(--pri)}
+.rp{background:#fff;border-radius:12px;box-shadow:var(--sh);border:1px solid var(--bd);overflow:hidden;flex:1;display:flex;flex-direction:column}
+.rp-head{padding:.6rem 1rem;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center}
+.rp-count{font-size:.78rem;color:var(--g5)}.rp-count strong{color:var(--pri)}
+.tw{overflow:auto;flex:1;max-height:calc(100vh - 340px)}
+table{width:100%;border-collapse:collapse;font-size:.72rem;table-layout:fixed}
+thead{background:var(--off);position:sticky;top:0;z-index:10}
+th{padding:.5rem .5rem;text-align:left;font-weight:600;color:var(--g5);font-size:.65rem;text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid var(--g100);white-space:nowrap;position:relative;cursor:pointer;user-select:none;overflow:hidden}
+th:hover{color:var(--ac)}
+th .sort-icon{font-size:.6rem;margin-left:.2rem;opacity:.4}
+th.sorted .sort-icon{opacity:1;color:var(--ac)}
+th .resize-handle{position:absolute;right:0;top:0;bottom:0;width:4px;cursor:col-resize;background:transparent}
+th .resize-handle:hover{background:var(--ac)}
+th .col-filter{display:block;margin-top:.2rem;width:100%}
+th .col-filter input{width:100%;padding:.2rem .3rem;border:1px solid var(--g100);border-radius:4px;font-size:.65rem;font-family:'DM Sans',sans-serif;outline:none}
+th .col-filter input:focus{border-color:var(--ac)}
+td{padding:.45rem .5rem;border-bottom:1px solid var(--off);color:var(--tx);vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr:hover td{background:rgba(8,145,178,.02)}
+.td-t{font-weight:600;color:var(--pri)}.td-c{color:var(--ac);font-weight:500}
+.td-src{display:inline-block;padding:.1rem .35rem;background:var(--off);border:1px solid var(--bd);border-radius:4px;font-size:.6rem;color:var(--ac);font-weight:600}
+.vb{padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;transition:background .2s;white-space:nowrap}
+.vb:hover{background:var(--pri)}
 
-.pagination{padding:.8rem 1.2rem;border-top:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center}
-.pag-info{font-size:.75rem;color:var(--g5)}
-.pag-btns{display:flex;gap:.3rem;align-items:center}
-.pag-btn{width:32px;height:32px;border:1px solid var(--g100);border-radius:6px;background:#fff;cursor:pointer;font-size:.75rem;color:var(--g7);display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;transition:all .15s}
-.pag-btn:hover{border-color:var(--ac);color:var(--ac)}
-.pag-btn.active{background:var(--ac);color:#fff;border-color:var(--ac)}
-.pag-btn:disabled{opacity:.4;cursor:not-allowed}
-.pag-jump{display:flex;align-items:center;gap:.3rem;font-size:.72rem;color:var(--g5)}
-.pag-jump input{width:45px;padding:.2rem .4rem;border:1px solid var(--g100);border-radius:5px;font-size:.72rem;text-align:center;font-family:'DM Sans',sans-serif}
+.pag{padding:.6rem 1rem;border-top:1px solid var(--g100);display:none;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem}
+.pag.show{display:flex}
+.pag-info{font-size:.72rem;color:var(--g5)}
+.pag-btns{display:flex;gap:.2rem;align-items:center;flex-wrap:wrap}
+.pb{min-width:28px;height:28px;border:1px solid var(--g100);border-radius:5px;background:#fff;cursor:pointer;font-size:.7rem;color:var(--g7);display:flex;align-items:center;justify-content:center;font-family:'DM Sans',sans-serif;transition:all .15s;padding:0 .3rem}
+.pb:hover{border-color:var(--ac);color:var(--ac)}
+.pb.act{background:var(--ac);color:#fff;border-color:var(--ac)}
+.pb:disabled{opacity:.4;cursor:not-allowed}
+.pag-jump{display:flex;align-items:center;gap:.3rem;font-size:.68rem;color:var(--g5)}
+.pag-jump input{width:40px;padding:.15rem .3rem;border:1px solid var(--g100);border-radius:4px;font-size:.68rem;text-align:center;font-family:'DM Sans',sans-serif}
 
-.detail-overlay{position:fixed;inset:0;background:rgba(15,35,65,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}
-.detail-overlay.open{display:flex}
-.detail-modal{background:#fff;border-radius:14px;max-width:700px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.25)}
-.detail-header{background:var(--pri);padding:1.2rem 1.5rem;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center}
-.detail-header h3{color:#fff;font-family:'Playfair Display',serif;font-size:1.1rem}
-.detail-close{background:none;border:none;color:rgba(255,255,255,.6);font-size:1.5rem;cursor:pointer}
-.detail-close:hover{color:#fff}
-.detail-body{padding:1.5rem}
-.detail-section{margin-bottom:1rem}
-.detail-section h4{font-size:.82rem;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.5px;margin-bottom:.4rem;padding-bottom:.3rem;border-bottom:1px solid var(--bd)}
-.detail-section p,.detail-section li{font-size:.85rem;color:var(--tl);line-height:1.6}
-.detail-section ul{padding-left:1.2rem}
-.detail-section li{margin-bottom:.2rem}
-.detail-meta{display:grid;grid-template-columns:1fr 1fr;gap:.4rem}
-.detail-meta-item{display:flex;justify-content:space-between;padding:.3rem .5rem;background:var(--off);border-radius:5px;font-size:.78rem}
-.detail-meta-label{color:var(--g3)}
-.detail-meta-value{color:var(--pri);font-weight:600}
-.detail-apply{display:inline-block;padding:.55rem 1.5rem;background:var(--ac);color:#fff;text-decoration:none;border-radius:8px;font-weight:700;font-size:.88rem;margin-top:.5rem;transition:background .2s}
-.detail-apply:hover{background:var(--pri)}
-
-.empty-state{text-align:center;padding:3rem 1rem;color:var(--g3)}
-.empty-state svg{width:48px;height:48px;fill:var(--g100);margin-bottom:.8rem}
-.empty-state h3{font-size:1rem;color:var(--g5);margin-bottom:.3rem}
-.empty-state p{font-size:.82rem}
-.loading{text-align:center;padding:2rem;color:var(--g3);font-size:.85rem}
-
-.footer{text-align:center;padding:.6rem;font-size:.65rem;color:var(--g3);background:#fff;border-top:1px solid var(--g100)}
-
-@media(max-width:768px){.search-grid,.search-row2{grid-template-columns:1fr}.detail-meta{grid-template-columns:1fr}.header{padding:.5rem 1rem}.main-content{padding:.8rem}.user-name{display:none}}
+.do{position:fixed;inset:0;background:rgba(15,35,65,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}
+.do.open{display:flex}
+.dm{background:#fff;border-radius:14px;max-width:720px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.25)}
+.dm-h{background:var(--pri);padding:1rem 1.2rem;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center}
+.dm-h h3{color:#fff;font-family:'Playfair Display',serif;font-size:1rem}
+.dm-close{background:none;border:none;color:rgba(255,255,255,.6);font-size:1.4rem;cursor:pointer}.dm-close:hover{color:#fff}
+.dm-body{padding:1.2rem}
+.dm-meta{display:grid;grid-template-columns:1fr 1fr;gap:.35rem;margin-bottom:1rem}
+.dm-mi{display:flex;justify-content:space-between;padding:.3rem .5rem;background:var(--off);border-radius:5px;font-size:.75rem}
+.dm-ml{color:var(--g3)}.dm-mv{color:var(--pri);font-weight:600}
+.dm-sec{margin-bottom:.8rem}
+.dm-sec h4{font-size:.78rem;font-weight:700;color:var(--ac);text-transform:uppercase;letter-spacing:.3px;margin-bottom:.3rem;padding-bottom:.2rem;border-bottom:1px solid var(--bd)}
+.dm-sec p,.dm-sec li{font-size:.82rem;color:var(--tl);line-height:1.55}
+.dm-sec ul{padding-left:1.2rem}.dm-sec li{margin-bottom:.15rem}
+.dm-apply{display:inline-block;padding:.5rem 1.3rem;background:var(--ac);color:#fff;text-decoration:none;border-radius:7px;font-weight:700;font-size:.85rem;margin-top:.5rem;transition:background .2s}
+.dm-apply:hover{background:var(--pri)}
+.empty{text-align:center;padding:2.5rem 1rem;color:var(--g3)}
+.empty h3{font-size:.95rem;color:var(--g5);margin-bottom:.2rem}
+.empty p{font-size:.78rem}
+.loading{text-align:center;padding:2rem;color:var(--g3);font-size:.82rem}
+.footer{text-align:center;padding:.5rem;font-size:.62rem;color:var(--g3);background:#fff;border-top:1px solid var(--g100)}
+@media(max-width:900px){.sf,.sf2{grid-template-columns:1fr 1fr}.dm-meta{grid-template-columns:1fr}}
+@media(max-width:600px){.sf,.sf2{grid-template-columns:1fr}.header{padding:.5rem .8rem}.main-content{padding:.5rem}.user-name{display:none}}
 </style>
 </head>
 <body>
 
-<!-- HEADER -->
 <div class="header" id="appHeader" style="display:none">
   <div class="header-left">
     <div class="header-logo"><svg viewBox="0 0 34 34"><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="#0891B2"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div>
-      <div class="header-title">SecVision Job Hunt</div>
-      <div class="header-sub">SOC & Security Job Intelligence</div>
-    </div>
+    <div><div class="header-title">SecVision Job Hunt</div><div class="header-sub">SOC & Security Job Intelligence</div></div>
   </div>
-  <div class="header-right">
-    <div class="user-menu" id="userMenu" onclick="toggleUserMenu()">
-      <div class="user-avatar" id="userAvatar">SV</div>
-      <span class="user-name" id="userName">User</span>
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="rgba(255,255,255,.5)"><path d="M7 10l5 5 5-5z"/></svg>
-      <div class="user-dropdown" id="userDropdown">
-        <div class="ud-header">
-          <div class="ud-header-name" id="udName">User</div>
-          <div class="ud-header-email" id="udEmail">user@secvisiontech.com</div>
-        </div>
-        <div class="ud-body">
-          <div class="ud-item" onclick="showUserProfile()">
-            <svg viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-            Profile Details
-          </div>
-          <div class="ud-divider"></div>
-          <div class="ud-detail"><span class="ud-detail-label">Role</span><span class="ud-detail-value" id="udRole">User</span></div>
-          <div class="ud-detail"><span class="ud-detail-label">Account created</span><span class="ud-detail-value" id="udCreated">-</span></div>
-          <div class="ud-detail"><span class="ud-detail-label">Last sign-in</span><span class="ud-detail-value" id="udLastLogin">-</span></div>
-          <div class="ud-detail"><span class="ud-detail-label">Token expires</span><span class="ud-detail-value" id="udExpiry">-</span></div>
-          <div class="ud-divider"></div>
-          <div class="ud-item" onclick="logout()" style="color:#E24B4A">
-            <svg viewBox="0 0 24 24" fill="#E24B4A"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
-            Sign Out
-          </div>
-        </div>
+  <div class="user-menu" id="userMenu" onclick="event.stopPropagation();document.getElementById('userDropdown').classList.toggle('open')">
+    <div class="user-avatar" id="userAvatar">SV</div>
+    <span class="user-name" id="userName">User</span>
+    <svg viewBox="0 0 24 24" width="14" height="14" fill="rgba(255,255,255,.5)"><path d="M7 10l5 5 5-5z"/></svg>
+    <div class="user-dropdown" id="userDropdown">
+      <div class="ud-header"><div class="ud-header-name" id="udName">User</div><div class="ud-header-email" id="udEmail">-</div></div>
+      <div class="ud-body">
+        <div class="ud-detail"><span class="ud-detail-label">Role</span><span class="ud-detail-value">SecVision Team</span></div>
+        <div class="ud-detail"><span class="ud-detail-label">Last sign-in</span><span class="ud-detail-value" id="udLogin">-</span></div>
+        <div class="ud-detail"><span class="ud-detail-label">Session expires</span><span class="ud-detail-value" id="udExpiry">-</span></div>
+        <div class="ud-divider"></div>
+        <div class="ud-item" onclick="logout()" style="color:#E24B4A"><svg viewBox="0 0 24 24" fill="#E24B4A"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>Sign Out</div>
       </div>
     </div>
   </div>
 </div>
 
-<!-- LOGIN PAGE -->
 <div class="login-page" id="loginPage">
   <div class="login-card">
     <div class="login-header">
       <svg viewBox="0 0 34 34" width="48" height="48" style="margin-bottom:.5rem"><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="#0891B2"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <h1>SecVision Job Hunt</h1>
-      <p>SOC & Security Job Intelligence Platform</p>
+      <h1>SecVision Job Hunt</h1><p>SOC & Security Job Intelligence Platform</p>
     </div>
     <div class="login-body">
-      <p style="font-size:.85rem;color:var(--tl);margin-bottom:1.2rem;text-align:center">Sign in with your SecVision Microsoft 365 account to access the job hunting platform.</p>
-      <button class="login-btn" id="loginBtn" onclick="login()">
-        <svg viewBox="0 0 21 21"><path d="M0 0h10v10H0zM11 0h10v10H11zM0 11h10v10H0zM11 11h10v10H11z"/></svg>
-        Sign in with Microsoft
-      </button>
-      <div class="login-note">Access restricted to SecVision Technologies team members only.</div>
+      <p style="font-size:.85rem;color:var(--tl);margin-bottom:1.2rem;text-align:center">Sign in with your SecVision Microsoft 365 account.</p>
+      <button class="login-btn" id="loginBtn" onclick="login()"><svg viewBox="0 0 21 21"><path d="M0 0h10v10H0zM11 0h10v10H11zM0 11h10v10H0zM11 11h10v10H11z"/></svg>Sign in with Microsoft</button>
+      <div class="login-note">Access restricted to SecVision team members.</div>
     </div>
   </div>
 </div>
 
-<!-- APP PAGE -->
 <div class="app-page" id="appPage">
   <div class="main-content">
-    <!-- Search Panel -->
     <div class="search-panel">
-      <div class="search-title">
-        <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        Job Search &amp; Hunting
+      <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Job Search & Hunting</div>
+      <div class="sf">
+        <div class="sg"><label>Role</label><select id="sRole" multiple><option value="SOC Analyst" selected>SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
+        <div class="sg"><label>Job Source</label><select id="sSource" multiple><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="CyberSecurityJobs">CyberSecurityJobs</option></select></div>
+        <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
+        <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="3months">Last 3 Months</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
+        <div class="sg"><label>Pages to fetch</label><select id="sPages"><option value="5">50 jobs (5 API calls)</option><option value="10" selected>100 jobs (10 API calls)</option></select></div>
+        <button class="sbtn" id="searchBtn" onclick="searchJobs()">Search</button>
       </div>
-      <div class="search-grid">
-        <div class="search-group">
-          <label>Role</label>
-          <select id="searchRole" multiple>
-            <option value="SOC Analyst" selected>SOC Analyst</option>
-            <option value="Security Engineer">Security Engineer</option>
-            <option value="Security Architect">Security Architect</option>
-            <option value="Threat Hunter">Threat Hunter</option>
-            <option value="Incident Responder">Incident Responder</option>
-            <option value="SIEM Engineer">SIEM Engineer</option>
-            <option value="Cloud Security Engineer">Cloud Security Engineer</option>
-            <option value="Cybersecurity Analyst">Cybersecurity Analyst</option>
-          </select>
-        </div>
-        <div class="search-group">
-          <label>Job Source</label>
-          <select id="searchSource" multiple>
-            <option value="LinkedIn" selected>LinkedIn</option>
-            <option value="Indeed" selected>Indeed</option>
-            <option value="Upwork">Upwork</option>
-            <option value="CyberSeek">CyberSeek</option>
-            <option value="CyberSecurityJobs">CyberSecurityJobs</option>
-            <option value="Dice">Dice</option>
-            <option value="Glassdoor">Glassdoor</option>
-          </select>
-        </div>
-        <div class="search-group">
-          <label>Time Period</label>
-          <select id="searchPeriod" onchange="toggleDateInputs()">
-            <option value="week">Last 1 Week</option>
-            <option value="month" selected>Last 1 Month</option>
-            <option value="3months">Last 3 Months</option>
-            <option value="6months">Last 6 Months</option>
-            <option value="year">Last 1 Year</option>
-            <option value="custom">Custom Date Range</option>
-          </select>
-        </div>
-        <button class="search-btn" id="searchBtn" onclick="searchJobs()">Search</button>
+      <div class="sf2" id="customDates">
+        <div class="sg"><label>From</label><input type="date" id="dateFrom"></div>
+        <div class="sg"><label>To</label><input type="date" id="dateTo"></div>
       </div>
-      <div class="search-row2" id="customDateRow" style="display:none">
-        <div class="search-group">
-          <label>From Date</label>
-          <input type="date" id="dateFrom">
-        </div>
-        <div class="search-group">
-          <label>To Date</label>
-          <input type="date" id="dateTo">
-        </div>
-        <div></div><div></div>
-      </div>
+      <div class="api-info" id="apiInfo"></div>
     </div>
-
-    <!-- Results Panel -->
-    <div class="results-panel">
-      <div class="results-header">
-        <div class="results-count" id="resultsCount">Enter search criteria and click Search to find cybersecurity job postings.</div>
+    <div class="rp">
+      <div class="rp-head"><div class="rp-count" id="rCount">Select criteria and click Search.</div></div>
+      <div class="tw" id="tableWrap">
+        <table id="rTable" style="display:none"><thead><tr id="thRow"></tr><tr id="thFilter"></tr></thead><tbody id="rBody"></tbody></table>
+        <div class="empty" id="emptyState"><h3>Start your job hunt</h3><p>Select roles, sources, and time period, then click Search.</p></div>
+        <div class="loading" id="loadState" style="display:none">Searching across job boards (fetching up to 100 jobs)...</div>
       </div>
-      <div class="table-wrap">
-        <table id="resultsTable" style="display:none">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Role / Title</th>
-              <th>Company</th>
-              <th>Experience</th>
-              <th>Key Skills</th>
-              <th>Certifications</th>
-              <th>Source</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody id="resultsBody"></tbody>
-        </table>
-        <div class="empty-state" id="emptyState">
-          <svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-          <h3>Start your job hunt</h3>
-          <p>Select roles, sources, and time period, then click Search.</p>
-        </div>
-        <div class="loading" id="loadingState" style="display:none">Searching across job boards...</div>
-      </div>
-      <!-- Pagination -->
-      <div class="pagination" id="pagination" style="display:none">
-        <div class="pag-info" id="pagInfo">Showing 1-10</div>
+      <div class="pag" id="pag">
+        <div class="pag-info" id="pagInfo"></div>
         <div class="pag-btns" id="pagBtns"></div>
-        <div class="pag-jump">
-          Go to <input type="number" id="pagJumpInput" min="1" onkeydown="if(event.key==='Enter')jumpToPage()"> <button class="pag-btn" onclick="jumpToPage()" style="width:auto;padding:0 .5rem;font-size:.7rem">Go</button>
-        </div>
+        <div class="pag-jump">Go to <input type="number" id="pjInput" min="1" onkeydown="if(event.key==='Enter')jumpPage()"><button class="pb" onclick="jumpPage()" style="width:auto;padding:0 .4rem;font-size:.65rem">Go</button></div>
       </div>
     </div>
   </div>
   <div class="footer">&copy; 2025 - 2026 SecVision Technologies, LLP. All Rights Reserved.</div>
 </div>
 
-<!-- DETAIL MODAL -->
-<div class="detail-overlay" id="detailOverlay" onclick="if(event.target===this)closeDetail()">
-  <div class="detail-modal">
-    <div class="detail-header">
-      <h3 id="detailTitle">Job Details</h3>
-      <button class="detail-close" onclick="closeDetail()">&times;</button>
-    </div>
-    <div class="detail-body" id="detailBody"></div>
-  </div>
+<div class="do" id="detailOverlay" onclick="if(event.target===this)closeDet()">
+  <div class="dm"><div class="dm-h"><h3 id="detTitle">Details</h3><button class="dm-close" onclick="closeDet()">&times;</button></div><div class="dm-body" id="detBody"></div></div>
 </div>
 
 <script>
-// MSAL Configuration
-var msalConfig = {
-  auth: {
-    clientId: 'dc517c46-dcf0-4d38-80e0-3cda854a5d59',
-    authority: 'https://login.microsoftonline.com/06f8ce50-3995-4966-9e25-7cfd7cd94a81',
-    redirectUri: window.location.origin + '/hunt/',
-    postLogoutRedirectUri: window.location.origin + '/hunt/'
-  },
-  cache: { cacheLocation: 'sessionStorage', storeAuthStateInCookie: false }
-};
+var msalConfig={auth:{clientId:'dc517c46-dcf0-4d38-80e0-3cda854a5d59',authority:'https://login.microsoftonline.com/06f8ce50-3995-4966-9e25-7cfd7cd94a81',redirectUri:location.origin+'/hunt/',postLogoutRedirectUri:location.origin+'/hunt/'},cache:{cacheLocation:'sessionStorage'}};
+var msal_=new msal.PublicClientApplication(msalConfig),curUser=null,allJobs=[],filtered=[],curPage=1,perPage=25,sortCol='',sortDir=1,colFilters={};
 
-var msalInstance = new msal.PublicClientApplication(msalConfig);
-var currentUser = null;
-var allJobs = [];
-var currentPage = 1;
-var totalPages = 1;
-var jobsPerPage = 10;
+var COLS=[
+  {key:'idx',label:'#',w:40},
+  {key:'date',label:'Date',w:80},
+  {key:'title',label:'Role / Title',w:180},
+  {key:'company',label:'Company',w:120},
+  {key:'location',label:'Location',w:110},
+  {key:'experience',label:'Experience',w:130},
+  {key:'skills',label:'Key Skills',w:150},
+  {key:'certifications',label:'Certifications',w:130},
+  {key:'tools',label:'Tools',w:130},
+  {key:'eligibility',label:'Eligibility',w:100},
+  {key:'jobType',label:'Job Type',w:80},
+  {key:'salary',label:'Salary / Rate',w:110},
+  {key:'source',label:'Source',w:80},
+  {key:'_action',label:'Action',w:70}
+];
 
-// Check if already logged in
-msalInstance.initialize().then(function() {
-  msalInstance.handleRedirectPromise().then(function(response) {
-    if (response) {
-      handleLogin(response);
-    } else {
-      var accounts = msalInstance.getAllAccounts();
-      if (accounts.length > 0) {
-        currentUser = accounts[0];
-        showApp();
-      }
-    }
-  }).catch(function(err) {
-    console.error('Auth error:', err);
-  });
+msal_.initialize().then(function(){
+  msal_.handleRedirectPromise().then(function(r){
+    if(r){curUser=r.account;showApp()}
+    else{var a=msal_.getAllAccounts();if(a.length>0){curUser=a[0];showApp()}}
+  }).catch(function(e){console.error('Auth:',e)});
 });
 
-function login() {
-  var loginBtn = document.getElementById('loginBtn');
-  loginBtn.textContent = 'Signing in...';
-  loginBtn.disabled = true;
-  msalInstance.loginRedirect({
-    scopes: ['openid', 'profile', 'email', 'User.Read'],
-    prompt: 'select_account'
-  });
+function login(){
+  document.getElementById('loginBtn').textContent='Signing in...';
+  msal_.loginRedirect({scopes:['openid','profile','email','User.Read'],prompt:'select_account'});
 }
-
-function handleLogin(response) {
-  currentUser = response.account;
-  showApp();
-}
-
-function showApp() {
-  document.getElementById('loginPage').style.display = 'none';
-  document.getElementById('appHeader').style.display = 'flex';
+function logout(){sessionStorage.clear();msal_.logoutRedirect({account:curUser})}
+function showApp(){
+  document.getElementById('loginPage').style.display='none';
+  document.getElementById('appHeader').style.display='flex';
   document.getElementById('appPage').classList.add('active');
-
-  var name = currentUser.name || currentUser.username || 'User';
-  var email = currentUser.username || '';
-  var initials = name.split(' ').map(function(n){return n[0]}).join('').toUpperCase().slice(0,2);
-
-  document.getElementById('userName').textContent = name;
-  document.getElementById('userAvatar').textContent = initials;
-  document.getElementById('udName').textContent = name;
-  document.getElementById('udEmail').textContent = email;
-  document.getElementById('udRole').textContent = 'SecVision Team Member';
-  document.getElementById('udCreated').textContent = new Date().toLocaleDateString();
-  document.getElementById('udLastLogin').textContent = new Date().toLocaleString();
-
-  var exp = currentUser.idTokenClaims?.exp;
-  if (exp) {
-    document.getElementById('udExpiry').textContent = new Date(exp * 1000).toLocaleString();
-  }
-
-  // Set default dates
-  var today = new Date();
-  document.getElementById('dateTo').value = today.toISOString().split('T')[0];
-  var monthAgo = new Date(today);
-  monthAgo.setMonth(monthAgo.getMonth() - 1);
-  document.getElementById('dateFrom').value = monthAgo.toISOString().split('T')[0];
+  var n=curUser.name||curUser.username||'User',e=curUser.username||'';
+  document.getElementById('userName').textContent=n;
+  document.getElementById('userAvatar').textContent=n.split(' ').map(function(x){return x[0]}).join('').toUpperCase().slice(0,2);
+  document.getElementById('udName').textContent=n;
+  document.getElementById('udEmail').textContent=e;
+  document.getElementById('udLogin').textContent=new Date().toLocaleString();
+  var exp=curUser.idTokenClaims?.exp;
+  if(exp)document.getElementById('udExpiry').textContent=new Date(exp*1000).toLocaleString();
+  buildTableHeader();
 }
+document.addEventListener('click',function(){var d=document.getElementById('userDropdown');if(d)d.classList.remove('open')});
 
-function toggleUserMenu() {
-  var dd = document.getElementById('userDropdown');
-  dd.classList.toggle('open');
-  event.stopPropagation();
-}
-document.addEventListener('click', function() {
-  document.getElementById('userDropdown')?.classList.remove('open');
-});
-
-function showUserProfile() {
-  var dd = document.getElementById('userDropdown');
-  dd.classList.remove('open');
-  alert('Profile: ' + (currentUser?.name || 'User') + '\nEmail: ' + (currentUser?.username || '-') + '\nRole: SecVision Team Member');
-}
-
-function logout() {
-  sessionStorage.clear();
-  msalInstance.logoutRedirect({ account: currentUser });
-}
-
-function toggleDateInputs() {
-  var period = document.getElementById('searchPeriod').value;
-  document.getElementById('customDateRow').style.display = period === 'custom' ? 'grid' : 'none';
-}
-
-function getDatePosted() {
-  var period = document.getElementById('searchPeriod').value;
-  switch(period) {
-    case 'week': return 'week';
-    case 'month': return 'month';
-    case '3months': return '3months';
-    default: return 'all';
-  }
-}
-
-async function searchJobs() {
-  var roles = Array.from(document.getElementById('searchRole').selectedOptions).map(function(o){return o.value});
-  if (roles.length === 0) { alert('Please select at least one role.'); return; }
-
-  var btn = document.getElementById('searchBtn');
-  btn.textContent = 'Searching...';
-  btn.disabled = true;
-
-  document.getElementById('resultsTable').style.display = 'none';
-  document.getElementById('emptyState').style.display = 'none';
-  document.getElementById('loadingState').style.display = 'block';
-  document.getElementById('pagination').style.display = 'none';
-
-  var query = roles.join(' OR ') + ' cybersecurity';
-  var datePosted = getDatePosted();
-
-  try {
-    var response = await fetch('/.netlify/functions/job-search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query, page: 1, datePosted: datePosted })
-    });
-
-    if (!response.ok) throw new Error('Search failed');
-    var data = await response.json();
-
-    allJobs = data.jobs || [];
-    currentPage = 1;
-
-    if (allJobs.length === 0) {
-      document.getElementById('loadingState').style.display = 'none';
-      document.getElementById('emptyState').style.display = 'block';
-      document.getElementById('emptyState').innerHTML = '<svg viewBox="0 0 24 24" style="width:48px;height:48px;fill:var(--g100)"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg><h3>No results found</h3><p>Try different roles or broaden your time period.</p>';
-      document.getElementById('resultsCount').innerHTML = 'No results found.';
-    } else {
-      totalPages = Math.ceil(allJobs.length / jobsPerPage);
-      renderTable();
+function buildTableHeader(){
+  var hr=document.getElementById('thRow'),fr=document.getElementById('thFilter');
+  hr.innerHTML='';fr.innerHTML='';
+  COLS.forEach(function(c){
+    var th=document.createElement('th');
+    th.style.width=c.w+'px';th.style.minWidth=c.w+'px';
+    if(c.key!=='_action'){
+      th.innerHTML=c.label+'<span class="sort-icon">\u25B2</span>';
+      th.onclick=function(e){if(e.target.tagName==='INPUT')return;sortTable(c.key)};
+    }else{th.textContent=c.label}
+    var handle=document.createElement('div');handle.className='resize-handle';
+    handle.onmousedown=function(e){startResize(e,th)};
+    th.appendChild(handle);
+    hr.appendChild(th);
+    var fth=document.createElement('th');
+    fth.style.width=c.w+'px';fth.style.minWidth=c.w+'px';fth.style.padding='.2rem .3rem';
+    if(c.key!=='_action'&&c.key!=='idx'){
+      var inp=document.createElement('input');
+      inp.placeholder='Filter...';inp.style.cssText='width:100%;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px;font-size:.6rem;outline:none;font-family:DM Sans,sans-serif';
+      inp.oninput=function(){colFilters[c.key]=this.value.toLowerCase();applyFilters()};
+      fth.appendChild(inp);
     }
-  } catch (err) {
-    console.error('Search error:', err);
-    document.getElementById('loadingState').style.display = 'none';
-    document.getElementById('emptyState').style.display = 'block';
-    document.getElementById('emptyState').innerHTML = '<h3>Search Error</h3><p>Unable to connect to job search service. Please try again.</p>';
-  }
-
-  btn.textContent = 'Search';
-  btn.disabled = false;
+    fr.appendChild(fth);
+  });
 }
 
-function renderTable() {
-  document.getElementById('loadingState').style.display = 'none';
-  document.getElementById('emptyState').style.display = 'none';
-  document.getElementById('resultsTable').style.display = 'table';
-  document.getElementById('pagination').style.display = 'flex';
+var resizing=null;
+function startResize(e,th){
+  e.preventDefault();e.stopPropagation();
+  var start=e.pageX,startW=th.offsetWidth,idx=Array.from(th.parentNode.children).indexOf(th);
+  var move=function(ev){
+    var w=Math.max(40,startW+(ev.pageX-start));
+    th.style.width=w+'px';th.style.minWidth=w+'px';
+    var fths=document.getElementById('thFilter').children;
+    if(fths[idx]){fths[idx].style.width=w+'px';fths[idx].style.minWidth=w+'px'}
+    document.querySelectorAll('#rBody tr').forEach(function(row){
+      if(row.children[idx]){row.children[idx].style.width=w+'px';row.children[idx].style.minWidth=w+'px'}
+    });
+  };
+  var up=function(){document.removeEventListener('mousemove',move);document.removeEventListener('mouseup',up)};
+  document.addEventListener('mousemove',move);document.addEventListener('mouseup',up);
+}
 
-  var start = (currentPage - 1) * jobsPerPage;
-  var end = Math.min(start + jobsPerPage, allJobs.length);
-  var pageJobs = allJobs.slice(start, end);
+function sortTable(key){
+  if(sortCol===key)sortDir*=-1;else{sortCol=key;sortDir=1}
+  document.querySelectorAll('#thRow th').forEach(function(th){th.classList.remove('sorted')});
+  var idx=COLS.findIndex(function(c){return c.key===key});
+  if(idx>=0){
+    var th=document.getElementById('thRow').children[idx];
+    th.classList.add('sorted');
+    th.querySelector('.sort-icon').textContent=sortDir===1?'\u25B2':'\u25BC';
+  }
+  applyFilters();
+}
 
-  document.getElementById('resultsCount').innerHTML = 'Showing <strong>' + (start+1) + '-' + end + '</strong> of <strong>' + allJobs.length + '</strong> results';
-  document.getElementById('pagInfo').textContent = 'Page ' + currentPage + ' of ' + totalPages;
+function applyFilters(){
+  filtered=allJobs.filter(function(job){
+    for(var k in colFilters){
+      if(colFilters[k]&&job[k]&&String(job[k]).toLowerCase().indexOf(colFilters[k])===-1)return false;
+    }
+    return true;
+  });
+  if(sortCol){
+    filtered.sort(function(a,b){
+      var va=String(a[sortCol]||'').toLowerCase(),vb=String(b[sortCol]||'').toLowerCase();
+      if(va<vb)return -1*sortDir;if(va>vb)return sortDir;return 0;
+    });
+  }
+  curPage=1;
+  renderTable();
+}
 
-  var tbody = document.getElementById('resultsBody');
-  tbody.innerHTML = '';
+async function searchJobs(){
+  var roles=Array.from(document.getElementById('sRole').selectedOptions).map(function(o){return o.value});
+  if(!roles.length){alert('Select at least one role.');return}
+  var sources=Array.from(document.getElementById('sSource').selectedOptions).map(function(o){return o.value});
+  var types=Array.from(document.getElementById('sType').selectedOptions).map(function(o){return o.value});
+  var btn=document.getElementById('searchBtn');
+  btn.textContent='Searching...';btn.disabled=true;
+  document.getElementById('rTable').style.display='none';
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('loadState').style.display='block';
+  document.getElementById('pag').classList.remove('show');
+  var query=roles.join(' OR ')+' cybersecurity';
+  var datePosted=document.getElementById('sPeriod').value;
+  if(datePosted==='custom'||datePosted==='3months')datePosted='all';
+  var pages=parseInt(document.getElementById('sPages').value)||10;
+  var empTypes=types.join(',');
+  try{
+    var r=await fetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({query:query,pages:pages,datePosted:datePosted,employmentTypes:empTypes})});
+    if(!r.ok)throw new Error('Failed');
+    var data=await r.json();
+    allJobs=data.jobs||[];
+    if(!sources.includes('Any')&&sources.length>0){
+      allJobs=allJobs.filter(function(j){
+        return sources.some(function(s){return j.source.toLowerCase().indexOf(s.toLowerCase())!==-1});
+      });
+    }
+    allJobs.forEach(function(j,i){j.idx=i+1});
+    document.getElementById('apiInfo').textContent='Fetched '+data.totalResults+' jobs from '+data.pagesSearched+' API pages. '+allJobs.length+' after source filter.';
+    colFilters={};sortCol='';sortDir=1;
+    document.querySelectorAll('#thFilter input').forEach(function(inp){inp.value=''});
+    if(!allJobs.length){
+      document.getElementById('loadState').style.display='none';
+      document.getElementById('emptyState').style.display='block';
+      document.getElementById('emptyState').innerHTML='<h3>No results</h3><p>Try different roles, sources, or time period.</p>';
+      document.getElementById('rCount').textContent='No results found.';
+    }else{
+      filtered=allJobs.slice();curPage=1;renderTable();
+    }
+  }catch(err){
+    console.error(err);
+    document.getElementById('loadState').style.display='none';
+    document.getElementById('emptyState').style.display='block';
+    document.getElementById('emptyState').innerHTML='<h3>Search Error</h3><p>Unable to connect. Please try again.</p>';
+  }
+  btn.textContent='Search';btn.disabled=false;
+}
 
-  pageJobs.forEach(function(job, idx) {
-    var tr = document.createElement('tr');
-    tr.innerHTML = '<td>' + job.date + '</td>' +
-      '<td class="td-title" title="' + (job.title||'').replace(/"/g,'&quot;') + '">' + job.title + '</td>' +
-      '<td class="td-company">' + job.company + '</td>' +
-      '<td>' + job.experience + '</td>' +
-      '<td class="td-skills" title="' + (job.skills||'').replace(/"/g,'&quot;') + '">' + job.skills + '</td>' +
-      '<td>' + job.certifications + '</td>' +
-      '<td><span class="td-source">' + job.source + '</span></td>' +
-      '<td><button class="view-btn" onclick="viewDetail(' + (start + idx) + ')">View Details</button></td>';
+function renderTable(){
+  document.getElementById('loadState').style.display='none';
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('rTable').style.display='table';
+  document.getElementById('pag').classList.add('show');
+  var total=filtered.length,totalPages=Math.ceil(total/perPage);
+  if(curPage>totalPages)curPage=totalPages||1;
+  var start=(curPage-1)*perPage,end=Math.min(start+perPage,total);
+  var page=filtered.slice(start,end);
+  document.getElementById('rCount').innerHTML='Showing <strong>'+(start+1)+'-'+end+'</strong> of <strong>'+total+'</strong> results'+(total!==allJobs.length?' (filtered from '+allJobs.length+')':'');
+  document.getElementById('pagInfo').textContent='Page '+curPage+' of '+totalPages;
+  var tbody=document.getElementById('rBody');tbody.innerHTML='';
+  page.forEach(function(j,i){
+    var tr=document.createElement('tr');
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+(j.title||'').replace(/"/g,'&quot;')+'">'+j.title+'</td><td class="td-c">'+j.company+'</td><td title="'+j.location+'">'+j.location+'</td><td title="'+j.experience+'">'+j.experience+'</td><td title="'+j.skills+'">'+j.skills+'</td><td title="'+j.certifications+'">'+j.certifications+'</td><td title="'+j.tools+'">'+j.tools+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td><span class="td-src">'+j.source+'</span></td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
     tbody.appendChild(tr);
   });
-
-  renderPagination();
+  renderPag(totalPages);
 }
 
-function renderPagination() {
-  var container = document.getElementById('pagBtns');
-  container.innerHTML = '';
-
-  // Previous
-  var prev = document.createElement('button');
-  prev.className = 'pag-btn';
-  prev.innerHTML = '&laquo;';
-  prev.disabled = currentPage === 1;
-  prev.onclick = function() { goToPage(currentPage - 1); };
-  container.appendChild(prev);
-
-  // Page numbers
-  var startP = Math.max(1, currentPage - 2);
-  var endP = Math.min(totalPages, currentPage + 2);
-
-  if (startP > 1) {
-    addPageBtn(container, 1);
-    if (startP > 2) {
-      var dots = document.createElement('span');
-      dots.textContent = '...';
-      dots.style.cssText = 'padding:0 .3rem;font-size:.75rem;color:var(--g3)';
-      container.appendChild(dots);
-    }
-  }
-
-  for (var i = startP; i <= endP; i++) {
-    addPageBtn(container, i);
-  }
-
-  if (endP < totalPages) {
-    if (endP < totalPages - 1) {
-      var dots2 = document.createElement('span');
-      dots2.textContent = '...';
-      dots2.style.cssText = 'padding:0 .3rem;font-size:.75rem;color:var(--g3)';
-      container.appendChild(dots2);
-    }
-    addPageBtn(container, totalPages);
-  }
-
-  // Next
-  var next = document.createElement('button');
-  next.className = 'pag-btn';
-  next.innerHTML = '&raquo;';
-  next.disabled = currentPage === totalPages;
-  next.onclick = function() { goToPage(currentPage + 1); };
-  container.appendChild(next);
+function renderPag(tp){
+  var c=document.getElementById('pagBtns');c.innerHTML='';
+  var prev=document.createElement('button');prev.className='pb';prev.innerHTML='&laquo;';prev.disabled=curPage===1;prev.onclick=function(){goPage(curPage-1)};c.appendChild(prev);
+  var s=Math.max(1,curPage-3),e=Math.min(tp,curPage+3);
+  if(s>1){addPB(c,1);if(s>2){var d=document.createElement('span');d.textContent='...';d.style.cssText='padding:0 .2rem;font-size:.7rem;color:var(--g3)';c.appendChild(d)}}
+  for(var i=s;i<=e;i++)addPB(c,i);
+  if(e<tp){if(e<tp-1){var d2=document.createElement('span');d2.textContent='...';d2.style.cssText='padding:0 .2rem;font-size:.7rem;color:var(--g3)';c.appendChild(d2)}addPB(c,tp)}
+  var next=document.createElement('button');next.className='pb';next.innerHTML='&raquo;';next.disabled=curPage===tp;next.onclick=function(){goPage(curPage+1)};c.appendChild(next);
 }
+function addPB(c,n){var b=document.createElement('button');b.className='pb'+(n===curPage?' act':'');b.textContent=n;b.onclick=function(){goPage(n)};c.appendChild(b)}
+function goPage(p){if(p<1)return;curPage=p;renderTable();document.getElementById('tableWrap').scrollTop=0}
+function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(v>=1){goPage(v);document.getElementById('pjInput').value=''}}
 
-function addPageBtn(container, pageNum) {
-  var btn = document.createElement('button');
-  btn.className = 'pag-btn' + (pageNum === currentPage ? ' active' : '');
-  btn.textContent = pageNum;
-  btn.onclick = function() { goToPage(pageNum); };
-  container.appendChild(btn);
-}
-
-function goToPage(page) {
-  if (page < 1 || page > totalPages) return;
-  currentPage = page;
-  renderTable();
-  document.querySelector('.table-wrap').scrollTop = 0;
-}
-
-function jumpToPage() {
-  var input = document.getElementById('pagJumpInput');
-  var page = parseInt(input.value);
-  if (page && page >= 1 && page <= totalPages) {
-    goToPage(page);
-    input.value = '';
-  }
-}
-
-function viewDetail(idx) {
-  var job = allJobs[idx];
-  if (!job) return;
-
-  document.getElementById('detailTitle').textContent = job.title;
-
-  var html = '<div class="detail-meta">' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Company</span><span class="detail-meta-value">' + job.company + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Location</span><span class="detail-meta-value">' + job.location + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Posted</span><span class="detail-meta-value">' + job.date + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Source</span><span class="detail-meta-value">' + job.source + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Type</span><span class="detail-meta-value">' + job.type + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Remote</span><span class="detail-meta-value">' + job.remote + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Experience</span><span class="detail-meta-value">' + job.experience + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Salary</span><span class="detail-meta-value">' + job.salary + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Education</span><span class="detail-meta-value">' + job.education + '</span></div>' +
-    '<div class="detail-meta-item"><span class="detail-meta-label">Contact</span><span class="detail-meta-value">' + job.contactEmail + '</span></div>' +
-    '</div>';
-
-  if (job.qualifications.length) {
-    html += '<div class="detail-section"><h4>Qualifications & Certifications</h4><ul>' +
-      job.qualifications.map(function(q){return '<li>' + q + '</li>'}).join('') + '</ul></div>';
-  }
-
-  if (job.responsibilities.length) {
-    html += '<div class="detail-section"><h4>Responsibilities</h4><ul>' +
-      job.responsibilities.map(function(r){return '<li>' + r + '</li>'}).join('') + '</ul></div>';
-  }
-
-  if (job.benefits.length) {
-    html += '<div class="detail-section"><h4>Benefits</h4><ul>' +
-      job.benefits.map(function(b){return '<li>' + b + '</li>'}).join('') + '</ul></div>';
-  }
-
-  html += '<div class="detail-section"><h4>Full Description</h4><p>' +
-    job.description.replace(/\n/g, '<br>').slice(0, 3000) + '</p></div>';
-
-  if (job.applyLink) {
-    html += '<a href="' + job.applyLink + '" target="_blank" rel="noopener" class="detail-apply">Apply Now &rarr;</a>';
-  }
-
-  document.getElementById('detailBody').innerHTML = html;
+function viewDet(i){
+  var j=allJobs[i];if(!j)return;
+  document.getElementById('detTitle').textContent=j.title;
+  var h='<div class="dm-meta">'+
+    [['Company',j.company],['Location',j.location],['Posted',j.date],['Source',j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Education',j.eligibility],['Certifications',j.certifications],['Tools',j.tools],['Contact',j.applyLink?'Apply online':'N/A']].map(function(x){return '<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
+  if(j.qualifications.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+j.qualifications.map(function(q){return '<li>'+q+'</li>'}).join('')+'</ul></div>';
+  if(j.responsibilities.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+j.responsibilities.map(function(r){return '<li>'+r+'</li>'}).join('')+'</ul></div>';
+  if(j.benefits.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+j.benefits.map(function(b){return '<li>'+b+'</li>'}).join('')+'</ul></div>';
+  h+='<div class="dm-sec"><h4>Full Description</h4><p>'+j.description.replace(/\n/g,'<br>').slice(0,4000)+'</p></div>';
+  if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" class="dm-apply">Apply Now &rarr;</a>';
+  document.getElementById('detBody').innerHTML=h;
   document.getElementById('detailOverlay').classList.add('open');
 }
-
-function closeDetail() {
-  document.getElementById('detailOverlay').classList.remove('open');
-}
-
-document.addEventListener('keydown', function(e) {
-  if (e.key === 'Escape') closeDetail();
-});
+function closeDet(){document.getElementById('detailOverlay').classList.remove('open')}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()});
 </script>
 </body>
 </html>
