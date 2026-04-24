@@ -182,7 +182,7 @@ tr:hover td{background:rgba(8,145,178,.02)}
         <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="Hiring Cafe">Hiring Cafe</option><option value="Snagajob">Snagajob</option><option value="BeBee">BeBee</option><option value="Talent.com">Talent.com</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option><option value="Jooble">Jooble</option><option value="CyberSecurityJobs">CyberSecurityJobs</option></select></div>
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="3months">Last 3 Months</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
-        <div class="sg"><label>Pages to fetch</label><select id="sPages"><option value="5">50 jobs (5 API calls)</option><option value="10" selected>100 jobs (10 API calls)</option><option value="20">200 jobs (20 API calls)</option><option value="50">500 jobs (50 API calls)</option></select></div>
+        <div class="sg"><label>Depth (pages/role)</label><select id="sPages"><option value="3">Quick (3 pages/role)</option><option value="5" selected>Standard (5 pages/role)</option><option value="10">Deep (10 pages/role)</option></select></div>
         <button class="sbtn" id="searchBtn" onclick="searchJobs()">Search</button>
       </div>
       <div class="sf2" id="customDates">
@@ -453,7 +453,9 @@ function applyFilters(){
 async function searchJobs(){
   var roles=Array.from(document.getElementById('sRole').selectedOptions).map(function(o){return o.value});
   if(!roles.length){alert('Select at least one role.');return}
-  var query = roles.includes('Any') ? 'cybersecurity security analyst engineer SOC' : roles.join(' OR ') + ' cybersecurity';
+  var searchRoles = roles.includes('Any') ?
+    ['SOC Analyst','Security Engineer','Cybersecurity Analyst','SIEM Engineer','Cloud Security Engineer','Threat Hunter'] :
+    roles;
   var sources=Array.from(document.getElementById('sSource').selectedOptions).map(function(o){return o.value});
   var types=Array.from(document.getElementById('sType').selectedOptions).map(function(o){return o.value});
   var btn=document.getElementById('searchBtn');
@@ -461,6 +463,7 @@ async function searchJobs(){
   document.getElementById('rTable').style.display='none';
   document.getElementById('emptyState').style.display='none';
   document.getElementById('loadState').style.display='block';
+  document.getElementById('loadState').textContent='Searching '+searchRoles.length+' role(s) × '+pages+' pages each = '+searchRoles.length*pages+' API calls. Please wait...';
   document.getElementById('pag').classList.remove('show');
   var datePosted=document.getElementById('sPeriod').value;
   if(datePosted==='custom'||datePosted==='3months')datePosted='all';
@@ -468,7 +471,7 @@ async function searchJobs(){
   var empTypes=types.join(',');
   try{
     var r=await fetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({query:query,pages:pages,datePosted:datePosted,employmentTypes:empTypes})});
+      body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:empTypes})});
     if(!r.ok)throw new Error('Failed');
     var data=await r.json();
     allJobs=data.jobs||[];
@@ -478,7 +481,7 @@ async function searchJobs(){
       });
     }
     allJobs.forEach(function(j,i){j.idx=i+1});
-    document.getElementById('apiInfo').textContent='Fetched '+data.totalResults+' jobs from '+data.pagesSearched+' API pages. '+allJobs.length+' after source filter.';
+    document.getElementById('apiInfo').textContent='Found '+data.totalResults+' jobs using '+data.apiCalls+' API calls across '+data.rolesSearched.length+' roles. '+allJobs.length+' after source filter.';
     colFilters={};sortCol='';sortDir=1;
     document.querySelectorAll('.col-flt-btn').forEach(function(b){b.textContent='All';b.classList.remove('active')});
     if(!allJobs.length){

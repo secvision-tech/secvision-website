@@ -96,39 +96,55 @@ exports.handler = async (event) => {
   var hdrs = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
   try {
     var body = JSON.parse(event.body);
-    if (!body.query) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Query required' }) };
     var apiKey = process.env.JSEARCH_API_KEY;
     if (!apiKey) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'API key not configured' }) };
-    var numPages = Math.min(body.pages || 10, 50), allJobs = [], errs = 0, seenIds = {};
-    
-    // Fetch in parallel batches of 5 to stay within Netlify timeout
-    var batchSize = 5;
-    for (var batch = 0; batch < numPages; batch += batchSize) {
-      var promises = [];
-      for (var p = batch + 1; p <= Math.min(batch + batchSize, numPages); p++) {
-        var params = new URLSearchParams({
-          query: body.query, page: String(p), num_pages: '1',
-          country: 'us', date_posted: body.datePosted || 'all'
+
+    // Accept roles as array or single query
+    var roles = body.roles || [body.query || 'cybersecurity'];
+    var totalPages = Math.min(body.pages || 10, 50);
+    var pagesPerRole = Math.max(1, Math.ceil(totalPages / roles.length));
+    // Cap pages per role to prevent timeout (Netlify 26sec limit)
+    pagesPerRole = Math.min(pagesPerRole, 5);
+    var allJobs = [], seenIds = {}, totalApiCalls = 0;
+    var startTime = Date.now();
+    var TIMEOUT_MS = 22000; // 22 sec safety margin
+
+    // Helper: fetch one page
+    async function fetchPage(query, page) {
+      if (Date.now() - startTime > TIMEOUT_MS) return [];
+      var params = new URLSearchParams({
+        query: query, page: String(page), num_pages: '1',
+        country: 'us', date_posted: body.datePosted || 'all'
+      });
+      if (body.employmentTypes) params.set('employment_types', body.employmentTypes);
+      try {
+        var r = await fetch('https://jsearch.p.rapidapi.com/search?' + params, {
+          headers: { 'x-rapidapi-host': 'jsearch.p.rapidapi.com', 'x-rapidapi-key': apiKey }
         });
-        if (body.employmentTypes) params.set('employment_types', body.employmentTypes);
-        promises.push(
-          fetch('https://jsearch.p.rapidapi.com/search?' + params, {
-            headers: { 'x-rapidapi-host': 'jsearch.p.rapidapi.com', 'x-rapidapi-key': apiKey }
-          }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
-        );
+        totalApiCalls++;
+        if (!r.ok) return [];
+        var d = await r.json();
+        return d.data || [];
+      } catch (e) { return []; }
+    }
+
+    // Search ALL roles in parallel simultaneously
+    var rolePromises = roles.map(async function(role) {
+      // Fetch all pages for this role in parallel at once
+      var pagePromises = [];
+      for (var p = 1; p <= pagesPerRole; p++) {
+        pagePromises.push(fetchPage(role, p));
       }
-      var results = await Promise.all(promises);
-      var emptyCount = 0;
-      results.forEach(function(d) {
-        if (!d || !d.data || d.data.length === 0) { emptyCount++; return; }
-        d.data.forEach(function(job) {
+      var results = await Promise.all(pagePromises);
+      results.forEach(function(jobs) {
+        jobs.forEach(function(job) {
           var jid = job.job_id || (job.employer_name + '|' + job.job_title);
           if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
         });
       });
-      // Stop if most pages in batch were empty
-      if (emptyCount >= batchSize - 1) break;
-    }
+    });
+
+    await Promise.all(rolePromises);
 
     var jobs = allJobs.map(function(job, i) {
       var desc = job.job_description || '';
@@ -160,7 +176,7 @@ exports.handler = async (event) => {
         benefits: job.job_highlights?.Benefits || []
       };
     });
-    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, pagesSearched: numPages }) };
+    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, apiCalls: totalApiCalls, rolesSearched: roles }) };
   } catch (err) {
     console.error('Error:', err);
     return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'Internal server error' }) };
