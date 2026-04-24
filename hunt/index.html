@@ -96,6 +96,19 @@ tr:hover td{background:rgba(8,145,178,.02)}
 .pb:disabled{opacity:.4;cursor:not-allowed}
 .pag-jump{display:flex;align-items:center;gap:.3rem;font-size:.68rem;color:var(--g5)}
 .pag-jump input{width:40px;padding:.15rem .3rem;border:1px solid var(--g100);border-radius:4px;font-size:.68rem;text-align:center;font-family:'DM Sans',sans-serif}
+.col-flt-wrap{position:relative;display:inline-block;width:100%}
+.col-flt-btn{width:100%;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px;font-size:.6rem;text-align:left;background:#fff;cursor:pointer;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:22px;font-family:'DM Sans',sans-serif}
+.col-flt-btn:hover{border-color:var(--ac)}
+.col-flt-btn.active{border-color:var(--ac);color:var(--ac)}
+.col-flt-dd{position:absolute;top:100%;left:0;min-width:160px;max-height:200px;overflow-y:auto;background:#fff;border:1px solid var(--g100);border-radius:6px;box-shadow:0 8px 24px rgba(15,35,65,.12);z-index:50;display:none;padding:.3rem 0}
+.col-flt-dd.open{display:block}
+.col-flt-dd label{display:flex;align-items:center;gap:.35rem;padding:.2rem .5rem;font-size:.62rem;color:var(--tx);cursor:pointer;transition:background .1s}
+.col-flt-dd label:hover{background:var(--off)}
+.col-flt-dd input[type=checkbox]{width:12px;height:12px;accent-color:var(--ac)}
+.col-flt-dd .flt-search{width:calc(100% - .6rem);margin:.15rem .3rem;padding:.2rem .3rem;border:1px solid var(--g100);border-radius:3px;font-size:.6rem;outline:none;font-family:'DM Sans',sans-serif}
+.col-flt-dd .flt-actions{display:flex;gap:.3rem;padding:.3rem .5rem;border-top:1px solid var(--g100);margin-top:.2rem}
+.col-flt-dd .flt-actions button{flex:1;padding:.15rem;border:1px solid var(--g100);border-radius:3px;font-size:.58rem;cursor:pointer;font-family:'DM Sans',sans-serif;background:#fff;color:var(--g5)}
+.col-flt-dd .flt-actions button:hover{border-color:var(--ac);color:var(--ac)}
 
 .do{position:fixed;inset:0;background:rgba(15,35,65,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}
 .do.open{display:flex}
@@ -165,7 +178,7 @@ tr:hover td{background:rgba(8,145,178,.02)}
     <div class="search-panel">
       <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Job Search & Hunting</div>
       <div class="sf">
-        <div class="sg"><label>Role</label><select id="sRole" multiple><option value="SOC Analyst" selected>SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
+        <div class="sg"><label>Role</label><select id="sRole" multiple><option value="Any" selected>Any (All Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
         <div class="sg"><label>Job Source</label><select id="sSource" multiple><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="CyberSecurityJobs">CyberSecurityJobs</option></select></div>
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="3months">Last 3 Months</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
@@ -204,20 +217,20 @@ var msalConfig={auth:{clientId:'dc517c46-dcf0-4d38-80e0-3cda854a5d59',authority:
 var msal_=new msal.PublicClientApplication(msalConfig),curUser=null,allJobs=[],filtered=[],curPage=1,perPage=25,sortCol='',sortDir=1,colFilters={};
 
 var COLS=[
-  {key:'idx',label:'#',w:40},
-  {key:'date',label:'Date',w:80},
-  {key:'title',label:'Role / Title',w:180},
-  {key:'company',label:'Company',w:120},
-  {key:'location',label:'Location',w:110},
+  {key:'idx',label:'#',w:35},
+  {key:'date',label:'Date',w:75},
+  {key:'title',label:'Role / Title',w:170},
+  {key:'company',label:'Company',w:110},
+  {key:'location',label:'Location',w:100},
   {key:'experience',label:'Experience',w:130},
   {key:'skills',label:'Key Skills',w:150},
   {key:'certifications',label:'Certifications',w:130},
   {key:'tools',label:'Tools',w:130},
-  {key:'eligibility',label:'Eligibility',w:100},
-  {key:'jobType',label:'Job Type',w:80},
-  {key:'salary',label:'Salary / Rate',w:110},
-  {key:'source',label:'Source',w:80},
-  {key:'_action',label:'Action',w:70}
+  {key:'eligibility',label:'Eligibility',w:90},
+  {key:'jobType',label:'Job Type',w:75},
+  {key:'salary',label:'Salary / Rate',w:100},
+  {key:'source',label:'Source',w:75},
+  {key:'_action',label:'Action',w:60}
 ];
 
 msal_.initialize().then(function(){
@@ -246,7 +259,12 @@ function showApp(){
   if(exp)document.getElementById('udExpiry').textContent=new Date(exp*1000).toLocaleString();
   buildTableHeader();
 }
-document.addEventListener('click',function(){var d=document.getElementById('userDropdown');if(d)d.classList.remove('open')});
+document.addEventListener('click',function(e){
+  document.getElementById('userDropdown')?.classList.remove('open');
+  document.querySelectorAll('.col-flt-dd.open').forEach(function(dd){
+    if(!dd.parentNode.contains(e.target))dd.classList.remove('open');
+  });
+});
 
 function buildTableHeader(){
   var hr=document.getElementById('thRow'),fr=document.getElementById('thFilter');
@@ -256,22 +274,109 @@ function buildTableHeader(){
     th.style.width=c.w+'px';th.style.minWidth=c.w+'px';
     if(c.key!=='_action'){
       th.innerHTML=c.label+'<span class="sort-icon">\u25B2</span>';
-      th.onclick=function(e){if(e.target.tagName==='INPUT')return;sortTable(c.key)};
+      th.onclick=function(e){if(e.target.closest('.col-flt-wrap')||e.target.tagName==='INPUT'||e.target.tagName==='LABEL'||e.target.tagName==='BUTTON')return;sortTable(c.key)};
     }else{th.textContent=c.label}
     var handle=document.createElement('div');handle.className='resize-handle';
     handle.onmousedown=function(e){startResize(e,th)};
     th.appendChild(handle);
     hr.appendChild(th);
     var fth=document.createElement('th');
-    fth.style.width=c.w+'px';fth.style.minWidth=c.w+'px';fth.style.padding='.2rem .3rem';
+    fth.style.width=c.w+'px';fth.style.minWidth=c.w+'px';fth.style.padding='.15rem .2rem';
     if(c.key!=='_action'&&c.key!=='idx'){
-      var inp=document.createElement('input');
-      inp.placeholder='Filter...';inp.style.cssText='width:100%;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px;font-size:.6rem;outline:none;font-family:DM Sans,sans-serif';
-      inp.oninput=function(){colFilters[c.key]=this.value.toLowerCase();applyFilters()};
-      fth.appendChild(inp);
+      var wrap=document.createElement('div');
+      wrap.className='col-flt-wrap';
+      wrap.setAttribute('data-col',c.key);
+      var btn=document.createElement('button');
+      btn.className='col-flt-btn';
+      btn.textContent='All';
+      btn.onclick=function(e){e.stopPropagation();toggleFilterDD(c.key)};
+      var dd=document.createElement('div');
+      dd.className='col-flt-dd';
+      dd.id='fltDD_'+c.key;
+      dd.onclick=function(e){e.stopPropagation()};
+      wrap.appendChild(btn);
+      wrap.appendChild(dd);
+      fth.appendChild(wrap);
     }
     fr.appendChild(fth);
   });
+}
+
+function toggleFilterDD(key){
+  document.querySelectorAll('.col-flt-dd.open').forEach(function(d){if(d.id!=='fltDD_'+key)d.classList.remove('open')});
+  var dd=document.getElementById('fltDD_'+key);
+  if(!dd)return;
+  if(!dd.classList.contains('open')){buildFilterOptions(key);dd.classList.add('open')}
+  else dd.classList.remove('open');
+}
+
+function buildFilterOptions(key){
+  var dd=document.getElementById('fltDD_'+key);
+  if(!dd)return;
+  // Collect unique values, splitting comma-separated
+  var vals={};
+  allJobs.forEach(function(j){
+    var v=String(j[key]||'');
+    v.split(',').forEach(function(part){
+      var p=part.trim();
+      if(p&&p!=='See details'&&p!=='N/A'&&p!=='Not specified'&&p!=='Not disclosed'){vals[p]=true}
+    });
+  });
+  var sorted=Object.keys(vals).sort();
+  var selected=colFilters[key]||null;// null=all, array=selected
+  var html='<input class="flt-search" placeholder="Search..." oninput="filterDDSearch(\''+key+'\',this.value)">';
+  html+='<div class="flt-opts" id="fltOpts_'+key+'">';
+  sorted.forEach(function(v){
+    var checked=(!selected||selected.includes(v))?'checked':'';
+    html+='<label><input type="checkbox" value="'+v.replace(/"/g,'&quot;')+'" '+checked+' onchange="updateColFilter(\''+key+'\')">'+v+'</label>';
+  });
+  html+='</div>';
+  html+='<div class="flt-actions"><button onclick="selectAllFilter(\''+key+'\')">All</button><button onclick="clearAllFilter(\''+key+'\')">None</button><button onclick="applyAndClose(\''+key+'\')">Apply</button></div>';
+  dd.innerHTML=html;
+}
+
+function filterDDSearch(key,val){
+  var opts=document.getElementById('fltOpts_'+key);
+  if(!opts)return;
+  var labels=opts.querySelectorAll('label');
+  val=val.toLowerCase();
+  labels.forEach(function(l){l.style.display=l.textContent.toLowerCase().includes(val)?'flex':'none'});
+}
+
+function selectAllFilter(key){
+  var opts=document.getElementById('fltOpts_'+key);
+  if(!opts)return;
+  opts.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.checked=true});
+  updateColFilter(key);
+}
+
+function clearAllFilter(key){
+  var opts=document.getElementById('fltOpts_'+key);
+  if(!opts)return;
+  opts.querySelectorAll('input[type=checkbox]').forEach(function(cb){cb.checked=false});
+  updateColFilter(key);
+}
+
+function updateColFilter(key){
+  var opts=document.getElementById('fltOpts_'+key);
+  if(!opts)return;
+  var cbs=opts.querySelectorAll('input[type=checkbox]');
+  var total=cbs.length,checked=[];
+  cbs.forEach(function(cb){if(cb.checked)checked.push(cb.value)});
+  var btn=document.querySelector('[data-col="'+key+'"] .col-flt-btn');
+  if(checked.length===total||checked.length===0){
+    colFilters[key]=null;
+    if(btn){btn.textContent='All';btn.classList.remove('active')}
+  }else{
+    colFilters[key]=checked;
+    if(btn){btn.textContent=checked.length+' selected';btn.classList.add('active')}
+  }
+}
+
+function applyAndClose(key){
+  updateColFilter(key);
+  document.getElementById('fltDD_'+key)?.classList.remove('open');
+  applyFilters();
 }
 
 var resizing=null;
@@ -306,7 +411,13 @@ function sortTable(key){
 function applyFilters(){
   filtered=allJobs.filter(function(job){
     for(var k in colFilters){
-      if(colFilters[k]&&job[k]&&String(job[k]).toLowerCase().indexOf(colFilters[k])===-1)return false;
+      if(!colFilters[k])continue;// null means All
+      var selected=colFilters[k];
+      var val=String(job[k]||'');
+      // Split comma-separated values and check if any match
+      var parts=val.split(',').map(function(p){return p.trim()});
+      var hasMatch=parts.some(function(p){return selected.includes(p)});
+      if(!hasMatch)return false;
     }
     return true;
   });
@@ -323,6 +434,7 @@ function applyFilters(){
 async function searchJobs(){
   var roles=Array.from(document.getElementById('sRole').selectedOptions).map(function(o){return o.value});
   if(!roles.length){alert('Select at least one role.');return}
+  var query = roles.includes('Any') ? 'cybersecurity security analyst engineer SOC' : roles.join(' OR ') + ' cybersecurity';
   var sources=Array.from(document.getElementById('sSource').selectedOptions).map(function(o){return o.value});
   var types=Array.from(document.getElementById('sType').selectedOptions).map(function(o){return o.value});
   var btn=document.getElementById('searchBtn');
@@ -331,7 +443,6 @@ async function searchJobs(){
   document.getElementById('emptyState').style.display='none';
   document.getElementById('loadState').style.display='block';
   document.getElementById('pag').classList.remove('show');
-  var query=roles.join(' OR ')+' cybersecurity';
   var datePosted=document.getElementById('sPeriod').value;
   if(datePosted==='custom'||datePosted==='3months')datePosted='all';
   var pages=parseInt(document.getElementById('sPages').value)||10;
@@ -350,7 +461,7 @@ async function searchJobs(){
     allJobs.forEach(function(j,i){j.idx=i+1});
     document.getElementById('apiInfo').textContent='Fetched '+data.totalResults+' jobs from '+data.pagesSearched+' API pages. '+allJobs.length+' after source filter.';
     colFilters={};sortCol='';sortDir=1;
-    document.querySelectorAll('#thFilter input').forEach(function(inp){inp.value=''});
+    document.querySelectorAll('.col-flt-btn').forEach(function(b){b.textContent='All';b.classList.remove('active')});
     if(!allJobs.length){
       document.getElementById('loadState').style.display='none';
       document.getElementById('emptyState').style.display='block';
