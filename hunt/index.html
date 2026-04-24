@@ -178,11 +178,11 @@ tr:hover td{background:rgba(8,145,178,.02)}
     <div class="search-panel">
       <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Job Search & Hunting</div>
       <div class="sf">
-        <div class="sg"><label>Role</label><select id="sRole" multiple><option value="Any" selected>Any (All Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
-        <div class="sg"><label>Job Source</label><select id="sSource" multiple><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="CyberSecurityJobs">CyberSecurityJobs</option></select></div>
+        <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
+        <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="Hiring Cafe">Hiring Cafe</option><option value="Snagajob">Snagajob</option><option value="BeBee">BeBee</option><option value="Talent.com">Talent.com</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option><option value="Jooble">Jooble</option><option value="CyberSecurityJobs">CyberSecurityJobs</option></select></div>
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="3months">Last 3 Months</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
-        <div class="sg"><label>Pages to fetch</label><select id="sPages"><option value="5">50 jobs (5 API calls)</option><option value="10" selected>100 jobs (10 API calls)</option></select></div>
+        <div class="sg"><label>Pages to fetch</label><select id="sPages"><option value="5">50 jobs (5 API calls)</option><option value="10" selected>100 jobs (10 API calls)</option><option value="20">200 jobs (20 API calls)</option><option value="50">500 jobs (50 API calls)</option></select></div>
         <button class="sbtn" id="searchBtn" onclick="searchJobs()">Search</button>
       </div>
       <div class="sf2" id="customDates">
@@ -243,6 +243,25 @@ msal_.initialize().then(function(){
 function login(){
   document.getElementById('loginBtn').textContent='Signing in...';
   msal_.loginRedirect({scopes:['openid','profile','email','User.Read'],prompt:'select_account'});
+}
+
+function handleAnyToggle(sel){
+  var opts=Array.from(sel.options);
+  var anyOpt=opts.find(function(o){return o.value==='Any'});
+  var selected=Array.from(sel.selectedOptions).map(function(o){return o.value});
+  if(selected.includes('Any')&&selected.length>1){
+    // If Any was just selected alongside others, or others alongside Any
+    var lastClick=sel.getAttribute('data-last')||'';
+    if(selected.indexOf('Any')===selected.length-1||lastClick!=='Any'){
+      // User clicked a specific option, deselect Any
+      if(anyOpt)anyOpt.selected=false;
+    }else{
+      // User clicked Any, deselect all others
+      opts.forEach(function(o){if(o.value!=='Any')o.selected=false});
+    }
+  }
+  if(Array.from(sel.selectedOptions).length===0&&anyOpt)anyOpt.selected=true;
+  sel.setAttribute('data-last',Array.from(sel.selectedOptions).pop()?.value||'');
 }
 function logout(){sessionStorage.clear();msal_.logoutRedirect({account:curUser})}
 function showApp(){

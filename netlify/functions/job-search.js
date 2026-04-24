@@ -99,26 +99,35 @@ exports.handler = async (event) => {
     if (!body.query) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Query required' }) };
     var apiKey = process.env.JSEARCH_API_KEY;
     if (!apiKey) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'API key not configured' }) };
-    var numPages = Math.min(body.pages || 10, 10), allJobs = [], errs = 0, seenIds = {};
-
-    for (var p = 1; p <= numPages; p++) {
-      try {
+    var numPages = Math.min(body.pages || 10, 50), allJobs = [], errs = 0, seenIds = {};
+    
+    // Fetch in parallel batches of 5 to stay within Netlify timeout
+    var batchSize = 5;
+    for (var batch = 0; batch < numPages; batch += batchSize) {
+      var promises = [];
+      for (var p = batch + 1; p <= Math.min(batch + batchSize, numPages); p++) {
         var params = new URLSearchParams({
           query: body.query, page: String(p), num_pages: '1',
           country: 'us', date_posted: body.datePosted || 'all'
         });
         if (body.employmentTypes) params.set('employment_types', body.employmentTypes);
-        var r = await fetch('https://jsearch.p.rapidapi.com/search?' + params, {
-          headers: { 'x-rapidapi-host': 'jsearch.p.rapidapi.com', 'x-rapidapi-key': apiKey }
-        });
-        if (!r.ok) { errs++; if (errs > 2) break; continue; }
-        var d = await r.json();
-        if (!d.data || d.data.length === 0) break;
+        promises.push(
+          fetch('https://jsearch.p.rapidapi.com/search?' + params, {
+            headers: { 'x-rapidapi-host': 'jsearch.p.rapidapi.com', 'x-rapidapi-key': apiKey }
+          }).then(function(r) { return r.ok ? r.json() : null; }).catch(function() { return null; })
+        );
+      }
+      var results = await Promise.all(promises);
+      var emptyCount = 0;
+      results.forEach(function(d) {
+        if (!d || !d.data || d.data.length === 0) { emptyCount++; return; }
         d.data.forEach(function(job) {
           var jid = job.job_id || (job.employer_name + '|' + job.job_title);
           if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
         });
-      } catch (e) { errs++; if (errs > 2) break; }
+      });
+      // Stop if most pages in batch were empty
+      if (emptyCount >= batchSize - 1) break;
     }
 
     var jobs = allJobs.map(function(job, i) {
@@ -151,7 +160,7 @@ exports.handler = async (event) => {
         benefits: job.job_highlights?.Benefits || []
       };
     });
-    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, pagesSearched: numPages - errs }) };
+    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, pagesSearched: numPages }) };
   } catch (err) {
     console.error('Error:', err);
     return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'Internal server error' }) };
