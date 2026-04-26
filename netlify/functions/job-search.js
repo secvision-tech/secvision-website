@@ -2,7 +2,7 @@
 const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-500|AZ-900|MS-500|CCSP|CCNA|CCNP|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*CSF|NIST\s*800-171|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITIL|TOGAF|ITAR|NERC\s*CIP|FERPA|GLBA/gi;
 
 // Tools + Platforms + Technology categories
-const TOOL_RE = /Microsoft\s*Sentinel|Azure\s*Sentinel|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM)|Chronicle|Defender\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office)|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|TIP|threat\s*intelligence\s*platf\w*|Zero\s*Trust\s*(?:tooling|architecture|framework)?|cloud\s*security\s*(?:tools|platforms)?/gi;
+const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM)|Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|TIP|threat\s*intelligence\s*platf\w*|Zero\s*Trust\s*(?:tooling|architecture|framework)?|cloud\s*security\s*(?:tools|platforms)?/gi;
 
 // Technical skills
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|Go\slang|Perl|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|change\s*management|patch\s*management|asset\s*management|security\s*awareness|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
@@ -21,11 +21,12 @@ function unique(text, re) {
 function extractExp(job) {
   var d = job.job_description || '', parts = [], seen = {};
 
-  // Pattern 1: "X+ years experience/demonstrated experience in/with/leading..."
-  var pat1 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s-]*on\s*|relevant\s*|professional\s*|progressive\s*)?(?:experience|expertise)\s*(?:in|with|leading|managing|performing|working|supporting|conducting|doing)?\s*([\w\s,/&\-()]+?)(?:\.|;|\n|$)/gi;
+  // Pattern 1: "X+ years of experience working in / with ..." (broadest)
+  var pat1 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*)?(?:experience|expertise)\s*(?:in|with|working\s*(?:in|with)|leading|managing|performing|supporting|conducting|across|within)?\s*([\w\s,/&\-\u2010\u2013()]+?)(?:\.|;|\n|,\s*(?:with|including|and|or|in|plus))/gi;
   var m1;
   while ((m1 = pat1.exec(d)) !== null && parts.length < 5) {
     var ctx = m1[2].trim().slice(0, 40).replace(/^\s*(?:a|an|the)\s*/i, '');
+    if (ctx.length < 3) continue;
     var key = m1[1] + ctx.toLowerCase();
     if (!seen[key]) { seen[key] = true; parts.push(m1[1] + '+ yr ' + ctx); }
   }
@@ -38,13 +39,24 @@ function extractExp(job) {
     if (!seen[key2]) { seen[key2] = true; parts.unshift(m2[1] + '-' + m2[2] + ' years'); }
   }
 
-  // Pattern 3: "minimum/at least X years"
-  var pat3 = /(?:minimum|at\s*least|requires?)\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:experience|expertise)?\s*(?:in|with)?\s*([\w\s,/&\-]+?)(?:\.|;|\n|$)/gi;
+  // Pattern 3: "minimum/at least/requires X years"
+  var pat3 = /(?:minimum|at\s*least|requires?)\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\s]*)?(?:experience|expertise)\s*(?:in|with)?\s*([\w\s,/&\-]+?)(?:\.|;|,|\n|$)/gi;
   var m3;
   while ((m3 = pat3.exec(d)) !== null && parts.length < 5) {
     var ctx3 = m3[2].trim().slice(0, 35);
+    if (ctx3.length < 3) continue;
     var key3 = 'min' + m3[1] + ctx3.toLowerCase();
     if (!seen[key3]) { seen[key3] = true; parts.push(m3[1] + '+ yr ' + ctx3); }
+  }
+
+  // Pattern 4: Simple "X+ years" standalone (catches anything missed)
+  if (parts.length === 0) {
+    var pat4 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\s,]*?)(?:experience|expertise)/gi;
+    var m4;
+    while ((m4 = pat4.exec(d)) !== null && parts.length < 3) {
+      var key4 = 'simple' + m4[1];
+      if (!seen[key4]) { seen[key4] = true; parts.push(m4[1] + '+ years'); }
+    }
   }
 
   // Fallback: API structured data
@@ -80,12 +92,23 @@ function extractSalary(job) {
 
 function mapType(t) {
   if (!t) return 'Not specified';
-  t = t.toUpperCase();
-  if (t.includes('FULL')) return 'Full-time';
-  if (t.includes('CONTRACT')) return 'Contract';
-  if (t.includes('PART')) return 'Part-time';
-  if (t.includes('INTERN')) return 'Internship';
-  return t;
+  t = t.toUpperCase().trim();
+  // Only match exact JSearch employment type values
+  var typeMap = {
+    'FULLTIME': 'Full-time',
+    'FULL_TIME': 'Full-time',
+    'PARTTIME': 'Part-time',
+    'PART_TIME': 'Part-time',
+    'CONTRACTOR': 'Contract',
+    'CONTRACT': 'Contract',
+    'INTERN': 'Internship',
+    'INTERNSHIP': 'Internship',
+    'TEMPORARY': 'Temporary',
+    'VOLUNTEER': 'Volunteer',
+    'PER_DIEM': 'Per Diem',
+    'OTHER': 'Other'
+  };
+  return typeMap[t] || t;
 }
 
 exports.handler = async (event) => {

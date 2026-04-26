@@ -181,7 +181,7 @@ tr:hover td{background:rgba(8,145,178,.02)}
         <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
         <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="Hiring Cafe">Hiring Cafe</option><option value="Snagajob">Snagajob</option><option value="BeBee">BeBee</option><option value="Talent.com">Talent.com</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option><option value="Jooble">Jooble</option><option value="CyberSecurityJobs">CyberSecurityJobs</option></select></div>
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
-        <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="3months">Last 3 Months</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
+        <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
         <div class="sg"><label>Depth (pages/role)</label><select id="sPages"><option value="3">Quick (3 pages/role)</option><option value="5" selected>Standard (5 pages/role)</option><option value="10">Deep (10 pages/role)</option></select></div>
         <button class="sbtn" id="searchBtn" onclick="searchJobs()">Search</button>
       </div>
@@ -442,7 +442,10 @@ function applyFilters(){
   });
   if(sortCol){
     filtered.sort(function(a,b){
-      var va=String(a[sortCol]||'').toLowerCase(),vb=String(b[sortCol]||'').toLowerCase();
+      var va=a[sortCol],vb=b[sortCol];
+      // Numeric sort for index and columns that look like numbers
+      if(sortCol==='idx'||(!isNaN(va)&&!isNaN(vb))){return (Number(va)-Number(vb))*sortDir}
+      va=String(va||'').toLowerCase();vb=String(vb||'').toLowerCase();
       if(va<vb)return -1*sortDir;if(va>vb)return sortDir;return 0;
     });
   }
@@ -466,7 +469,8 @@ async function searchJobs(){
   document.getElementById('loadState').textContent='Searching '+searchRoles.length+' role(s) × '+pages+' pages each = '+searchRoles.length*pages+' API calls. Please wait...';
   document.getElementById('pag').classList.remove('show');
   var datePosted=document.getElementById('sPeriod').value;
-  if(datePosted==='custom'||datePosted==='3months')datePosted='all';
+  // JSearch supports: today, 3days, week, month, all
+  if(datePosted==='custom')datePosted='all';
   var pages=parseInt(document.getElementById('sPages').value)||10;
   var empTypes=types.join(',');
   try{
