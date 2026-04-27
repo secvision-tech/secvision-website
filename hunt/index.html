@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SecVision Job Hunt | SOC & Security Job Intelligence</title>
+<title>SecVision Business Hunt | SOC & Security Job Intelligence</title>
 <meta name="robots" content="noindex, nofollow">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
@@ -118,7 +118,7 @@ tr:hover td{background:rgba(8,145,178,.02)}
 <div class="header" id="appHeader" style="display:none">
   <div class="header-left">
     <div class="header-logo"><svg viewBox="0 0 34 34"><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="#0891B2"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div><div class="header-title">SecVision Job Hunt</div><div class="header-sub">SOC & Security Job Intelligence</div></div>
+    <div><div class="header-title">SecVision Business Hunt</div><div class="header-sub">SOC & Security Job Intelligence</div></div>
   </div>
   <div class="user-menu" id="userMenu" onclick="event.stopPropagation();document.getElementById('userDropdown').classList.toggle('open')">
     <div class="user-avatar" id="userAvatar">SV</div>
@@ -140,7 +140,7 @@ tr:hover td{background:rgba(8,145,178,.02)}
   <div class="login-card">
     <div class="login-header">
       <svg viewBox="0 0 34 34" width="48" height="48" style="margin-bottom:.5rem"><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="#0891B2"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <h1>SecVision Job Hunt</h1><p>SOC & Security Job Intelligence Platform</p>
+      <h1>SecVision Business Hunt</h1><p>SOC & Security Job Intelligence Platform</p>
     </div>
     <div class="login-body">
       <p style="font-size:.85rem;color:var(--tl);margin-bottom:1.2rem;text-align:center">Sign in with your SecVision Microsoft 365 account.</p>
@@ -152,7 +152,7 @@ tr:hover td{background:rgba(8,145,178,.02)}
 <div class="app-page" id="appPage">
   <div class="main-content">
     <div class="search-panel">
-      <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Job Search & Hunting</div>
+      <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Security Job Search & Hunting</div>
       <div class="sf">
         <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (Listed Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
         <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option></select></div>
@@ -188,7 +188,7 @@ var msalConfig={auth:{clientId:'dc517c46-dcf0-4d38-80e0-3cda854a5d59',authority:
 var msal_=new msal.PublicClientApplication(msalConfig),curUser=null,allJobs=[],filtered=[],curPage=1,perPage=25,sortCol='',sortDir=1,colFilters={};
 var COLS=[
   {key:'idx',label:'#',w:30,num:true},
-  {key:'date',label:'Date',w:68},
+  {key:'date',label:'Date',w:68,dateSort:true},
   {key:'title',label:'Role / Title',w:150},
   {key:'company',label:'Company',w:100},
   {key:'location',label:'Location',w:90},
@@ -243,15 +243,18 @@ function buildTableHeader(){
   });
 }
 
+var wasResizing=false;
 function startResize(e,th){
-  e.preventDefault();e.stopPropagation();var s=e.pageX,sw=th.offsetWidth,idx=Array.from(th.parentNode.children).indexOf(th);
+  e.preventDefault();e.stopPropagation();wasResizing=true;var s=e.pageX,sw=th.offsetWidth,idx=Array.from(th.parentNode.children).indexOf(th);
   var mv=function(ev){var w=Math.max(30,sw+(ev.pageX-s));th.style.width=w+'px';th.style.minWidth=w+'px';
     var f=document.getElementById('thFilter').children;if(f[idx]){f[idx].style.width=w+'px';f[idx].style.minWidth=w+'px'}};
-  var up=function(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up)};
+  var up=function(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+    setTimeout(function(){wasResizing=false},100)};
   document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
 }
 
 function sortTable(key){
+  if(wasResizing)return;
   if(sortCol===key)sortDir*=-1;else{sortCol=key;sortDir=1}
   document.querySelectorAll('#thRow th').forEach(function(t){t.classList.remove('sorted')});
   var idx=COLS.findIndex(function(c){return c.key===key}),isNum=COLS[idx]?.num;
@@ -264,9 +267,13 @@ function applyFilters(){
     for(var k in colFilters){if(!colFilters[k])continue;if(String(job[k]||'').toLowerCase().indexOf(colFilters[k])===-1)return false}return true;
   });
   if(sortCol){
-    var isNum=COLS.find(function(c){return c.key===sortCol})?.num;
+    var colDef=COLS.find(function(c){return c.key===sortCol});
     filtered.sort(function(a,b){
-      if(isNum)return(Number(a[sortCol])-Number(b[sortCol]))*sortDir;
+      if(colDef?.num)return(Number(a[sortCol])-Number(b[sortCol]))*sortDir;
+      if(colDef?.dateSort){
+        var da=a.dateRaw?new Date(a.dateRaw).getTime():0,db=b.dateRaw?new Date(b.dateRaw).getTime():0;
+        return(da-db)*sortDir;
+      }
       var va=String(a[sortCol]||'').toLowerCase(),vb=String(b[sortCol]||'').toLowerCase();
       return va<vb?-1*sortDir:va>vb?sortDir:0;
     });
@@ -320,12 +327,23 @@ function renderTable(){
     var tr=document.createElement('tr');
     var companyCell=j.companyUrl?'<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>':'<a href="https://www.google.com/search?q='+encodeURIComponent(j.company+' company website')+'" target="_blank" title="Search company">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+j.title+'</td><td class="td-c">'+companyCell+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td title="'+esc(j.contact)+'">'+j.contact+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+j.title+'</td><td class="td-c">'+companyCell+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
     tb.appendChild(tr);
   });
   renderPag(tp);
 }
 function esc(s){return(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function contactCell(j){
+  if(j.contact&&j.contact!=='See details'&&j.contact!=='Apply online'){
+    // Has actual contact - add LinkedIn search link
+    var name=j.contact.split('(')[0].trim();
+    var linkedinUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent(name+' '+j.company);
+    return '<a href="'+linkedinUrl+'" target="_blank" title="Find on LinkedIn">'+esc(j.contact)+'</a>';
+  }
+  // No contact found - provide LinkedIn search for company recruiter
+  var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('recruiter OR HR '+j.company)+'&origin=GLOBAL_SEARCH_HEADER';
+  return '<a href="'+searchUrl+'" target="_blank" title="Search company HR on LinkedIn" style="font-size:.58rem">Search LinkedIn</a>';
+}
 
 function renderPag(tp){
   var c=document.getElementById('pagBtns');c.innerHTML='';
@@ -376,7 +394,7 @@ function exportXLSX(){
 function exportPDF(){
   var d=getExportData();if(!d.length)return;
   var doc=new jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a3'});
-  doc.setFontSize(14);doc.text('SecVision Job Hunt Results - '+new Date().toLocaleDateString(),40,30);
+  doc.setFontSize(14);doc.text('SecVision Business Hunt Results - '+new Date().toLocaleDateString(),40,30);
   doc.setFontSize(8);doc.text(filtered.length+' jobs | Generated '+new Date().toLocaleString(),40,45);
   var cols=Object.keys(d[0]).filter(function(k){return k!=='Apply Link'});
   var rows=d.map(function(r){return cols.map(function(k){return String(r[k]||'').slice(0,40)})});

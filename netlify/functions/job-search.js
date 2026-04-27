@@ -1,46 +1,31 @@
-// Security Certifications only
 const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-500|AZ-900|MS-500|CCSP|CCNA|CCNP|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF/gi;
-
-// Compliance frameworks only (separate from certs)
 const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*CSF|NIST\s*800-171|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR/gi;
-
-// Tools - fixed TIP to require full phrase, not standalone word
 const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)/gi;
-
-// Technical skills
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|patch\s*management|asset\s*management|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
 
 function unique(text, re) {
   if (!text) return [];
   var m = text.match(re) || [], seen = {};
-  return m.filter(function(v) {
-    var k = v.toLowerCase().replace(/\s+/g, ' ').trim();
-    if (seen[k]) return false; seen[k] = true; return true;
-  }).slice(0, 12);
+  return m.filter(function(v) { var k = v.toLowerCase().replace(/\s+/g,' ').trim(); if (seen[k]) return false; seen[k] = true; return true; }).slice(0, 12);
 }
 
 function extractExp(job) {
   var d = job.job_description || '', parts = [], seen = {};
-  // P1: "X+ years of [adj] experience [working] in/with ..."
-  var p1 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*)?(?:experience|expertise)\s*(?:in|with|working\s*(?:in|with)|leading|managing|performing|supporting|conducting|across|within|using)?\s*([\w\s,/&\-\u2010\u2013()]+?)(?:\.|;|\n|,\s*(?:with|including|and|or|in|plus|specific))/gi;
+  var p1 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*)?(?:experience|expertise)\s*(?:in|with|working\s*(?:in|with)|leading|managing|performing|supporting|conducting|across|within|using)?\s*([\w\s,/&\-\u2010\u2013()]+?)(?:\.|;|\n|,\s*(?:with|including|and|or|in|plus|specific))/gi;
   var m; while ((m = p1.exec(d)) !== null && parts.length < 5) {
     var c = m[2].trim().slice(0, 40).replace(/^\s*(?:a|an|the)\s*/i, '');
     if (c.length < 3) continue; var k = m[1] + c.toLowerCase();
     if (!seen[k]) { seen[k] = true; parts.push(m[1] + '+ yr ' + c); }
   }
-  // P2: "X-Y years of experience"
   var p2 = /(\d+)\s*[\-\u2013]+\s*(\d+)\s*years?\s*(?:of\s*)?(?:experience|expertise)/gi;
   while ((m = p2.exec(d)) !== null && parts.length < 5) {
     var k2 = m[1]+'-'+m[2]; if (!seen[k2]) { seen[k2] = true; parts.unshift(m[1]+'-'+m[2]+' years'); }
   }
-  // P3: "at least/minimum X years of [adj] experience in..."
   var p3 = /(?:minimum|at\s*least|requires?)\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\-\u2010\u2011\s]*)?(?:experience|expertise)\s*(?:in|with|using)?\s*([\w\s,/&\-]+?)(?:\.|;|,|\n|$)/gi;
   while ((m = p3.exec(d)) !== null && parts.length < 5) {
-    var c3 = m[2].trim().slice(0, 35);
-    if (c3.length < 3) continue; var k3 = 'min'+m[1]+c3.toLowerCase();
-    if (!seen[k3]) { seen[k3] = true; parts.push(m[1]+'+ yr '+c3); }
+    var c3 = m[2].trim().slice(0, 35); if (c3.length < 3) continue;
+    var k3 = 'min'+m[1]+c3.toLowerCase(); if (!seen[k3]) { seen[k3] = true; parts.push(m[1]+'+ yr '+c3); }
   }
-  // P4: Broad fallback "X+ years experience"
   if (parts.length === 0) {
     var p4 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\s,\-\u2010\u2011]*?)(?:experience|expertise)/gi;
     while ((m = p4.exec(d)) !== null && parts.length < 3) {
@@ -61,36 +46,106 @@ function extractElig(job) {
   return i.length ? i.join(', ') : 'See details';
 }
 
+// #46: Handle $XX.XX/hr, total compensation, salary range formats
 function extractSalary(job) {
   if (job.job_min_salary && job.job_max_salary) {
     var s = job.job_salary_period === 'HOUR' ? '/hr' : '/yr';
     return '$'+Math.round(job.job_min_salary).toLocaleString()+'-$'+Math.round(job.job_max_salary).toLocaleString()+s;
   }
-  var m = (job.job_description||'').match(/\$\s*([\d,]+)\s*[\-\u2013to]+\s*\$?\s*([\d,]+)\s*(?:per\s*)?(hour|year|hr|yr|annually)?/i);
-  if (m) return '$'+m[1]+'-$'+m[2]+(/hour|hr/i.test(m[3]||'')?'/hr':'/yr');
+  var d = job.job_description || '';
+  // Pattern: $XX.XX/hr - $YY.YY/hr or "set between $X and $Y"
+  var m1 = d.match(/\$\s*([\d,.]+)\s*\/\s*(hr|hour)\s*(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/?\s*(?:hr|hour)?/i);
+  if (m1) return '$'+m1[1]+'/hr - $'+m1[3]+'/hr';
+  // Pattern: "between $X/hr and $Y/hr" or "set between $X and $Y"
+  var m2 = d.match(/(?:between|from)\s*\$\s*([\d,.]+)\s*(?:\/\s*(?:hr|hour)\s*)?(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*(?:\/?\s*(?:hr|hour))?/i);
+  if (m2) {
+    var isHourly = /\/\s*(?:hr|hour)|per\s*hour|hourly/i.test(d.substring(Math.max(0,d.indexOf(m2[0])-30), d.indexOf(m2[0])+m2[0].length+30));
+    return '$'+m2[1]+'-$'+m2[2]+(isHourly?'/hr':'/yr');
+  }
+  // Pattern: "$X,000 - $Y,000" with optional /yr /hr
+  var m3 = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)\s*\+?\s*(?:\/?\s*)?(per\s*hour|per\s*year|hourly|annually|\/hr|\/yr|\/hour|\/year)?/i);
+  if (m3) {
+    var suffix = /hour|hr/i.test(m3[3]||'') ? '/hr' : '/yr';
+    return '$'+m3[1]+'-$'+m3[2]+suffix;
+  }
+  // Pattern: "total compensation ... $X - $Y" or "compensation ... $X,000"
+  var m4 = d.match(/(?:compensation|salary|pay)\s*(?:[\w\s]*?)\$\s*([\d,]+)\s*[\-\u2013to]+\s*\$?\s*([\d,]+)/i);
+  if (m4) return '$'+m4[1]+'-$'+m4[2]+'/yr';
   return 'Not disclosed';
 }
 
 function extractContact(job) {
-  var d = job.job_description || '';
-  // Try to find email
+  var d = job.job_description || '', company = job.employer_name || '';
   var emailMatch = d.match(/[\w.\-+]+@[\w.\-]+\.[\w]{2,}/);
-  // Try to find contact name patterns
-  var nameMatch = d.match(/(?:contact|reach out to|send.*to|apply.*to|email)\s*:?\s*([A-Z][a-z]+ [A-Z][a-z]+)/i);
-  var name = nameMatch ? nameMatch[1] : '';
+  // Try recruiter/HR/hiring manager name patterns
+  var namePatterns = [
+    /(?:recruiter|hiring\s*manager|talent\s*acquisition|HR\s*contact|point\s*of\s*contact)\s*:?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
+    /(?:contact|reach\s*out\s*to|send.*to|email|questions.*to)\s*:?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
+    /([A-Z][a-z]+\s+[A-Z][a-z]+)\s*(?:,?\s*(?:recruiter|HR|hiring|talent))/i
+  ];
+  var name = '';
+  for (var i = 0; i < namePatterns.length; i++) {
+    var nm = d.match(namePatterns[i]);
+    if (nm) { name = nm[1]; break; }
+  }
   var email = emailMatch ? emailMatch[0] : '';
+  // Filter out generic/noreply emails
+  if (email && /noreply|no-reply|donotreply|notifications/i.test(email)) email = '';
   if (name && email) return name + ' (' + email + ')';
   if (email) return email;
   if (name) return name;
-  return 'Apply online';
+  return 'See details';
 }
 
-function mapType(t) {
-  if (!t) return 'Not specified';
-  var m = { 'FULLTIME':'Full-time','FULL_TIME':'Full-time','PARTTIME':'Part-time','PART_TIME':'Part-time',
+// #45, #49, #50: Smart job type detection from description
+function detectJobType(job) {
+  var apiType = job.job_employment_type || '';
+  var d = job.job_description || '';
+  var salary = extractSalary(job);
+
+  // First check API structured type
+  var typeMap = { 'FULLTIME':'Full-time','FULL_TIME':'Full-time','PARTTIME':'Part-time','PART_TIME':'Part-time',
     'CONTRACTOR':'Contract','CONTRACT':'Contract','INTERN':'Internship','INTERNSHIP':'Internship',
-    'TEMPORARY':'Temporary','VOLUNTEER':'Volunteer','PER_DIEM':'Per Diem','OTHER':'Other' };
-  return m[t.toUpperCase().trim()] || t;
+    'TEMPORARY':'Temporary','VOLUNTEER':'Volunteer','PER_DIEM':'Per Diem' };
+  var mapped = typeMap[apiType.toUpperCase().trim()];
+
+  // Now analyze description for contract signals
+  var contractSignals = 0, fulltimeSignals = 0;
+
+  // Strong contract indicators
+  if (/\bcontract\s*(?:position|role|opportunity|assignment|engagement|basis|duration|length)\b/i.test(d)) contractSignals += 3;
+  if (/\b(?:W-?2|1099|C2C|Corp[\s-]*to[\s-]*Corp)\b/i.test(d)) contractSignals += 3;
+  if (/\b(?:contract[\s-]*to[\s-]*hire|temp[\s-]*to[\s-]*perm)\b/i.test(d)) contractSignals += 3;
+  if (/\b(?:6|12|18|24)\s*(?:month|months)\s*(?:contract|engagement|assignment)\b/i.test(d)) contractSignals += 3;
+  if (/\/\s*(?:hr|hour)\b/i.test(salary)) contractSignals += 2;
+  if (/\bcontract\s*(?:only|worker|staff|employee|personnel)\b/i.test(d)) contractSignals += 2;
+  // Weak: just "contractor" mentioned in passing (like "manage contractor staff") - not counted
+
+  // Strong full-time indicators
+  if (/\bfull[\s-]*time\s*(?:position|role|opportunity|employee|employment)\b/i.test(d)) fulltimeSignals += 3;
+  if (/\b(?:benefits|401k|401\(k\)|PTO|paid\s*time\s*off|medical|dental|vision)\b/i.test(d)) fulltimeSignals += 2;
+  if (/\b(?:annual|yearly)\s*(?:salary|compensation|bonus)\b/i.test(d)) fulltimeSignals += 2;
+  if (/\btotal\s*compensation\b/i.test(d)) fulltimeSignals += 2;
+  if (/\/\s*(?:yr|year)\b/i.test(salary) && !salary.includes('Not disclosed')) fulltimeSignals += 1;
+  if (/\bsalaried\b/i.test(d)) fulltimeSignals += 3;
+
+  // Part-time indicators
+  var partTimeSignals = /\bpart[\s-]*time\b/i.test(d) ? 3 : 0;
+
+  // Internship indicators
+  var internSignals = /\bintern(?:ship)?\b/i.test(d) ? 3 : 0;
+
+  // Decision logic: description analysis overrides API type only if strong signals
+  if (contractSignals >= 3 && contractSignals > fulltimeSignals) return 'Contract';
+  if (fulltimeSignals >= 3 && fulltimeSignals > contractSignals) return 'Full-time';
+  if (partTimeSignals >= 3) return 'Part-time';
+  if (internSignals >= 3) return 'Internship';
+  // Fall back to API type if available
+  if (mapped) return mapped;
+  // Final fallback: analyze salary hints
+  if (salary.includes('/hr')) return 'Contract';
+  if (salary.includes('/yr')) return 'Full-time';
+  return 'Not specified';
 }
 
 exports.handler = async (event) => {
@@ -104,8 +159,7 @@ exports.handler = async (event) => {
     var apiKey = process.env.JSEARCH_API_KEY;
     if (!apiKey) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'API key not configured' }) };
     var roles = body.roles || [body.query || 'cybersecurity'];
-    var totalPages = Math.min(body.pages || 10, 50);
-    var pagesPerRole = Math.min(Math.max(1, Math.ceil(totalPages / roles.length)), 5);
+    var pagesPerRole = Math.min(Math.max(1, Math.ceil((body.pages||10) / roles.length)), 5);
     var allJobs = [], seenIds = {}, totalApiCalls = 0, startTime = Date.now();
 
     async function fetchPage(query, page) {
@@ -117,9 +171,7 @@ exports.handler = async (event) => {
           headers: { 'x-rapidapi-host': 'jsearch.p.rapidapi.com', 'x-rapidapi-key': apiKey }
         });
         totalApiCalls++;
-        if (!r.ok) return [];
-        var d = await r.json();
-        return d.data || [];
+        if (!r.ok) return []; var d = await r.json(); return d.data || [];
       } catch (e) { return []; }
     }
 
@@ -145,6 +197,7 @@ exports.handler = async (event) => {
       return {
         idx: i + 1, id: job.job_id,
         date: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString('en-US') : 'N/A',
+        dateRaw: job.job_posted_at_datetime_utc || '',
         title: job.job_title || 'N/A', company: job.employer_name || 'N/A',
         companyUrl: job.employer_website || '',
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'Remote',
@@ -155,7 +208,8 @@ exports.handler = async (event) => {
         tools: unique(fullText, TOOL_RE).join(', ') || 'See details',
         eligibility: extractElig(job), salary: extractSalary(job),
         contact: extractContact(job),
-        source: job.job_publisher || 'Unknown', jobType: mapType(job.job_employment_type),
+        source: job.job_publisher || 'Unknown',
+        jobType: detectJobType(job),
         remote: job.job_is_remote ? 'Yes' : 'No',
         applyLink: job.job_apply_link || '', description: desc,
         qualifications: job.job_highlights?.Qualifications || [],
