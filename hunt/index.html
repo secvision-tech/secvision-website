@@ -81,6 +81,7 @@ th.flt-th input{width:100%;padding:.15rem .25rem;border:1px solid var(--g100);bo
 th.flt-th input:focus{border-color:var(--ac)}
 td{padding:.35rem .4rem;border-bottom:1px solid var(--off);color:var(--tx);vertical-align:top;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 tr:hover td{background:rgba(8,145,178,.02)}
+tr.row-hl td{background:rgba(8,145,178,.08)!important}
 .td-t{font-weight:600;color:var(--pri)}.td-c a{color:var(--ac);font-weight:500}
 .td-src a{display:inline-block;padding:.1rem .3rem;background:var(--off);border:1px solid var(--bd);border-radius:4px;font-size:.58rem;color:var(--ac);font-weight:600;text-decoration:none}
 .td-src a:hover{background:rgba(8,145,178,.06)}
@@ -196,7 +197,7 @@ var COLS=[
   {key:'skills',label:'Key Skills',w:130},
   {key:'certifications',label:'Certifications',w:110},
   {key:'compliance',label:'Compliance',w:110},
-  {key:'tools',label:'Tools',w:120},
+  {key:'tools',label:'Technology/Tools',w:120},
   {key:'contact',label:'Contact',w:110},
   {key:'eligibility',label:'Eligibility',w:80},
   {key:'jobType',label:'Type',w:65},
@@ -301,6 +302,12 @@ async function searchJobs(){
     allJobs=data.jobs||[];
     if(!sources.includes('Any')&&sources.length>0)
       allJobs=allJobs.filter(function(j){return sources.some(function(s){return j.source.toLowerCase().indexOf(s.toLowerCase())!==-1})});
+    // #56: Client-side job type filter — enforce selected types
+    var typeMap={'FULLTIME':'Full-time','CONTRACTOR':'Contract','PARTTIME':'Part-time','INTERN':'Internship'};
+    var selectedTypes=types.map(function(t){return typeMap[t]||t});
+    if(selectedTypes.length>0&&selectedTypes.length<4){
+      allJobs=allJobs.filter(function(j){return selectedTypes.indexOf(j.jobType)!==-1});
+    }
     allJobs.forEach(function(j,i){j.idx=i+1});
     document.getElementById('apiText').textContent='Found '+data.totalResults+' jobs ('+data.apiCalls+' API calls, '+data.rolesSearched.length+' roles). '+allJobs.length+' after filters.';
     colFilters={};sortCol='';sortDir=1;
@@ -328,6 +335,7 @@ function renderTable(){
     var companyCell=j.companyUrl?'<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>':'<a href="https://www.google.com/search?q='+encodeURIComponent(j.company+' company website')+'" target="_blank" title="Search company">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
     tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+j.title+'</td><td class="td-c">'+companyCell+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
+    tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON')return;this.classList.toggle('row-hl')};
     tb.appendChild(tr);
   });
   renderPag(tp);
@@ -341,7 +349,7 @@ function contactCell(j){
     return '<a href="'+linkedinUrl+'" target="_blank" title="Find on LinkedIn">'+esc(j.contact)+'</a>';
   }
   // No contact found - provide LinkedIn search for company recruiter
-  var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('recruiter OR HR '+j.company)+'&origin=GLOBAL_SEARCH_HEADER';
+  var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+j.company+'" AND ("recruiter" OR "HR")')+'&origin=GLOBAL_SEARCH_HEADER';
   return '<a href="'+searchUrl+'" target="_blank" title="Search company HR on LinkedIn" style="font-size:.58rem">Search LinkedIn</a>';
 }
 
