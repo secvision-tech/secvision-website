@@ -1,5 +1,5 @@
 const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-500|AZ-900|MS-500|CCSP|CCNA|CCNP|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF/gi;
-const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*CSF|NIST\s*800-171|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR/gi;
+const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII/gi;
 const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)/gi;
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|patch\s*management|asset\s*management|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
 
@@ -180,7 +180,7 @@ exports.handler = async (event) => {
 
     async function fetchPage(query, page) {
       if (Date.now() - startTime > 22000) return [];
-      var params = new URLSearchParams({ query: query, page: String(page), num_pages: '1', country: 'us', date_posted: body.datePosted || 'all' });
+      var params = new URLSearchParams({ query: query, page: String(page), num_pages: '1', country: body.country || 'us', date_posted: body.datePosted || 'all' });
       if (body.employmentTypes) params.set('employment_types', body.employmentTypes);
       try {
         var r = await fetch('https://jsearch.p.rapidapi.com/search?' + params, {
@@ -217,11 +217,17 @@ exports.handler = async (event) => {
         /(?:on\s*behalf\s*of|partnered\s*with|working\s*with|representing)\s*([\w\s&.,']+?)\s*(?:,|to\s*find|who\s*is|that\s*is)/i,
         /(?:hiring\s*for|staffing\s*for|recruiting\s*for)\s*([\w\s&.,']+?)(?:\.|,|\s*-|\s*who)/i
       ];
+      // Words that cannot start a company name
+      var badStarts = /^(?:over|under|about|with|the|a|an|and|or|for|in|at|to|from|by|on|is|are|was|were|has|have|had|will|would|can|could|may|might|shall|should|must|not|no|all|any|each|every|some|many|much|more|most|few|less|other|another|such|this|that|these|those|than|then|now|here|there|where|when|how|what|which|who|whom|whose|why|if|so|up|out|off|down|\d+)\b/i;
       for (var cp = 0; cp < clientPatterns.length; cp++) {
         var cm = desc.match(clientPatterns[cp]);
-        if (cm && cm[1].trim().length > 2 && cm[1].trim().length < 60) {
-          actualCompany = cm[1].trim().replace(/[,.']+$/, '');
-          break;
+        if (cm) {
+          var candidate = cm[1].trim().replace(/[,.']+$/, '');
+          // Validate: length 3-60, starts with uppercase letter, not a common word
+          if (candidate.length >= 3 && candidate.length <= 60 && /^[A-Z]/.test(candidate) && !badStarts.test(candidate)) {
+            actualCompany = candidate;
+            break;
+          }
         }
       }
       // #63: Build company URL - use employer_website if available, else Google I'm Feeling Lucky

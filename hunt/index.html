@@ -158,9 +158,13 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (Listed Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
         <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option></select></div>
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
+        <div class="sg"><label>Region</label><select id="sRegion" onchange="updateCountries()"><option value="Any">Any (All Regions)</option><option value="NA" selected>North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select></div>
+        <div class="sg"><label>Country</label><select id="sCountry"><option value="us" selected>United States</option><option value="ca">Canada</option></select></div>
+        <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:.6rem;margin-top:.5rem;align-items:end">
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
         <div class="sg"><label>Depth</label><select id="sPages"><option value="3">Quick (3pg/role)</option><option value="5" selected>Standard (5pg)</option><option value="10">Deep (10pg)</option></select></div>
-        <button class="sbtn" id="searchBtn" onclick="searchJobs()">Search</button>
       </div>
       <div class="sf2" id="customDates"><div class="sg"><label>From</label><input type="date" id="dateFrom"></div><div class="sg"><label>To</label><input type="date" id="dateTo"></div></div>
       <div class="api-info" id="apiInfo"><span id="apiText"></span><div class="export-btns" id="exportBtns" style="display:none"><button class="export-btn" onclick="exportCSV()">CSV</button><button class="export-btn" onclick="exportXLSX()">Excel</button><button class="export-btn" onclick="exportPDF()">PDF</button></div></div>
@@ -196,7 +200,7 @@ var COLS=[
   {key:'experience',label:'Experience',w:120},
   {key:'skills',label:'Key Skills',w:130},
   {key:'certifications',label:'Certifications',w:110},
-  {key:'compliance',label:'Compliance',w:110},
+  {key:'compliance',label:'Compliance/Framework',w:120},
   {key:'tools',label:'Technology/Tools',w:120},
   {key:'contact',label:'Contact',w:110},
   {key:'eligibility',label:'Eligibility',w:80},
@@ -216,6 +220,27 @@ function handleAnyToggle(sel){
   var opts=Array.from(sel.options),any=opts.find(function(o){return o.value==='Any'}),selected=Array.from(sel.selectedOptions).map(function(o){return o.value});
   if(selected.includes('Any')&&selected.length>1){var nonAny=selected.filter(function(v){return v!=='Any'});if(nonAny.length>0&&any)any.selected=false;else opts.forEach(function(o){if(o.value!=='Any')o.selected=false})}
   if(Array.from(sel.selectedOptions).length===0&&any)any.selected=true;
+}
+var COUNTRIES={
+  'Any':[['','Any (All Countries)']],
+  'NA':[['us','United States'],['ca','Canada'],['mx','Mexico']],
+  'EU':[['gb','United Kingdom'],['de','Germany'],['fr','France'],['nl','Netherlands'],['ie','Ireland'],['ch','Switzerland'],['se','Sweden'],['no','Norway'],['dk','Denmark'],['fi','Finland'],['be','Belgium'],['at','Austria'],['es','Spain'],['it','Italy'],['pl','Poland'],['pt','Portugal'],['cz','Czech Republic'],['ro','Romania']],
+  'AP':[['in','India'],['au','Australia'],['sg','Singapore'],['jp','Japan'],['kr','South Korea'],['nz','New Zealand'],['hk','Hong Kong'],['my','Malaysia'],['ph','Philippines'],['id','Indonesia'],['th','Thailand']],
+  'ME':[['ae','UAE'],['sa','Saudi Arabia'],['il','Israel'],['qa','Qatar'],['bh','Bahrain'],['kw','Kuwait'],['om','Oman']],
+  'AF':[['za','South Africa'],['ng','Nigeria'],['ke','Kenya'],['eg','Egypt'],['gh','Ghana'],['ma','Morocco']],
+  'SA':[['br','Brazil'],['ar','Argentina'],['cl','Chile'],['co','Colombia'],['pe','Peru']]
+};
+function updateCountries(){
+  var region=document.getElementById('sRegion').value;
+  var sel=document.getElementById('sCountry');
+  sel.innerHTML='';
+  var list=COUNTRIES[region]||COUNTRIES['Any'];
+  list.forEach(function(c){
+    var o=document.createElement('option');o.value=c[0];o.textContent=c[1];sel.appendChild(o);
+  });
+  if(region==='NA')sel.value='us';
+  else if(region==='Any')sel.value='';
+  else sel.selectedIndex=0;
 }
 function showApp(){
   document.getElementById('loginPage').style.display='none';document.getElementById('appHeader').style.display='flex';document.getElementById('appPage').classList.add('active');
@@ -297,7 +322,7 @@ async function searchJobs(){
   var pages=parseInt(document.getElementById('sPages').value)||5;
   try{
     var r=await fetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:types.join(',')})});
+      body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:types.join(','),country:document.getElementById('sCountry').value||'us'})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     if(!sources.includes('Any')&&sources.length>0)
