@@ -332,7 +332,7 @@ function renderTable(){
   var tb=document.getElementById('rBody');tb.innerHTML='';
   pg.forEach(function(j){
     var tr=document.createElement('tr');
-    var companyCell=j.companyUrl?'<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>':'<a href="https://www.google.com/search?q='+encodeURIComponent(j.company+' company website')+'" target="_blank" title="Search company">'+j.company+'</a>';
+    var companyCell='<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
     tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+j.title+'</td><td class="td-c">'+companyCell+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
     tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON')return;this.classList.toggle('row-hl')};
@@ -368,7 +368,7 @@ function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(
 
 function viewDet(i){
   var j=allJobs[i];if(!j)return;document.getElementById('detTitle').textContent=j.title;
-  var h='<div class="dm-meta">'+[['Company',j.companyUrl?'<a href="'+j.companyUrl+'" target="_blank">'+j.company+'</a>':j.company],['Location',j.location],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company','<a href="'+j.companyUrl+'" target="_blank">'+j.company+'</a>'],['Location',j.location],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
   if(j.qualifications.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+j.qualifications.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(j.responsibilities.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+j.responsibilities.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(j.benefits.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+j.benefits.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';

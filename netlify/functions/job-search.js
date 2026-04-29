@@ -75,22 +75,29 @@ function extractSalary(job) {
 }
 
 function extractContact(job) {
-  var d = job.job_description || '', company = job.employer_name || '';
-  var emailMatch = d.match(/[\w.\-+]+@[\w.\-]+\.[\w]{2,}/);
-  // Try recruiter/HR/hiring manager name patterns
+  var d = job.job_description || '';
+  // Only extract real contact emails (not generic/company emails)
+  var emailMatch = d.match(/(?:contact|email|reach|send|apply|submit|inquir)\w*\s*(?:at|to|:)\s*([\w.\-+]+@[\w.\-]+\.[\w]{2,})/i);
+  if (!emailMatch) {
+    // Try standalone email but validate it's a person email, not noreply/info/support
+    var anyEmail = d.match(/([\w.\-+]+@[\w.\-]+\.[\w]{2,})/);
+    if (anyEmail && !/noreply|no-reply|donotreply|notifications|info@|support@|careers@|jobs@|apply@|recruiting@|admin@/i.test(anyEmail[1])) {
+      emailMatch = anyEmail;
+    }
+  }
+  // Only match names that are explicitly labeled as recruiter/HR/contact
   var namePatterns = [
-    /(?:recruiter|hiring\s*manager|talent\s*acquisition|HR\s*contact|point\s*of\s*contact)\s*:?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
-    /(?:contact|reach\s*out\s*to|send.*to|email|questions.*to)\s*:?\s*([A-Z][a-z]+\s+[A-Z][a-z]+)/i,
-    /([A-Z][a-z]+\s+[A-Z][a-z]+)\s*(?:,?\s*(?:recruiter|HR|hiring|talent))/i
+    /(?:recruiter|hiring\s*manager|talent\s*acquisition\s*(?:specialist|manager|lead)?|HR\s*(?:manager|director|contact))\s*:?\s*-?\s*([A-Z][a-z]{2,}\s+[A-Z][a-z]{2,})/,
+    /(?:point\s*of\s*contact|POC)\s*:?\s*-?\s*([A-Z][a-z]{2,}\s+[A-Z][a-z]{2,})/,
+    /([A-Z][a-z]{2,}\s+[A-Z][a-z]{2,})\s*,?\s*(?:Recruiter|Talent\s*Acquisition|HR\s*Manager|Hiring\s*Manager)/
   ];
   var name = '';
   for (var i = 0; i < namePatterns.length; i++) {
     var nm = d.match(namePatterns[i]);
     if (nm) { name = nm[1]; break; }
   }
-  var email = emailMatch ? emailMatch[0] : '';
-  // Filter out generic/noreply emails
-  if (email && /noreply|no-reply|donotreply|notifications/i.test(email)) email = '';
+  var email = emailMatch ? (emailMatch[1] || emailMatch[0]) : '';
+  if (/noreply|no-reply|donotreply|notifications/i.test(email)) email = '';
   if (name && email) return name + ' (' + email + ')';
   if (email) return email;
   if (name) return name;
@@ -148,6 +155,15 @@ function detectJobType(job) {
   return 'Not specified';
 }
 
+// #60: Detect remote from both API field and description
+function detectRemote(job) {
+  if (job.job_is_remote) return 'Yes';
+  var d = (job.job_description || '') + ' ' + (job.job_title || '');
+  if (/\b(?:fully\s*remote|100%\s*remote|remote\s*(?:position|role|opportunity|work|only)|work\s*(?:from\s*home|remotely)|telecommute|telework)\b/i.test(d)) return 'Yes';
+  if (/\bhybrid\b/i.test(d)) return 'Hybrid';
+  return 'No';
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS')
     return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
@@ -194,12 +210,31 @@ exports.handler = async (event) => {
       var exSkills = unique(fullText, SKILL_RE);
       var ss = {}, fs = [];
       apiSkills.concat(exSkills).forEach(function(s) { var k = s.toLowerCase().trim(); if (!ss[k] && fs.length < 10) { ss[k] = true; fs.push(s); } });
+      // #62: Extract actual client company if staffing agency pattern found
+      var actualCompany = job.employer_name || 'N/A';
+      var clientPatterns = [
+        /(?:our\s*client|the\s*client|client\s*company)\s*,?\s*(?:is\s*)?([\w\s&.,']+?)\s*,?\s*(?:is\s*(?:seeking|looking|hiring|searching)|seeks|needs|requires)/i,
+        /(?:on\s*behalf\s*of|partnered\s*with|working\s*with|representing)\s*([\w\s&.,']+?)\s*(?:,|to\s*find|who\s*is|that\s*is)/i,
+        /(?:hiring\s*for|staffing\s*for|recruiting\s*for)\s*([\w\s&.,']+?)(?:\.|,|\s*-|\s*who)/i
+      ];
+      for (var cp = 0; cp < clientPatterns.length; cp++) {
+        var cm = desc.match(clientPatterns[cp]);
+        if (cm && cm[1].trim().length > 2 && cm[1].trim().length < 60) {
+          actualCompany = cm[1].trim().replace(/[,.']+$/, '');
+          break;
+        }
+      }
+      // #63: Build company URL - use employer_website if available, else Google I'm Feeling Lucky
+      var companyWebUrl = job.employer_website || '';
+      if (!companyWebUrl) {
+        companyWebUrl = 'https://www.google.com/search?btnI=1&q=' + encodeURIComponent(actualCompany + ' official website');
+      }
       return {
         idx: i + 1, id: job.job_id,
         date: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString('en-US') : 'N/A',
         dateRaw: job.job_posted_at_datetime_utc || '',
-        title: job.job_title || 'N/A', company: job.employer_name || 'N/A',
-        companyUrl: job.employer_website || '',
+        title: job.job_title || 'N/A', company: actualCompany,
+        companyUrl: companyWebUrl,
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'Remote',
         experience: extractExp(job),
         skills: fs.length ? fs.join(', ') : 'See details',
@@ -210,7 +245,7 @@ exports.handler = async (event) => {
         contact: extractContact(job),
         source: job.job_publisher || 'Unknown',
         jobType: detectJobType(job),
-        remote: job.job_is_remote ? 'Yes' : 'No',
+        remote: detectRemote(job),
         applyLink: job.job_apply_link || '', description: desc,
         qualifications: job.job_highlights?.Qualifications || [],
         responsibilities: job.job_highlights?.Responsibilities || [],
