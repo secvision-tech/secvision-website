@@ -164,6 +164,72 @@ function detectRemote(job) {
   return 'No';
 }
 
+// #68: Clean job title - strip clearance prefixes, location suffixes, keep core role
+function cleanTitle(title) {
+  if (!title) return 'N/A';
+  var clean = title;
+  // Remove clearance prefixes: "TS/SCI w/ CI Poly Cleared", "Secret Cleared", "Top Secret"
+  clean = clean.replace(/^(?:TS[\s/]*SCI[\s/]*(?:w\/?\s*)?(?:CI\s*Poly\s*)?(?:Cleared\s*)?|Top[\s-]*Secret\s*(?:Cleared\s*)?|Secret\s*(?:Cleared\s*)?|Public\s*Trust\s*(?:Cleared\s*)?)/i, '').trim();
+  // Remove trailing location/remote: "| Remote US", "- Remote", "(Hybrid)", "- Arlington, VA"
+  clean = clean.replace(/\s*[\|–\-]\s*(?:Remote\s*(?:US|USA|UK|CA)?|Hybrid|On[\s-]*site|Onsite)\s*$/i, '').trim();
+  clean = clean.replace(/\s*[\|–\-]\s*[A-Z][a-z]+(?:,\s*[A-Z]{2})?\s*$/i, '').trim();
+  clean = clean.replace(/\s*\((?:Remote|Hybrid|On[\s-]*site|REMOTE|HYBRID)\)\s*$/i, '').trim();
+  // Remove trailing clearance: "- TS/SCI Required", "(Secret Clearance)"
+  clean = clean.replace(/\s*[\|–\-]\s*(?:TS[\s/]*SCI|Secret|Top\s*Secret|Clearance)[\w\s]*/i, '').trim();
+  clean = clean.replace(/\s*\((?:TS[\s/]*SCI|Secret|Clearance)[^)]*\)\s*$/i, '').trim();
+  // Remove leading/trailing dashes, pipes
+  clean = clean.replace(/^[\s\-–|:]+|[\s\-–|:]+$/g, '').trim();
+  return clean || title;
+}
+
+// #69: Detect actual country from job data and description
+var COUNTRY_MAP = {
+  'US':'United States','USA':'United States','United States':'United States',
+  'CA':'Canada','Canada':'Canada',
+  'GB':'United Kingdom','UK':'United Kingdom','United Kingdom':'United Kingdom',
+  'DE':'Germany','Germany':'Germany',
+  'FR':'France','France':'France',
+  'AU':'Australia','Australia':'Australia',
+  'IN':'India','India':'India',
+  'SG':'Singapore','Singapore':'Singapore',
+  'IE':'Ireland','Ireland':'Ireland',
+  'NL':'Netherlands','Netherlands':'Netherlands',
+  'CH':'Switzerland','Switzerland':'Switzerland',
+  'SE':'Sweden','Sweden':'Sweden',
+  'AE':'UAE','UAE':'United Arab Emirates','United Arab Emirates':'United Arab Emirates',
+  'IL':'Israel','Israel':'Israel',
+  'JP':'Japan','Japan':'Japan',
+  'BR':'Brazil','Brazil':'Brazil',
+  'MX':'Mexico','Mexico':'Mexico',
+  'ZA':'South Africa','South Africa':'South Africa',
+  'NZ':'New Zealand','New Zealand':'New Zealand'
+};
+var US_STATES = /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\s*Hampshire|New\s*Jersey|New\s*Mexico|New\s*York|North\s*Carolina|North\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\s*Island|South\s*Carolina|South\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\s*Virginia|Wisconsin|Wyoming|D\.?C\.?)\b/i;
+var US_STATE_CODES = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
+
+function detectCountry(job) {
+  // Priority 1: API structured country field
+  var apiCountry = job.job_country || '';
+  if (apiCountry && COUNTRY_MAP[apiCountry]) return COUNTRY_MAP[apiCountry];
+
+  // Priority 2: Location fields
+  var loc = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
+  for (var k in COUNTRY_MAP) {
+    if (loc.indexOf(k) !== -1) return COUNTRY_MAP[k];
+  }
+
+  // Priority 3: Scan title and first 500 chars of description
+  var text = (job.job_title || '') + ' ' + (job.job_description || '').slice(0, 500);
+  if (US_STATES.test(text) || US_STATE_CODES.test(text) || /\bRemote\s*US\b|\bUSA\b|\bUnited\s*States\b/i.test(text)) return 'United States';
+  if (/\bRemote\s*(?:UK|GB)\b|\bUnited\s*Kingdom\b|\bLondon\b|\bManchester\b/i.test(text)) return 'United Kingdom';
+  if (/\bRemote\s*CA\b|\bCanada\b|\bToronto\b|\bVancouver\b|\bMontreal\b|\bOttawa\b/i.test(text)) return 'Canada';
+  if (/\bRemote\s*(?:AU)\b|\bAustralia\b|\bSydney\b|\bMelbourne\b/i.test(text)) return 'Australia';
+  if (/\bIndia\b|\bBangalore\b|\bMumbai\b|\bHyderabad\b|\bPune\b|\bDelhi\b/i.test(text)) return 'India';
+  if (/\bGermany\b|\bBerlin\b|\bMunich\b|\bFrankfurt\b/i.test(text)) return 'Germany';
+
+  return 'Unknown';
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS')
     return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
@@ -239,9 +305,10 @@ exports.handler = async (event) => {
         idx: i + 1, id: job.job_id,
         date: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString('en-US') : 'N/A',
         dateRaw: job.job_posted_at_datetime_utc || '',
-        title: job.job_title || 'N/A', company: actualCompany,
+        title: job.job_title || 'N/A', titleClean: cleanTitle(job.job_title), company: actualCompany,
         companyUrl: companyWebUrl,
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'Remote',
+        detectedCountry: detectCountry(job),
         experience: extractExp(job),
         skills: fs.length ? fs.join(', ') : 'See details',
         certifications: unique(fullText, CERT_RE).join(', ') || 'See details',

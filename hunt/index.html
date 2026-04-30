@@ -290,7 +290,7 @@ function sortTable(key){
 
 function applyFilters(){
   filtered=allJobs.filter(function(job){
-    for(var k in colFilters){if(!colFilters[k])continue;if(String(job[k]||'').toLowerCase().indexOf(colFilters[k])===-1)return false}return true;
+    for(var k in colFilters){if(!colFilters[k])continue;var val=k==='title'?String((job.titleClean||job.title)||''):String(job[k]||'');if(val.toLowerCase().indexOf(colFilters[k])===-1)return false}return true;
   });
   if(sortCol){
     var colDef=COLS.find(function(c){return c.key===sortCol});
@@ -333,6 +333,22 @@ async function searchJobs(){
     if(selectedTypes.length>0&&selectedTypes.length<4){
       allJobs=allJobs.filter(function(j){return selectedTypes.indexOf(j.jobType)!==-1});
     }
+    // #69: Country cross-check — filter out jobs that don't match selected country
+    var selCountry=document.getElementById('sCountry').value;
+    var selRegion=document.getElementById('sRegion').value;
+    if(selCountry&&selRegion!=='Any'){
+      var CCODE_TO_NAME={'us':'United States','ca':'Canada','mx':'Mexico','gb':'United Kingdom','de':'Germany','fr':'France','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','no':'Norway','dk':'Denmark','fi':'Finland','be':'Belgium','at':'Austria','es':'Spain','it':'Italy','pl':'Poland','pt':'Portugal','cz':'Czech Republic','ro':'Romania','in':'India','au':'Australia','sg':'Singapore','jp':'Japan','kr':'South Korea','nz':'New Zealand','hk':'Hong Kong','my':'Malaysia','ph':'Philippines','id':'Indonesia','th':'Thailand','ae':'UAE','sa':'Saudi Arabia','il':'Israel','qa':'Qatar','bh':'Bahrain','kw':'Kuwait','om':'Oman','za':'South Africa','ng':'Nigeria','ke':'Kenya','eg':'Egypt','gh':'Ghana','ma':'Morocco','br':'Brazil','ar':'Argentina','cl':'Chile','co':'Colombia','pe':'Peru'};
+      var expectedCountry=CCODE_TO_NAME[selCountry]||'';
+      if(expectedCountry){
+        var beforeCount=allJobs.length;
+        allJobs=allJobs.filter(function(j){
+          if(!j.detectedCountry||j.detectedCountry==='Unknown')return true;// keep if unknown
+          return j.detectedCountry===expectedCountry;
+        });
+        var removed=beforeCount-allJobs.length;
+        if(removed>0)console.log('Country cross-check removed '+removed+' jobs not matching '+expectedCountry);
+      }
+    }
     allJobs.forEach(function(j,i){j.idx=i+1});
     document.getElementById('apiText').textContent='Found '+data.totalResults+' jobs ('+data.apiCalls+' API calls, '+data.rolesSearched.length+' roles). '+allJobs.length+' after filters.';
     colFilters={};sortCol='';sortDir=1;
@@ -359,7 +375,7 @@ function renderTable(){
     var tr=document.createElement('tr');
     var companyCell='<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+j.title+'</td><td class="td-c">'+companyCell+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
     tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON')return;this.classList.toggle('row-hl')};
     tb.appendChild(tr);
   });
@@ -392,8 +408,8 @@ function goPage(p){if(p<1)return;curPage=p;renderTable();document.getElementById
 function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(v>=1){goPage(v);document.getElementById('pjInput').value=''}}
 
 function viewDet(i){
-  var j=allJobs[i];if(!j)return;document.getElementById('detTitle').textContent=j.title;
-  var h='<div class="dm-meta">'+[['Company','<a href="'+j.companyUrl+'" target="_blank">'+j.company+'</a>'],['Location',j.location],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
+  var j=allJobs[i];if(!j)return;document.getElementById('detTitle').textContent=j.titleClean||j.title;
+  var h='<div class="dm-meta">'+[['Company','<a href="'+j.companyUrl+'" target="_blank">'+j.company+'</a>'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
   if(j.qualifications.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+j.qualifications.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(j.responsibilities.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+j.responsibilities.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(j.benefits.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+j.benefits.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
@@ -407,8 +423,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()})
 // Export functions
 function getExportData(){
   var data=filtered.map(function(j){return{
-    '#':j.idx,Date:j.date,Title:j.title,Company:j.company,Location:j.location,Experience:j.experience,
-    'Key Skills':j.skills,Certifications:j.certifications,Compliance:j.compliance,Tools:j.tools,
+    '#':j.idx,Date:j.date,Title:j.titleClean||j.title,'Full Title':j.title,Company:j.company,Location:j.location,Country:j.detectedCountry||'Unknown',Experience:j.experience,
+    'Key Skills':j.skills,Certifications:j.certifications,'Compliance/Framework':j.compliance,'Technology/Tools':j.tools,
     Contact:j.contact,Eligibility:j.eligibility,Type:j.jobType,Salary:j.salary,Source:j.source,
     'Apply Link':j.applyLink
   }});return data;
