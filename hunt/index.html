@@ -224,7 +224,7 @@ function handleAnyToggle(sel){
 var COUNTRIES={
   'Any':[['','Any (All Countries)']],
   'NA':[['us','United States'],['ca','Canada'],['mx','Mexico']],
-  'EU':[['gb','United Kingdom'],['de','Germany'],['fr','France'],['nl','Netherlands'],['ie','Ireland'],['ch','Switzerland'],['se','Sweden'],['no','Norway'],['dk','Denmark'],['fi','Finland'],['be','Belgium'],['at','Austria'],['es','Spain'],['it','Italy'],['pl','Poland'],['pt','Portugal'],['cz','Czech Republic'],['ro','Romania']],
+  'EU':[['uk','United Kingdom'],['de','Germany'],['fr','France'],['nl','Netherlands'],['ie','Ireland'],['ch','Switzerland'],['se','Sweden'],['no','Norway'],['dk','Denmark'],['fi','Finland'],['be','Belgium'],['at','Austria'],['es','Spain'],['it','Italy'],['pl','Poland'],['pt','Portugal'],['cz','Czech Republic'],['ro','Romania']],
   'AP':[['in','India'],['au','Australia'],['sg','Singapore'],['jp','Japan'],['kr','South Korea'],['nz','New Zealand'],['hk','Hong Kong'],['my','Malaysia'],['ph','Philippines'],['id','Indonesia'],['th','Thailand']],
   'ME':[['ae','UAE'],['sa','Saudi Arabia'],['il','Israel'],['qa','Qatar'],['bh','Bahrain'],['kw','Kuwait'],['om','Oman']],
   'AF':[['za','South Africa'],['ng','Nigeria'],['ke','Kenya'],['eg','Egypt'],['gh','Ghana'],['ma','Morocco']],
@@ -321,8 +321,11 @@ async function searchJobs(){
   var datePosted=document.getElementById('sPeriod').value;if(datePosted==='custom')datePosted='all';
   var pages=parseInt(document.getElementById('sPages').value)||5;
   try{
-    var r=await fetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:types.join(','),country:document.getElementById('sCountry').value||'us'})});
+    var countryCode=document.getElementById('sCountry').value||'us';
+      var countryName=document.getElementById('sCountry').selectedOptions[0]?.textContent||'';
+      var regionVal=document.getElementById('sRegion').value;
+      var r=await fetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:types.join(','),country:countryCode,countryName:regionVal!=='Any'&&countryCode!=='us'?countryName:''})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     if(!sources.includes('Any')&&sources.length>0)
@@ -337,7 +340,7 @@ async function searchJobs(){
     var selCountry=document.getElementById('sCountry').value;
     var selRegion=document.getElementById('sRegion').value;
     if(selCountry&&selRegion!=='Any'){
-      var CCODE_TO_NAME={'us':'United States','ca':'Canada','mx':'Mexico','gb':'United Kingdom','de':'Germany','fr':'France','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','no':'Norway','dk':'Denmark','fi':'Finland','be':'Belgium','at':'Austria','es':'Spain','it':'Italy','pl':'Poland','pt':'Portugal','cz':'Czech Republic','ro':'Romania','in':'India','au':'Australia','sg':'Singapore','jp':'Japan','kr':'South Korea','nz':'New Zealand','hk':'Hong Kong','my':'Malaysia','ph':'Philippines','id':'Indonesia','th':'Thailand','ae':'UAE','sa':'Saudi Arabia','il':'Israel','qa':'Qatar','bh':'Bahrain','kw':'Kuwait','om':'Oman','za':'South Africa','ng':'Nigeria','ke':'Kenya','eg':'Egypt','gh':'Ghana','ma':'Morocco','br':'Brazil','ar':'Argentina','cl':'Chile','co':'Colombia','pe':'Peru'};
+      var CCODE_TO_NAME={'us':'United States','ca':'Canada','mx':'Mexico','uk':'United Kingdom','de':'Germany','fr':'France','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','no':'Norway','dk':'Denmark','fi':'Finland','be':'Belgium','at':'Austria','es':'Spain','it':'Italy','pl':'Poland','pt':'Portugal','cz':'Czech Republic','ro':'Romania','in':'India','au':'Australia','sg':'Singapore','jp':'Japan','kr':'South Korea','nz':'New Zealand','hk':'Hong Kong','my':'Malaysia','ph':'Philippines','id':'Indonesia','th':'Thailand','ae':'UAE','sa':'Saudi Arabia','il':'Israel','qa':'Qatar','bh':'Bahrain','kw':'Kuwait','om':'Oman','za':'South Africa','ng':'Nigeria','ke':'Kenya','eg':'Egypt','gh':'Ghana','ma':'Morocco','br':'Brazil','ar':'Argentina','cl':'Chile','co':'Colombia','pe':'Peru'};
       var expectedCountry=CCODE_TO_NAME[selCountry]||'';
       if(expectedCountry){
         var beforeCount=allJobs.length;

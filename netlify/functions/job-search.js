@@ -259,6 +259,8 @@ exports.handler = async (event) => {
     var apiKey = process.env.JSEARCH_API_KEY;
     if (!apiKey) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'API key not configured' }) };
     var roles = body.roles || [body.query || 'cybersecurity'];
+    // For non-US countries, append country name to query for better results
+    var locationSuffix = body.countryName ? ' ' + body.countryName : '';
     var pagesPerRole = Math.min(Math.max(1, Math.ceil((body.pages||10) / roles.length)), 5);
     var allJobs = [], seenIds = {}, totalApiCalls = 0, startTime = Date.now();
 
@@ -276,8 +278,9 @@ exports.handler = async (event) => {
     }
 
     await Promise.all(roles.map(async function(role) {
+      var searchQuery = role + locationSuffix;
       var pp = [];
-      for (var p = 1; p <= pagesPerRole; p++) pp.push(fetchPage(role, p));
+      for (var p = 1; p <= pagesPerRole; p++) pp.push(fetchPage(searchQuery, p));
       var results = await Promise.all(pp);
       results.forEach(function(jobs) {
         jobs.forEach(function(job) {
