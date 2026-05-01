@@ -11,21 +11,39 @@ function unique(text, re) {
 
 function extractExp(job) {
   var d = job.job_description || '', parts = [], seen = {};
-  var p1 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*)?(?:experience|expertise)\s*(?:in|with|working\s*(?:in|with)|leading|managing|performing|supporting|conducting|across|within|using)?\s*([\w\s,/&\-\u2010\u2013()]+?)(?:\.|;|\n|,\s*(?:with|including|and|or|in|plus|specific))/gi;
+  // P1: "X+ years of [adj] experience in/with..." #70: added work|practical|industry|related|combined|prior|recent
+  var p1 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*|work\s*|practical\s*|industry\s*|related\s*|combined\s*|cumulative\s*|prior\s*|recent\s*)?(?:experience|expertise|background)\s*(?:in|with|working\s*(?:in|with)|leading|managing|performing|supporting|conducting|across|within|using|on)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|,\s*(?:with|including|and|or|in|plus|specific))/gi;
   var m; while ((m = p1.exec(d)) !== null && parts.length < 5) {
     var c = m[2].trim().slice(0, 40).replace(/^\s*(?:a|an|the)\s*/i, '');
     if (c.length < 3) continue; var k = m[1] + c.toLowerCase();
     if (!seen[k]) { seen[k] = true; parts.push(m[1] + '+ yr ' + c); }
   }
-  var p2 = /(\d+)\s*[\-\u2013]+\s*(\d+)\s*years?\s*(?:of\s*)?(?:experience|expertise)/gi;
+  // P2: "X-Y years [of experience]" - validate range 1-30
+  var p2 = /(\d+)\s*[\-\u2013]+\s*(\d+)\s*(?:years?\s*)?(?:of\s*)?(?:[\w\s]*)?(?:experience|expertise)?/gi;
   while ((m = p2.exec(d)) !== null && parts.length < 5) {
+    var y1 = parseInt(m[1]), y2 = parseInt(m[2]);
+    if (y1 < 1 || y1 > 30 || y2 < 1 || y2 > 30 || y2 <= y1) continue;
     var k2 = m[1]+'-'+m[2]; if (!seen[k2]) { seen[k2] = true; parts.unshift(m[1]+'-'+m[2]+' years'); }
   }
-  var p3 = /(?:minimum|at\s*least|requires?)\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\-\u2010\u2011\s]*)?(?:experience|expertise)\s*(?:in|with|using)?\s*([\w\s,/&\-]+?)(?:\.|;|,|\n|$)/gi;
+  // P3: "minimum/at least/requires X years"
+  var p3 = /(?:minimum|at\s*least|requires?)\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\-\u2010\u2011\s]*)?(?:experience|expertise)\s*(?:in|with|using)?\s*([\w\s,\/&\-]+?)(?:\.|;|,|\n|$)/gi;
   while ((m = p3.exec(d)) !== null && parts.length < 5) {
     var c3 = m[2].trim().slice(0, 35); if (c3.length < 3) continue;
     var k3 = 'min'+m[1]+c3.toLowerCase(); if (!seen[k3]) { seen[k3] = true; parts.push(m[1]+'+ yr '+c3); }
   }
+  // P5: #71 "Experience Required: 8-10" or "Experience: 5+" or "Years of Experience: 7"
+  var p5 = /(?:experience|expertise|years\s*of\s*experience)\s*(?:required|needed|level|range)?\s*:\s*(\d+)\s*[\-\u2013to]*\s*(\d+)?\s*\+?\s*(?:years?)?/gi;
+  while ((m = p5.exec(d)) !== null && parts.length < 5) {
+    var val = m[2] ? m[1]+'-'+m[2]+' years' : m[1]+'+ years';
+    var k5 = 'p5'+m[1]+(m[2]||''); if (!seen[k5]) { seen[k5] = true; parts.push(val); }
+  }
+  // P6: Bullet point "* X+ years of work experience with..."
+  var p6 = /[\u2022\-\*]\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\s]*?)(?:experience|expertise|background)\s*(?:in|with|on|across)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$)/gi;
+  while ((m = p6.exec(d)) !== null && parts.length < 5) {
+    var c6 = m[2].trim().slice(0, 35); if (c6.length < 3) continue;
+    var k6 = 'p6'+m[1]+c6.toLowerCase(); if (!seen[k6]) { seen[k6] = true; parts.push(m[1]+'+ yr '+c6); }
+  }
+  // P4: Broad fallback
   if (parts.length === 0) {
     var p4 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\s,\-\u2010\u2011]*?)(?:experience|expertise)/gi;
     while ((m = p4.exec(d)) !== null && parts.length < 3) {
