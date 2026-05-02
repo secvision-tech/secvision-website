@@ -334,7 +334,11 @@ async function searchJobs(){
     var typeMap={'FULLTIME':'Full-time','CONTRACTOR':'Contract','PARTTIME':'Part-time','INTERN':'Internship'};
     var selectedTypes=types.map(function(t){return typeMap[t]||t});
     if(selectedTypes.length>0&&selectedTypes.length<4){
-      allJobs=allJobs.filter(function(j){return selectedTypes.indexOf(j.jobType)!==-1});
+      allJobs=allJobs.filter(function(j){
+        // Keep jobs with unknown type - only exclude explicit mismatches
+        if(!j.jobType||j.jobType==='Not specified')return true;
+        return selectedTypes.indexOf(j.jobType)!==-1;
+      });
     }
     // #69: Country cross-check — filter out jobs that don't match selected country
     var selCountry=document.getElementById('sCountry').value;
