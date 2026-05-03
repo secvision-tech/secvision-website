@@ -141,7 +141,10 @@ function detectJobType(job) {
   if (/\bcontract\s*(?:position|role|opportunity|assignment|engagement|basis|duration|length)\b/i.test(d)) contractSignals += 3;
   if (/\b(?:W-?2|1099|C2C|Corp[\s-]*to[\s-]*Corp)\b/i.test(d)) contractSignals += 3;
   if (/\b(?:contract[\s-]*to[\s-]*hire|temp[\s-]*to[\s-]*perm)\b/i.test(d)) contractSignals += 3;
-  if (/\b(?:6|12|18|24)\s*(?:month|months)\s*(?:contract|engagement|assignment)\b/i.test(d)) contractSignals += 3;
+  if (/\b\d+\+?\s*(?:month|months|mo)\s*(?:contract|engagement|assignment|duration)\b/i.test(d)) contractSignals += 3;
+  if (/\bduration\s*:?\s*\d+\+?\s*(?:month|months|week|weeks)\b/i.test(d)) contractSignals += 3;
+  if (/\b(?:contract|engagement)\s*(?:length|duration|period)\s*:?\s*\d+/i.test(d)) contractSignals += 3;
+  if (/\b(?:with\s*(?:possible\s*)?extension)\b/i.test(d)) contractSignals += 2;
   if (/\/\s*(?:hr|hour)\b/i.test(salary)) contractSignals += 2;
   if (/\bcontract\s*(?:only|worker|staff|employee|personnel)\b/i.test(d)) contractSignals += 2;
   // Weak: just "contractor" mentioned in passing (like "manage contractor staff") - not counted
@@ -297,17 +300,32 @@ exports.handler = async (event) => {
       });
       // Fallback for non-US: if zero results, retry with country name in query
       if (!gotResults && countryName) {
+        // Fallback 1: same country code + country name in query
         var fallbackQuery = role + ' ' + countryName;
         var fb = await fetchPage(fallbackQuery, 1, country, false);
         fb.forEach(function(job) {
           var jid = job.job_id || (job.employer_name + '|' + job.job_title);
           if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
         });
+        // Fallback 2: if still nothing, try global search (country=us which has broadest index) with country name in query
+        if (fb.length === 0) {
+          var fb2 = await fetchPage(fallbackQuery, 1, 'us', false);
+          fb2.forEach(function(job) {
+            var jid = job.job_id || (job.employer_name + '|' + job.job_title);
+            if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
+          });
+        }
       }
     }));
 
     var jobs = allJobs.map(function(job, i) {
-      var desc = job.job_description || '';
+      var rawDesc = job.job_description || '';
+      // #73: Strip HTML tags, style blocks, and CSS from descriptions
+      var desc = rawDesc.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
       var fullText = desc + ' ' + (job.job_highlights?.Qualifications || []).join(' ') + ' ' + (job.job_highlights?.Responsibilities || []).join(' ');
       var apiSkills = (job.job_required_skills || []).slice(0, 6);
       var exSkills = unique(fullText, SKILL_RE);
