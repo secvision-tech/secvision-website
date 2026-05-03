@@ -262,14 +262,15 @@ exports.handler = async (event) => {
     var apiKey = process.env.JSEARCH_API_KEY;
     if (!apiKey) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'API key not configured' }) };
     var roles = body.roles || [body.query || 'cybersecurity'];
-    var isUS = !body.country || body.country === 'us';
+    var country = body.country || 'us';
+    var isUSCA = !body.country || body.country === 'us' || body.country === 'ca';
+    var countryName = body.countryName || '';
     var pagesPerRole = Math.min(Math.max(1, Math.ceil((body.pages||10) / roles.length)), 5);
     var allJobs = [], seenIds = {}, totalApiCalls = 0, startTime = Date.now();
 
-    async function fetchPage(query, page, country, useEmpType) {
+    async function fetchPage(query, page, ctry, useEmpType) {
       if (Date.now() - startTime > 22000) return [];
-      var params = new URLSearchParams({ query: query, page: String(page), num_pages: '1', country: country, date_posted: body.datePosted || 'all' });
-      // Only apply employmentTypes for US - it's unreliable for other markets
+      var params = new URLSearchParams({ query: query, page: String(page), num_pages: '1', country: ctry, date_posted: body.datePosted || 'all' });
       if (useEmpType && body.employmentTypes) params.set('employment_types', body.employmentTypes);
       try {
         var r = await fetch('https://jsearch.p.rapidapi.com/search?' + params, {
@@ -280,40 +281,31 @@ exports.handler = async (event) => {
       } catch (e) { return []; }
     }
 
-    var country = body.country || 'us';
-    // For non-US: also try with country name appended to query for broader results
-    var countryName = (!isUS && body.countryName) ? body.countryName : '';
+    function addJobs(jobs) {
+      jobs.forEach(function(job) {
+        var jid = job.job_id || (job.employer_name + '|' + job.job_title);
+        if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
+      });
+    }
 
     await Promise.all(roles.map(async function(role) {
-      var searchQuery = role;
-      var pp = [];
-      // First try: role + country param (no country name in query, no employment filter for non-US)
-      for (var p = 1; p <= pagesPerRole; p++) pp.push(fetchPage(searchQuery, p, country, isUS));
-      var results = await Promise.all(pp);
-      var gotResults = false;
-      results.forEach(function(jobs) {
-        if (jobs.length > 0) gotResults = true;
-        jobs.forEach(function(job) {
-          var jid = job.job_id || (job.employer_name + '|' + job.job_title);
-          if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
-        });
-      });
-      // Fallback for non-US: if zero results, retry with country name in query
-      if (!gotResults && countryName) {
-        // Fallback 1: same country code + country name in query
-        var fallbackQuery = role + ' ' + countryName;
-        var fb = await fetchPage(fallbackQuery, 1, country, false);
-        fb.forEach(function(job) {
-          var jid = job.job_id || (job.employer_name + '|' + job.job_title);
-          if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
-        });
-        // Fallback 2: if still nothing, try global search (country=us which has broadest index) with country name in query
-        if (fb.length === 0) {
-          var fb2 = await fetchPage(fallbackQuery, 1, 'us', false);
-          fb2.forEach(function(job) {
-            var jid = job.job_id || (job.employer_name + '|' + job.job_title);
-            if (!seenIds[jid]) { seenIds[jid] = true; allJobs.push(job); }
-          });
+      var pp = [], gotResults = false;
+      if (isUSCA) {
+        // US/CA: use country param with employment filter
+        for (var p = 1; p <= pagesPerRole; p++) pp.push(fetchPage(role, p, country, true));
+        var results = await Promise.all(pp);
+        results.forEach(function(jobs) { if (jobs.length) gotResults = true; addJobs(jobs); });
+      } else {
+        // Non-US/CA: try local country code first (works for India, Japan, etc.)
+        for (var p = 1; p <= pagesPerRole; p++) pp.push(fetchPage(role, p, country, false));
+        var results = await Promise.all(pp);
+        results.forEach(function(jobs) { if (jobs.length) gotResults = true; addJobs(jobs); });
+
+        // Per-role fallback: if local country returned 0, search US index with country name
+        if (!gotResults && countryName) {
+          var fbQuery = role + ' ' + countryName;
+          var fb = await fetchPage(fbQuery, 1, 'us', false);
+          addJobs(fb);
         }
       }
     }));
