@@ -372,7 +372,44 @@ exports.handler = async (event) => {
         benefits: job.job_highlights?.Benefits || []
       };
     });
-    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, apiCalls: totalApiCalls, rolesSearched: roles }) };
+
+    // Auto-save to MongoDB
+    var savedCount = 0;
+    try {
+      var { getDb } = require('./db');
+      var db = await getDb();
+      var col = db.collection('jobs');
+      var userEmail = body.userEmail || 'anonymous';
+      var ops = jobs.map(function(j) {
+        return {
+          updateOne: {
+            filter: { jobId: j.id },
+            update: { $set: {
+              jobId: j.id, datePosted: j.dateRaw ? new Date(j.dateRaw) : null, dateScanned: new Date(),
+              title: j.title, titleClean: j.titleClean, company: j.company, companyUrl: j.companyUrl,
+              location: j.location, detectedCountry: j.detectedCountry, experience: j.experience,
+              skills: j.skills, certifications: j.certifications, compliance: j.compliance,
+              tools: j.tools, eligibility: j.eligibility, salary: j.salary, contact: j.contact,
+              source: j.source, jobType: j.jobType, remote: j.remote, applyLink: j.applyLink,
+              description: j.description, qualifications: j.qualifications,
+              responsibilities: j.responsibilities, benefits: j.benefits
+            }, $setOnInsert: { status: 'new', companyType: '', notes: '', searchedBy: userEmail,
+              searchRegion: body.searchRegion || '', searchCountry: body.country || 'us', createdAt: new Date() }
+            },
+            upsert: true
+          }
+        };
+      });
+      if (ops.length > 0) {
+        var result = await col.bulkWrite(ops, { ordered: false });
+        savedCount = (result.upsertedCount || 0) + (result.modifiedCount || 0);
+      }
+    } catch (dbErr) {
+      console.error('MongoDB save error:', dbErr.message);
+      // Don't fail the response if DB save fails
+    }
+
+    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, apiCalls: totalApiCalls, rolesSearched: roles, savedToDb: savedCount }) };
   } catch (err) {
     console.error('Error:', err);
     return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'Internal server error' }) };

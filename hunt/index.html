@@ -64,6 +64,20 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .export-btns{display:flex;gap:.3rem}
 .export-btn{padding:.2rem .5rem;border:1px solid var(--g100);border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;background:#fff;color:var(--g5);font-weight:600;transition:all .15s}
 .export-btn:hover{border-color:var(--ac);color:var(--ac)}
+.mode-toggle{display:flex;border:1px solid var(--g100);border-radius:6px;overflow:hidden;margin-bottom:.5rem}
+.mode-btn{flex:1;padding:.35rem .8rem;border:none;background:#fff;font-size:.7rem;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;color:var(--g5);transition:all .15s}
+.mode-btn.active{background:var(--ac);color:#fff}
+.mode-btn:hover:not(.active){background:var(--off)}
+.status-badge{display:inline-block;padding:.1rem .35rem;border-radius:4px;font-size:.55rem;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:.3px}
+.status-new{background:#E3F0D4;color:#3B6D11}.status-reviewed{background:#DBE9F7;color:#185FA5}
+.status-contacted{background:#FDF0D3;color:#854F0B}.status-archived{background:#E5E3F9;color:#534AB7}
+.ctype-badge{display:inline-block;padding:.1rem .35rem;border-radius:4px;font-size:.55rem;font-weight:600;cursor:pointer}
+.ctype-mssp{background:#D1F0E5;color:#0F6E56}.ctype-enterprise{background:#DBE9F7;color:#185FA5}
+.ctype-govt{background:#FDF0D3;color:#854F0B}.ctype-startup{background:#E5E3F9;color:#534AB7}
+.ctype-unknown{background:var(--off);color:var(--g5);border:1px solid var(--g100)}
+.db-info{font-size:.62rem;color:var(--g3);margin-top:.3rem}
+.fc-btn{padding:.18rem .35rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.55rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;white-space:nowrap}
+.fc-btn:hover{background:var(--ac)}
 .rp{background:#fff;border-radius:12px;box-shadow:var(--sh);border:1px solid var(--bd);overflow:hidden;flex:1;display:flex;flex-direction:column}
 .rp-head{padding:.5rem 1rem;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center}
 .rp-count{font-size:.75rem;color:var(--g5)}.rp-count strong{color:var(--pri)}
@@ -154,6 +168,11 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
   <div class="main-content">
     <div class="search-panel">
       <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Security Job Search & Hunting</div>
+      <div class="mode-toggle" id="modeToggle">
+        <button class="mode-btn active" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
+        <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
+      </div>
+      <div id="webSearchPanel">
       <div class="sf">
         <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (Listed Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
         <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option></select></div>
@@ -168,6 +187,17 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
       </div>
       <div class="sf2" id="customDates"><div class="sg"><label>From</label><input type="date" id="dateFrom"></div><div class="sg"><label>To</label><input type="date" id="dateTo"></div></div>
       <div class="api-info" id="apiInfo"><span id="apiText"></span><div class="export-btns" id="exportBtns" style="display:none"><button class="export-btn" onclick="exportCSV()">CSV</button><button class="export-btn" onclick="exportXLSX()">Excel</button><button class="export-btn" onclick="exportPDF()">PDF</button></div></div>
+      </div><!-- end webSearchPanel -->
+      <div id="dbSearchPanel" style="display:none">
+        <div class="sf" style="grid-template-columns:2fr 1fr 1fr 1fr auto">
+          <div class="sg"><label>Search Text</label><input type="text" id="dbQuery" placeholder="Role, company, skill, tool..."></div>
+          <div class="sg"><label>Status</label><select id="dbStatus"><option value="all">All Statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="contacted">Contacted</option><option value="archived">Archived</option></select></div>
+          <div class="sg"><label>Company Type</label><select id="dbCompanyType"><option value="all">All Types</option><option value="MSSP/MDR">MSSP/MDR</option><option value="Enterprise">Enterprise</option><option value="Government">Government</option><option value="Startup">Startup</option><option value="">Unclassified</option></select></div>
+          <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option><option value="United States">United States</option><option value="United Kingdom">United Kingdom</option><option value="India">India</option><option value="Canada">Canada</option><option value="Germany">Germany</option><option value="Australia">Australia</option></select></div>
+          <button class="sbtn" onclick="searchDb()" style="align-self:end">Search DB</button>
+        </div>
+        <div class="db-info" id="dbInfo"></div>
+      </div>
     </div>
     <div class="rp">
       <div class="rp-head"><div class="rp-count" id="rCount">Select criteria and click Search.</div></div>
@@ -194,20 +224,22 @@ var msal_=new msal.PublicClientApplication(msalConfig),curUser=null,allJobs=[],f
 var COLS=[
   {key:'idx',label:'#',w:30,num:true},
   {key:'date',label:'Date',w:68,dateSort:true},
-  {key:'title',label:'Role / Title',w:150},
-  {key:'company',label:'Company',w:100},
-  {key:'location',label:'Location',w:90},
-  {key:'experience',label:'Experience',w:120},
-  {key:'skills',label:'Key Skills',w:130},
-  {key:'certifications',label:'Certifications',w:110},
-  {key:'compliance',label:'Compliance/Framework',w:120},
-  {key:'tools',label:'Technology/Tools',w:120},
-  {key:'contact',label:'Contact',w:110},
-  {key:'eligibility',label:'Eligibility',w:80},
-  {key:'jobType',label:'Type',w:65},
-  {key:'salary',label:'Salary/Rate',w:95},
-  {key:'source',label:'Source',w:68},
-  {key:'_action',label:'',w:45}
+  {key:'title',label:'Role / Title',w:140},
+  {key:'company',label:'Company',w:95},
+  {key:'companyType',label:'Co. Type',w:70},
+  {key:'location',label:'Location',w:85},
+  {key:'experience',label:'Experience',w:110},
+  {key:'skills',label:'Key Skills',w:120},
+  {key:'certifications',label:'Certifications',w:100},
+  {key:'compliance',label:'Compliance/Framework',w:110},
+  {key:'tools',label:'Technology/Tools',w:110},
+  {key:'contact',label:'Contact',w:100},
+  {key:'eligibility',label:'Eligibility',w:70},
+  {key:'jobType',label:'Type',w:60},
+  {key:'salary',label:'Salary/Rate',w:85},
+  {key:'source',label:'Source',w:62},
+  {key:'status',label:'Status',w:58},
+  {key:'_action',label:'',w:80}
 ];
 msal_.initialize().then(function(){
   msal_.handleRedirectPromise().then(function(r){
@@ -307,6 +339,77 @@ function applyFilters(){
   curPage=1;renderTable();
 }
 
+var searchMode='web';
+function setMode(mode){
+  searchMode=mode;
+  document.getElementById('modeWeb').classList.toggle('active',mode==='web');
+  document.getElementById('modeDb').classList.toggle('active',mode==='db');
+  document.getElementById('webSearchPanel').style.display=mode==='web'?'block':'none';
+  document.getElementById('dbSearchPanel').style.display=mode==='db'?'block':'none';
+}
+
+async function searchDb(){
+  var q=document.getElementById('dbQuery').value;
+  var status=document.getElementById('dbStatus').value;
+  var cType=document.getElementById('dbCompanyType').value;
+  var country=document.getElementById('dbCountry').value;
+  document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
+  document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Searching database...';
+  document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,detectedCountry:country,limit:500})});
+    if(!r.ok)throw new Error('Failed');var data=await r.json();
+    allJobs=data.jobs||[];
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    document.getElementById('dbInfo').textContent='Found '+data.total+' jobs in database.';
+    colFilters={};sortCol='';sortDir=1;
+    document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
+    if(!allJobs.length){
+      document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';
+      document.getElementById('emptyState').innerHTML='<h3>No saved results</h3><p>Search the web first to build your database.</p>';
+      document.getElementById('rCount').textContent='No results in database.';
+    }else{filtered=allJobs.slice();curPage=1;renderTable();document.getElementById('exportBtns').style.display='flex'}
+  }catch(err){console.error(err);document.getElementById('loadState').style.display='none';
+    document.getElementById('emptyState').style.display='block';document.getElementById('emptyState').innerHTML='<h3>Database Error</h3><p>'+err.message+'</p>'}
+}
+
+function statusBadge(status){
+  var cls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
+  return '<span class="status-badge '+(cls[status]||'status-new')+'" title="Click to change">'+(status||'new')+'</span>';
+}
+
+function companyTypeBadge(type){
+  if(!type)return '<span class="ctype-badge ctype-unknown" title="Click to classify">Classify</span>';
+  var cls={'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'};
+  return '<span class="ctype-badge '+(cls[type]||'ctype-unknown')+'" title="Click to change">'+type+'</span>';
+}
+
+async function cycleStatus(jobIdx,el){
+  var j=allJobs[jobIdx];if(!j||!j._id)return;
+  var order=['new','reviewed','contacted','archived'];
+  var cur=j.status||'new';var next=order[(order.indexOf(cur)+1)%order.length];
+  j.status=next;el.outerHTML=statusBadge(next);
+  // Also re-bind click
+  var newEl=el.parentNode?.querySelector('.status-badge');
+  if(newEl)newEl.onclick=function(){cycleStatus(jobIdx,this)};
+  try{await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'updateStatus',id:j._id,status:next})})}catch(e){console.error('Status update failed:',e)}
+}
+
+async function setCompanyType(jobIdx){
+  var j=allJobs[jobIdx];if(!j||!j._id)return;
+  var types=['MSSP/MDR','Enterprise','Government','Startup',''];
+  var cur=j.companyType||'';var next=types[(types.indexOf(cur)+1)%types.length];
+  j.companyType=next;
+  // Update all jobs with same company
+  try{await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'bulkUpdateCompanyType',company:j.company,companyType:next})})}catch(e){console.error(e)}
+  // Refresh display
+  allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=next});
+  renderTable();
+}
+
 async function searchJobs(){
   var roles=Array.from(document.getElementById('sRole').selectedOptions).map(function(o){return o.value});
   if(!roles.length){alert('Select at least one role.');return}
@@ -325,7 +428,7 @@ async function searchJobs(){
       var countryName=document.getElementById('sCountry').selectedOptions[0]?.textContent||'';
       var regionVal=document.getElementById('sRegion').value;
       var r=await fetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:types.join(','),country:countryCode,countryName:regionVal!=='Any'&&countryCode!=='us'?countryName:''})});
+      body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:types.join(','),country:countryCode,countryName:regionVal!=='Any'&&countryCode!=='us'?countryName:'',userEmail:curUser?.username||'',searchRegion:regionVal})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     if(!sources.includes('Any')&&sources.length>0)
@@ -356,8 +459,9 @@ async function searchJobs(){
         if(removed>0)console.log('Country cross-check removed '+removed+' jobs not matching '+expectedCountry);
       }
     }
-    allJobs.forEach(function(j,i){j.idx=i+1});
-    document.getElementById('apiText').textContent='Found '+data.totalResults+' jobs ('+data.apiCalls+' API calls, '+data.rolesSearched.length+' roles). '+allJobs.length+' after filters.';
+    allJobs.forEach(function(j,i){j.idx=i+1;j.status=j.status||'new';j.companyType=j.companyType||''});
+    var savedMsg=data.savedToDb?' | '+data.savedToDb+' saved to database':'';
+    document.getElementById('apiText').textContent='Found '+data.totalResults+' jobs ('+data.apiCalls+' API calls, '+data.rolesSearched.length+' roles). '+allJobs.length+' after filters.'+savedMsg;
     colFilters={};sortCol='';sortDir=1;
     document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
     if(!allJobs.length){
@@ -382,8 +486,15 @@ function renderTable(){
     var tr=document.createElement('tr');
     var companyCell='<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td><button class="vb" onclick="viewDet('+allJobs.indexOf(j)+')">View</button></td>';
-    tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON')return;this.classList.toggle('row-hl')};
+    var ji=allJobs.indexOf(j);
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">View</button> <button class="fc-btn" onclick="findContacts('+ji+')">Contacts</button></td>';
+    tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.classList.contains('status-badge')||e.target.classList.contains('ctype-badge'))return;this.classList.toggle('row-hl')};
+    // Bind status badge click
+    var sBadge=tr.querySelector('.status-badge');
+    if(sBadge)(function(idx){sBadge.onclick=function(){cycleStatus(idx,this)}})(ji);
+    // Bind company type badge click
+    var ctBadge=tr.querySelector('.ctype-badge');
+    if(ctBadge)(function(idx){ctBadge.onclick=function(){setCompanyType(idx)}})(ji);
     tb.appendChild(tr);
   });
   renderPag(tp);
@@ -416,7 +527,7 @@ function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(
 
 function viewDet(i){
   var j=allJobs[i];if(!j)return;document.getElementById('detTitle').textContent=j.titleClean||j.title;
-  var h='<div class="dm-meta">'+[['Company','<a href="'+j.companyUrl+'" target="_blank">'+j.company+'</a>'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company','<a href="'+j.companyUrl+'" target="_blank">'+j.company+'</a>'],['Company Type',j.companyType||'Not classified'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
   if(j.qualifications.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+j.qualifications.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(j.responsibilities.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+j.responsibilities.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(j.benefits.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+j.benefits.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
@@ -427,12 +538,25 @@ function viewDet(i){
 function closeDet(){document.getElementById('detailOverlay').classList.remove('open')}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()});
 
+function findContacts(idx){
+  var j=allJobs[idx];if(!j)return;
+  var company=encodeURIComponent('"'+j.company+'" AND ("recruiter" OR "HR" OR "SOC Director" OR "VP Operations" OR "CISO")');
+  var linkedinUrl='https://www.linkedin.com/search/results/people/?keywords='+company+'&origin=GLOBAL_SEARCH_HEADER';
+  window.open(linkedinUrl,'_blank');
+  if(j.status==='new'&&j._id){
+    j.status='reviewed';
+    fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'updateStatus',id:j._id,status:'reviewed'})}).catch(function(e){console.error(e)});
+    renderTable();
+  }
+}
+
 // Export functions
 function getExportData(){
   var data=filtered.map(function(j){return{
-    '#':j.idx,Date:j.date,Title:j.titleClean||j.title,'Full Title':j.title,Company:j.company,Location:j.location,Country:j.detectedCountry||'Unknown',Experience:j.experience,
+    '#':j.idx,Date:j.date,Title:j.titleClean||j.title,'Full Title':j.title,Company:j.company,'Company Type':j.companyType||'',Location:j.location,Country:j.detectedCountry||'Unknown',Experience:j.experience,
     'Key Skills':j.skills,Certifications:j.certifications,'Compliance/Framework':j.compliance,'Technology/Tools':j.tools,
-    Contact:j.contact,Eligibility:j.eligibility,Type:j.jobType,Salary:j.salary,Source:j.source,
+    Contact:j.contact,Eligibility:j.eligibility,Type:j.jobType,Salary:j.salary,Source:j.source,Status:j.status||'new',
     'Apply Link':j.applyLink
   }});return data;
 }
