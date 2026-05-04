@@ -226,7 +226,7 @@ var COLS=[
   {key:'date',label:'Date',w:68,dateSort:true},
   {key:'title',label:'Role / Title',w:140},
   {key:'company',label:'Company',w:95},
-  {key:'companyType',label:'Co. Type',w:70},
+  {key:'companyType',label:'Company Type',w:85},
   {key:'location',label:'Location',w:85},
   {key:'experience',label:'Experience',w:110},
   {key:'skills',label:'Key Skills',w:120},
@@ -525,13 +525,31 @@ function addPB(c,n){var b=document.createElement('button');b.className='pb'+(n==
 function goPage(p){if(p<1)return;curPage=p;renderTable();document.getElementById('tableWrap').scrollTop=0}
 function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(v>=1){goPage(v);document.getElementById('pjInput').value=''}}
 
-function viewDet(i){
-  var j=allJobs[i];if(!j)return;document.getElementById('detTitle').textContent=j.titleClean||j.title;
-  var h='<div class="dm-meta">'+[['Company','<a href="'+j.companyUrl+'" target="_blank">'+j.company+'</a>'],['Company Type',j.companyType||'Not classified'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+x[1]+'</span></div>'}).join('')+'</div>';
-  if(j.qualifications.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+j.qualifications.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
-  if(j.responsibilities.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+j.responsibilities.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
-  if(j.benefits.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+j.benefits.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
-  h+='<div class="dm-sec"><h4>Full Description</h4><p>'+j.description.replace(/\n/g,'<br>').slice(0,4000)+'</p></div>';
+async function viewDet(i){
+  var j=allJobs[i];if(!j)return;
+  // If description missing (DB search excludes it), fetch full record
+  if(!j.description&&j._id){
+    try{
+      var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'get',id:j._id})});
+      if(r.ok){var data=await r.json();if(data.job){
+        j.description=data.job.description||'';
+        j.qualifications=data.job.qualifications||[];
+        j.responsibilities=data.job.responsibilities||[];
+        j.benefits=data.job.benefits||[];
+      }}
+    }catch(e){console.error('Failed to fetch details:',e)}
+  }
+  document.getElementById('detTitle').textContent=j.titleClean||j.title;
+  var desc=j.description||'No description available.';
+  var quals=j.qualifications||[];
+  var resps=j.responsibilities||[];
+  var bens=j.benefits||[];
+  var h='<div class="dm-meta">'+[['Company','<a href="'+(j.companyUrl||'#')+'" target="_blank">'+j.company+'</a>'],['Company Type',j.companyType||'Not classified'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote||'N/A'],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
+  if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
+  if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
+  h+='<div class="dm-sec"><h4>Full Description</h4><p>'+desc.replace(/\n/g,'<br>').slice(0,4000)+'</p></div>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" class="dm-apply">Apply Now &rarr;</a>';
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
 }
