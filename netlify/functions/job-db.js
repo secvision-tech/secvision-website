@@ -138,7 +138,7 @@ exports.handler = async (event) => {
       var companyCounts = await col.aggregate([
         { $group: { _id: '$company', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 15 }
+        { $limit: 10 }
       ]).toArray();
       // Split comma-separated fields and count each value
       var certCounts = await col.aggregate([
@@ -148,7 +148,7 @@ exports.handler = async (event) => {
         { $match: { items: { $ne: '' } } },
         { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 15 }
+        { $limit: 10 }
       ]).toArray();
       var complianceCounts = await col.aggregate([
         { $match: { compliance: { $ne: 'See details' } } },
@@ -157,7 +157,7 @@ exports.handler = async (event) => {
         { $match: { items: { $ne: '' } } },
         { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 15 }
+        { $limit: 10 }
       ]).toArray();
       var toolsCounts = await col.aggregate([
         { $match: { tools: { $ne: 'See details' } } },
@@ -166,13 +166,13 @@ exports.handler = async (event) => {
         { $match: { items: { $ne: '' } } },
         { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 15 }
+        { $limit: 10 }
       ]).toArray();
       var locationCounts = await col.aggregate([
         { $match: { location: { $ne: 'Remote' } } },
         { $group: { _id: '$location', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 15 }
+        { $limit: 10 }
       ]).toArray();
       var recentScans = await col.aggregate([
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateScanned' } }, count: { $sum: 1 } } },

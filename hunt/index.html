@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SecVision Business Hunt | SOC & Security Job Intelligence</title>
+<title>SecVision Business Hunt | SOC & Security Demand Intelligence</title>
 <meta name="robots" content="noindex, nofollow">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
@@ -151,7 +151,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
 <div class="header" id="appHeader" style="display:none">
   <div class="header-left">
     <div class="header-logo"><svg viewBox="0 0 34 34"><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="#0891B2"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-    <div><div class="header-title">SecVision Business Hunt</div><div class="header-sub">SOC & Security Job Intelligence</div></div>
+    <div><div class="header-title">SecVision Business Hunt</div><div class="header-sub">SOC & Security Demand Intelligence</div></div>
   </div>
   <div class="user-menu" id="userMenu" onclick="event.stopPropagation();document.getElementById('userDropdown').classList.toggle('open')">
     <div class="user-avatar" id="userAvatar">SV</div>
@@ -173,7 +173,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
   <div class="login-card">
     <div class="login-header">
       <svg viewBox="0 0 34 34" width="48" height="48" style="margin-bottom:.5rem"><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="#0891B2"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <h1>SecVision Business Hunt</h1><p>SOC & Security Job Intelligence Platform</p>
+      <h1>SecVision Business Hunt</h1><p>SOC & Security Demand Intelligence Platform</p>
     </div>
     <div class="login-body">
       <p style="font-size:.85rem;color:var(--tl);margin-bottom:1.2rem;text-align:center">Sign in with your SecVision Microsoft 365 account.</p>
@@ -709,7 +709,9 @@ function findContacts(idx){
 }
 
 // Dashboard
-var COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#2563EB','#059669','#D97706','#4F46E5','#EC4899'];
+var COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626'];
+var dashChartInstances={};
+
 async function loadDashboard(){
   if(typeof Chart==='undefined'){
     document.getElementById('dashLoading').textContent='Loading charts library...';
@@ -719,66 +721,97 @@ async function loadDashboard(){
     });
     if(typeof Chart==='undefined'){document.getElementById('dashLoading').textContent='Chart library failed to load. Please refresh the page.';return}
   }
+  // Disable animations globally for faster rendering
+  Chart.defaults.animation=false;
+  Chart.defaults.font.family='DM Sans';
+
   document.getElementById('dashLoading').style.display='block';
+  document.getElementById('dashLoading').textContent='Loading dashboard...';
   document.getElementById('dashContent').style.display='none';
   try{
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
-    if(!r.ok)throw new Error('Failed');var d=await r.json();
+    if(!r.ok)throw new Error('API returned '+r.status);
+    var d=await r.json();
+
     // Summary cards
     document.getElementById('dTotal').textContent=d.totalJobs||0;
     var sc={};(d.statusCounts||[]).forEach(function(s){sc[s._id]=s.count});
     document.getElementById('dNew').textContent=sc.new||0;
     document.getElementById('dReviewed').textContent=sc.reviewed||0;
     document.getElementById('dContacted').textContent=sc.contacted||0;
-    // Render charts
-    renderPieChart('chartType',d.typeCounts,'Company Type');
-    renderBarChart('chartCompany',d.companyCounts,'Jobs');
-    renderBarChart('chartLocation',(d.locationCounts||[]).slice(0,10),'Jobs');
-    renderBarChart('chartCountry',d.countryCounts,'Jobs');
-    renderBarChart('chartCerts',d.certCounts,'Mentions');
-    renderBarChart('chartCompliance',d.complianceCounts,'Mentions');
-    renderBarChart('chartTools',d.toolsCounts,'Mentions');
-    renderLineChart('chartScans',(d.recentScans||[]).reverse());
+
+    // Show content first, then render charts sequentially
     document.getElementById('dashLoading').style.display='none';
     document.getElementById('dashContent').style.display='block';
+
+    // Render charts one at a time with small delays to prevent browser hang
+    var chartFns=[
+      function(){renderDoughnut('chartType',(d.typeCounts||[]).slice(0,10))},
+      function(){renderHBar('chartCompany',(d.companyCounts||[]).slice(0,10))},
+      function(){renderHBar('chartLocation',(d.locationCounts||[]).slice(0,10))},
+      function(){renderHBar('chartCountry',(d.countryCounts||[]).slice(0,10))},
+      function(){renderHBar('chartCerts',(d.certCounts||[]).slice(0,10))},
+      function(){renderHBar('chartCompliance',(d.complianceCounts||[]).slice(0,10))},
+      function(){renderHBar('chartTools',(d.toolsCounts||[]).slice(0,10))},
+      function(){renderLine('chartScans',(d.recentScans||[]).reverse().slice(0,14))}
+    ];
+    for(var ci=0;ci<chartFns.length;ci++){
+      chartFns[ci]();
+      await new Promise(function(resolve){setTimeout(resolve,30)});
+    }
   }catch(e){
     console.error('Dashboard error:',e);
+    document.getElementById('dashLoading').style.display='block';
     document.getElementById('dashLoading').textContent='Failed to load dashboard: '+e.message;
   }
 }
 
-function destroyChart(id){if(dashCharts[id]){dashCharts[id].destroy();delete dashCharts[id]}}
+function killChart(id){if(dashChartInstances[id]){dashChartInstances[id].destroy();dashChartInstances[id]=null}}
 
-function renderPieChart(canvasId,data,label){
-  destroyChart(canvasId);
-  if(!data||!data.length){document.getElementById(canvasId).parentNode.querySelector('.dash-chart-title').textContent+=' (no data)';return}
-  var ctx=document.getElementById(canvasId).getContext('2d');
-  dashCharts[canvasId]=new Chart(ctx,{
+function renderDoughnut(id,data){
+  killChart(id);
+  var el=document.getElementById(id);if(!el||!data||!data.length)return;
+  el.height=220;
+  dashChartInstances[id]=new Chart(el,{
     type:'doughnut',
-    data:{labels:data.map(function(d){return d._id||'Unknown'}),datasets:[{data:data.map(function(d){return d.count}),backgroundColor:COLORS.slice(0,data.length),borderWidth:1,borderColor:'#fff'}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:10,family:'DM Sans'},padding:8,usePointStyle:true,pointStyle:'circle'}}}}
+    data:{
+      labels:data.map(function(d){return(d._id||'Other')}),
+      datasets:[{data:data.map(function(d){return d.count}),backgroundColor:COLORS.slice(0,data.length),borderWidth:2,borderColor:'#fff'}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{position:'right',labels:{font:{size:10},padding:6,usePointStyle:true,pointStyle:'circle'}}}}
   });
 }
 
-function renderBarChart(canvasId,data,label){
-  destroyChart(canvasId);
-  if(!data||!data.length)return;
-  var ctx=document.getElementById(canvasId).getContext('2d');
-  dashCharts[canvasId]=new Chart(ctx,{
+function renderHBar(id,data){
+  killChart(id);
+  var el=document.getElementById(id);if(!el||!data||!data.length)return;
+  el.height=220;
+  dashChartInstances[id]=new Chart(el,{
     type:'bar',
-    data:{labels:data.map(function(d){return(d._id||'Unknown').slice(0,25)}),datasets:[{label:label,data:data.map(function(d){return d.count}),backgroundColor:COLORS[0]+'CC',borderColor:COLORS[0],borderWidth:1,borderRadius:4}]},
-    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9,family:'DM Sans'}},grid:{display:false}},y:{ticks:{font:{size:9,family:'DM Sans'}},grid:{display:false}}}}
+    data:{
+      labels:data.map(function(d){return(d._id||'Other').slice(0,30)}),
+      datasets:[{data:data.map(function(d){return d.count}),backgroundColor:COLORS[0]+'BB',borderColor:COLORS[0],borderWidth:1,borderRadius:3}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,animation:false,indexAxis:'y',
+      plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9}},grid:{display:false}}}}
   });
 }
 
-function renderLineChart(canvasId,data){
-  destroyChart(canvasId);
-  if(!data||!data.length)return;
-  var ctx=document.getElementById(canvasId).getContext('2d');
-  dashCharts[canvasId]=new Chart(ctx,{
+function renderLine(id,data){
+  killChart(id);
+  var el=document.getElementById(id);if(!el||!data||!data.length)return;
+  el.height=220;
+  dashChartInstances[id]=new Chart(el,{
     type:'line',
-    data:{labels:data.map(function(d){return d._id?d._id.slice(5):''}),datasets:[{label:'Jobs Scanned',data:data.map(function(d){return d.count}),borderColor:COLORS[0],backgroundColor:COLORS[0]+'22',fill:true,tension:.3,pointRadius:4,pointBackgroundColor:COLORS[0]}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9,family:'DM Sans'}},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9,family:'DM Sans'}},grid:{color:'#f0f0f0'}}}}
+    data:{
+      labels:data.map(function(d){return d._id?d._id.slice(5):''}),
+      datasets:[{label:'Jobs',data:data.map(function(d){return d.count}),borderColor:COLORS[0],backgroundColor:COLORS[0]+'22',fill:true,tension:.3,pointRadius:3,pointBackgroundColor:COLORS[0]}]
+    },
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9}},grid:{color:'#f0f0f0'}}}}
   });
 }
 
