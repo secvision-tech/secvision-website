@@ -237,6 +237,12 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
           <div class="dash-charts">
             <div class="dash-chart-box"><div class="dash-chart-title">Company Type Distribution</div><div id="chartType" class="css-chart"></div></div>
             <div class="dash-chart-box"><div class="dash-chart-title">Top Companies (by job count)</div><div id="chartCompany" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Locations</div><div id="chartLocation" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Countries</div><div id="chartCountry" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Certifications Required</div><div id="chartCerts" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Compliance / Frameworks</div><div id="chartCompliance" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Technology / Tools</div><div id="chartTools" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Jobs Scanned (Last 14 Days)</div><div id="chartScans" class="css-chart"></div></div>
           </div>
         </div>
       </div>
@@ -729,6 +735,12 @@ async function loadDashboard(){
     document.getElementById('dashContent').style.display='block';
     renderCSSPie('chartType',d.typeCounts||[]);
     renderCSSPie('chartCompany',d.companyCounts||[]);
+    renderCSSPie('chartLocation',d.locationCounts||[]);
+    renderCSSPie('chartCountry',d.countryCounts||[]);
+    renderCSSPie('chartCerts',d.certCounts||[]);
+    renderCSSPie('chartCompliance',d.complianceCounts||[]);
+    renderCSSPie('chartTools',d.toolsCounts||[]);
+    renderCSSBars('chartScans',d.recentScans||[]);
   }catch(e){
     console.error('Dashboard error:',e);
     document.getElementById('dashLoading').style.display='block';
@@ -760,6 +772,22 @@ function renderCSSPie(containerId,data){
     legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+(d._id||'Unknown')+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
   });
   el.innerHTML='<div class="css-pie" style="background:conic-gradient('+gradient+')"><div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
+}
+
+function renderCSSBars(containerId,data){
+  var el=document.getElementById(containerId);if(!el)return;
+  if(!data||!data.length){el.innerHTML='<div class="css-no-data">No scan data yet.</div>';return}
+  var sorted=data.slice(0,14).sort(function(a,b){return(a._id||'').localeCompare(b._id||'')});
+  var max=0;sorted.forEach(function(d){if(d.count>max)max=d.count});
+  if(max===0)max=1;
+  var html='<div style="display:flex;flex-direction:column;gap:.25rem;width:100%;padding:.3rem 0">';
+  sorted.forEach(function(d){
+    var pct=Math.round(d.count/max*100);
+    var label=d._id?d._id.slice(5):'';
+    html+='<div style="display:flex;align-items:center;gap:.4rem;font-size:.65rem"><span style="width:40px;color:var(--g5);text-align:right">'+label+'</span><div style="flex:1;height:16px;background:var(--off);border-radius:3px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+PIE_COLORS[0]+';border-radius:3px"></div></div><span style="width:24px;font-weight:600;color:var(--pri)">'+d.count+'</span></div>';
+  });
+  html+='</div>';
+  el.innerHTML=html;
 }
 
 // Export functions
