@@ -10,7 +10,6 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
 :root{--pri:#0F2341;--pm:#1B3A5C;--ac:#0891B2;--al:#22D3EE;--w:#FFF;--off:#F7F9FC;--g100:#DDE4ED;--g3:#8FA0B8;--g5:#5A6F87;--g7:#344054;--tx:#1D2939;--tl:#475467;--bd:rgba(8,145,178,.1);--sh:0 4px 20px rgba(15,35,65,.06)}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -93,6 +92,14 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .dash-card-label{font-size:.65rem;color:var(--g5);text-transform:uppercase;letter-spacing:.5px;margin-top:.15rem}
 .dash-charts{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
 .dash-chart-box{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:.8rem;min-height:260px}
+.css-chart{display:flex;align-items:center;gap:1rem;min-height:200px}
+.css-pie{width:180px;height:180px;border-radius:50%;flex-shrink:0;position:relative}
+.css-pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--pri)}
+.css-legend{flex:1;display:flex;flex-direction:column;gap:.25rem;max-height:200px;overflow-y:auto}
+.css-legend-item{display:flex;align-items:center;gap:.4rem;font-size:.68rem;color:var(--tx)}
+.css-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.css-legend-count{margin-left:auto;font-weight:600;color:var(--pri);font-size:.65rem}
+.css-no-data{text-align:center;padding:2rem;color:var(--g3);font-size:.8rem}
 .dash-chart-title{font-size:.75rem;font-weight:700;color:var(--pri);margin-bottom:.5rem}
 .dash-loading{text-align:center;padding:2rem;color:var(--g3);font-size:.82rem}
 @media(max-width:768px){.dash-summary{grid-template-columns:1fr 1fr}.dash-charts{grid-template-columns:1fr}}
@@ -228,8 +235,8 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
             <div class="dash-card"><div class="dash-card-num" id="dContacted">0</div><div class="dash-card-label">Contacted</div></div>
           </div>
           <div class="dash-charts">
-            <div class="dash-chart-box"><div class="dash-chart-title">Company Type Distribution</div><canvas id="chartType"></canvas></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Companies (by job count)</div><canvas id="chartCompany"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Company Type Distribution</div><div id="chartType" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Companies (by job count)</div><div id="chartCompany" class="css-chart"></div></div>
           </div>
         </div>
       </div>
@@ -702,21 +709,10 @@ function findContacts(idx){
   }
 }
 
-// Dashboard
-var COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#94A3B8'];
-var dashChartInstances={};
+// Dashboard - Pure CSS pie charts, no external library
+var PIE_COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#94A3B8'];
 
 async function loadDashboard(){
-  if(typeof Chart==='undefined'){
-    document.getElementById('dashLoading').textContent='Loading charts library...';
-    await new Promise(function(resolve){
-      var check=setInterval(function(){if(typeof Chart!=='undefined'){clearInterval(check);resolve()}},200);
-      setTimeout(function(){clearInterval(check);resolve()},5000);
-    });
-    if(typeof Chart==='undefined'){document.getElementById('dashLoading').textContent='Chart library failed to load. Please refresh the page.';return}
-  }
-  Chart.defaults.animation=false;
-  Chart.defaults.font.family='DM Sans';
   document.getElementById('dashLoading').style.display='block';
   document.getElementById('dashLoading').textContent='Loading dashboard...';
   document.getElementById('dashContent').style.display='none';
@@ -731,9 +727,8 @@ async function loadDashboard(){
     document.getElementById('dContacted').textContent=sc.contacted||0;
     document.getElementById('dashLoading').style.display='none';
     document.getElementById('dashContent').style.display='block';
-    // Render 2 pie charts
-    renderPie('chartType',d.typeCounts||[]);
-    renderPie('chartCompany',d.companyCounts||[]);
+    renderCSSPie('chartType',d.typeCounts||[]);
+    renderCSSPie('chartCompany',d.companyCounts||[]);
   }catch(e){
     console.error('Dashboard error:',e);
     document.getElementById('dashLoading').style.display='block';
@@ -741,27 +736,30 @@ async function loadDashboard(){
   }
 }
 
-function killChart(id){if(dashChartInstances[id]){dashChartInstances[id].destroy();dashChartInstances[id]=null}}
-
-function renderPie(id,data){
-  killChart(id);
-  var el=document.getElementById(id);if(!el)return;
-  if(!data||!data.length){el.parentNode.querySelector('.dash-chart-title').textContent+=' (no data yet)';return}
+function renderCSSPie(containerId,data){
+  var el=document.getElementById(containerId);if(!el)return;
+  if(!data||!data.length){el.innerHTML='<div class="css-no-data">No data yet. Run some searches first.</div>';return}
   // Top 10 + Others
   var top=data.slice(0,10);
   var othersCount=0;
   for(var i=10;i<data.length;i++)othersCount+=data[i].count;
   if(othersCount>0)top.push({_id:'Others',count:othersCount});
-  el.height=240;
-  dashChartInstances[id]=new Chart(el,{
-    type:'pie',
-    data:{
-      labels:top.map(function(d){return(d._id||'Unknown')+' ('+d.count+')'}),
-      datasets:[{data:top.map(function(d){return d.count}),backgroundColor:COLORS.slice(0,top.length),borderWidth:2,borderColor:'#fff'}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{position:'right',labels:{font:{size:10},padding:6,usePointStyle:true,pointStyle:'circle'}}}}
+  var total=0;top.forEach(function(d){total+=d.count});
+  if(total===0){el.innerHTML='<div class="css-no-data">No data yet.</div>';return}
+  // Build conic-gradient
+  var gradient='',pct=0;
+  top.forEach(function(d,i){
+    var slice=d.count/total*100;
+    gradient+=(i>0?',':'')+PIE_COLORS[i]+' '+pct.toFixed(1)+'% '+(pct+slice).toFixed(1)+'%';
+    pct+=slice;
   });
+  // Build legend
+  var legend='';
+  top.forEach(function(d,i){
+    var p=(d.count/total*100).toFixed(0);
+    legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+(d._id||'Unknown')+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
+  });
+  el.innerHTML='<div class="css-pie" style="background:conic-gradient('+gradient+')"><div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
 }
 
 // Export functions
