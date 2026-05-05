@@ -251,6 +251,54 @@ function detectCountry(job) {
   return 'Unknown';
 }
 
+// Auto-classify company type from job description and company name
+function classifyCompany(company, desc) {
+  var text = (company + ' ' + desc).toLowerCase();
+  var score = { mssp: 0, enterprise: 0, govt: 0, startup: 0, consulting: 0 };
+
+  // MSSP/MDR signals
+  if (/\bmssp\b/.test(text)) score.mssp += 5;
+  if (/\bmdr\b/.test(text)) score.mssp += 5;
+  if (/\bmanaged\s*(?:security|detection|soc|siem)\b/.test(text)) score.mssp += 4;
+  if (/\bsoc[\s-]*as[\s-]*a[\s-]*service\b/.test(text)) score.mssp += 5;
+  if (/\bmanaged\s*(?:service|services)\s*provider\b/.test(text)) score.mssp += 4;
+  if (/\bsecurity\s*(?:operations|services)\s*(?:provider|company|firm)\b/.test(text)) score.mssp += 3;
+  if (/\bclient(?:s|'s)?\s*(?:environment|network|infrastructure|tenant)\b/.test(text)) score.mssp += 3;
+  if (/\bmulti[\s-]*tenant\b/.test(text)) score.mssp += 3;
+  if (/\bazure\s*lighthouse\b/.test(text)) score.mssp += 3;
+  if (/\bsecurity\s*partner\b/.test(text)) score.mssp += 2;
+
+  // Government/Defense signals
+  if (/\b(?:government|federal|dod|department\s*of\s*defense|military|army|navy|air\s*force)\b/.test(text)) score.govt += 5;
+  if (/\b(?:clearance|ts[\s\/]*sci|secret\s*clearance|public\s*trust)\b/.test(text)) score.govt += 4;
+  if (/\b(?:disa|cisa|nsa|fbi|cia|dhs|va\s*(?:health|medical)|cms)\b/.test(text)) score.govt += 4;
+  if (/\b(?:fedramp|fisma|dod\s*stigs|itar|dfars|cmmc)\b/.test(text)) score.govt += 3;
+  if (/\b(?:contractor|contracting\s*officer|government\s*contract)\b/.test(text)) score.govt += 2;
+
+  // Enterprise signals
+  if (/\b(?:fortune\s*\d+|global\s*leader|multinational|enterprise[\s-]*wide)\b/.test(text)) score.enterprise += 4;
+  if (/\b(?:bank|banking|financial\s*services|insurance|pharmaceutical|healthcare|hospital|manufacturing|retail)\b/.test(text)) score.enterprise += 4;
+  if (/\b(?:internal\s*(?:soc|security|it)|corporate\s*(?:security|it))\b/.test(text)) score.enterprise += 3;
+  if (/\b(?:our\s*company|our\s*organization|in[\s-]*house)\b/.test(text)) score.enterprise += 2;
+  if (/\b(?:401k|401\(k\)|pto|paid\s*time\s*off|medical|dental|vision)\b/.test(text)) score.enterprise += 1;
+
+  // Startup signals
+  if (/\b(?:startup|start[\s-]*up|seed\s*funding|series\s*[a-c]|venture|early[\s-]*stage|founding\s*(?:team|member))\b/.test(text)) score.startup += 5;
+  if (/\b(?:fast[\s-]*paced|rapidly\s*growing|disrupt|innovative\s*(?:company|startup))\b/.test(text)) score.startup += 2;
+
+  // Consulting signals
+  if (/\b(?:consulting|consultancy|advisory|professional\s*services|staffing\s*(?:agency|firm|company))\b/.test(text)) score.consulting += 4;
+  if (/\b(?:on\s*behalf\s*of|our\s*client|client\s*site)\b/.test(text)) score.consulting += 3;
+
+  // Find highest score
+  var best = '', bestScore = 0;
+  var map = { mssp: 'MSSP/MDR', enterprise: 'Enterprise', govt: 'Government', startup: 'Startup', consulting: 'IT Consulting' };
+  for (var k in score) {
+    if (score[k] > bestScore) { bestScore = score[k]; best = map[k]; }
+  }
+  return bestScore >= 3 ? best : '';
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS')
     return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
@@ -353,6 +401,7 @@ exports.handler = async (event) => {
         date: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString('en-US') : 'N/A',
         dateRaw: job.job_posted_at_datetime_utc || '',
         title: job.job_title || 'N/A', titleClean: cleanTitle(job.job_title), company: actualCompany,
+        companyType: classifyCompany(actualCompany, desc),
         companyUrl: companyWebUrl,
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'Remote',
         detectedCountry: detectCountry(job),
@@ -393,7 +442,7 @@ exports.handler = async (event) => {
               source: j.source, jobType: j.jobType, remote: j.remote, applyLink: j.applyLink,
               description: j.description, qualifications: j.qualifications,
               responsibilities: j.responsibilities, benefits: j.benefits
-            }, $setOnInsert: { status: 'new', companyType: '', notes: '', searchedBy: userEmail,
+            }, $setOnInsert: { status: 'new', companyType: j.companyType || '', notes: '', searchedBy: userEmail,
               searchRegion: body.searchRegion || '', searchCountry: body.country || 'us', createdAt: new Date() }
             },
             upsert: true

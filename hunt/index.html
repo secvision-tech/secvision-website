@@ -68,13 +68,19 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .mode-btn{flex:1;padding:.35rem .8rem;border:none;background:#fff;font-size:.7rem;font-weight:600;font-family:'DM Sans',sans-serif;cursor:pointer;color:var(--g5);transition:all .15s}
 .mode-btn.active{background:var(--ac);color:#fff}
 .mode-btn:hover:not(.active){background:var(--off)}
-.status-badge{display:inline-block;padding:.1rem .35rem;border-radius:4px;font-size:.55rem;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:.3px}
+.status-badge{display:inline-block;padding:.12rem .4rem;border-radius:4px;font-size:.55rem;font-weight:600;cursor:pointer;text-transform:uppercase;letter-spacing:.3px;border:1px dashed transparent;transition:all .15s}
+.status-badge:hover{opacity:.8;border-color:currentColor;transform:scale(1.05)}
 .status-new{background:#E3F0D4;color:#3B6D11}.status-reviewed{background:#DBE9F7;color:#185FA5}
 .status-contacted{background:#FDF0D3;color:#854F0B}.status-archived{background:#E5E3F9;color:#534AB7}
 .ctype-badge{display:inline-block;padding:.1rem .35rem;border-radius:4px;font-size:.55rem;font-weight:600;cursor:pointer}
 .ctype-mssp{background:#D1F0E5;color:#0F6E56}.ctype-enterprise{background:#DBE9F7;color:#185FA5}
 .ctype-govt{background:#FDF0D3;color:#854F0B}.ctype-startup{background:#E5E3F9;color:#534AB7}
 .ctype-unknown{background:var(--off);color:var(--g5);border:1px solid var(--g100)}
+.ctype-dd{position:absolute;background:#fff;border:1px solid var(--g100);border-radius:6px;box-shadow:0 6px 20px rgba(15,35,65,.12);z-index:60;min-width:130px;padding:.2rem 0;display:none}
+.ctype-dd.open{display:block}
+.ctype-dd-item{padding:.3rem .6rem;font-size:.62rem;cursor:pointer;color:var(--tx);transition:background .1s}
+.ctype-dd-item:hover{background:var(--off)}
+.ctype-dd-item.active{font-weight:700;color:var(--ac)}
 .db-info{font-size:.62rem;color:var(--g3);margin-top:.3rem}
 .fc-btn{padding:.18rem .35rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.55rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;white-space:nowrap}
 .fc-btn:hover{background:var(--ac)}
@@ -340,12 +346,37 @@ function applyFilters(){
 }
 
 var searchMode='web';
+var webResults={jobs:[],filtered:[],page:1,info:'',shown:false};
+var dbResults={jobs:[],filtered:[],page:1,info:'',shown:false};
+
 function setMode(mode){
   searchMode=mode;
   document.getElementById('modeWeb').classList.toggle('active',mode==='web');
   document.getElementById('modeDb').classList.toggle('active',mode==='db');
   document.getElementById('webSearchPanel').style.display=mode==='web'?'block':'none';
   document.getElementById('dbSearchPanel').style.display=mode==='db'?'block':'none';
+  // Save current results before switching
+  if(mode==='db'){
+    webResults.jobs=allJobs;webResults.filtered=filtered;webResults.page=curPage;webResults.info=document.getElementById('apiText').textContent;webResults.shown=allJobs.length>0;
+  }else{
+    dbResults.jobs=allJobs;dbResults.filtered=filtered;dbResults.page=curPage;dbResults.info=document.getElementById('dbInfo').textContent;dbResults.shown=allJobs.length>0;
+  }
+  // Restore previous results for the target mode
+  var restore=mode==='web'?webResults:dbResults;
+  if(restore.shown&&restore.jobs.length>0){
+    allJobs=restore.jobs;filtered=restore.filtered;curPage=restore.page;
+    if(mode==='web')document.getElementById('apiText').textContent=restore.info;
+    else document.getElementById('dbInfo').textContent=restore.info;
+    renderTable();document.getElementById('exportBtns').style.display='flex';
+  }else{
+    allJobs=[];filtered=[];curPage=1;
+    document.getElementById('rTable').style.display='none';
+    document.getElementById('emptyState').style.display='block';
+    document.getElementById('emptyState').innerHTML=mode==='web'?'<h3>Start your job hunt</h3><p>Select roles, sources, and time period, then click Search.</p>':'<h3>Search saved results</h3><p>Enter search criteria and click Search DB to query your database.</p>';
+    document.getElementById('pag').classList.remove('show');
+    document.getElementById('exportBtns').style.display='none';
+    document.getElementById('rCount').textContent=mode==='web'?'Select criteria and click Search.':'Enter criteria and click Search DB.';
+  }
 }
 
 async function searchDb(){
@@ -376,38 +407,69 @@ async function searchDb(){
 
 function statusBadge(status){
   var cls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
-  return '<span class="status-badge '+(cls[status]||'status-new')+'" title="Click to change">'+(status||'new')+'</span>';
+  return '<span class="status-badge '+(cls[status]||'status-new')+'" title="Click to change status: new \u2192 reviewed \u2192 contacted \u2192 archived">'+(status||'new')+'</span>';
 }
 
 function companyTypeBadge(type){
-  if(!type)return '<span class="ctype-badge ctype-unknown" title="Click to classify">Classify</span>';
-  var cls={'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'};
-  return '<span class="ctype-badge '+(cls[type]||'ctype-unknown')+'" title="Click to change">'+type+'</span>';
+  if(!type)return '<span class="ctype-badge ctype-unknown" title="Click to classify company type">Classify</span>';
+  var cls={'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise'};
+  return '<span class="ctype-badge '+(cls[type]||'ctype-unknown')+'" title="Click to change: '+type+'">'+type+'</span>';
 }
 
 async function cycleStatus(jobIdx,el){
-  var j=allJobs[jobIdx];if(!j||!j._id)return;
+  var j=allJobs[jobIdx];if(!j)return;
   var order=['new','reviewed','contacted','archived'];
   var cur=j.status||'new';var next=order[(order.indexOf(cur)+1)%order.length];
-  j.status=next;el.outerHTML=statusBadge(next);
-  // Also re-bind click
-  var newEl=el.parentNode?.querySelector('.status-badge');
-  if(newEl)newEl.onclick=function(){cycleStatus(jobIdx,this)};
-  try{await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action:'updateStatus',id:j._id,status:next})})}catch(e){console.error('Status update failed:',e)}
+  j.status=next;
+  // Update badge immediately
+  var cls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
+  el.className='status-badge '+(cls[next]||'status-new');
+  el.textContent=next;
+  el.title='Click to change status: new \u2192 reviewed \u2192 contacted \u2192 archived';
+  // Persist to DB
+  try{
+    if(j._id){
+      // DB record - update by _id
+      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'updateStatus',id:j._id,status:next})});
+    }else if(j.id){
+      // Web result - update by jobId (the job was auto-saved during search)
+      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'updateStatusByJobId',jobId:j.id,status:next})});
+    }
+  }catch(e){console.error('Status update failed:',e)}
 }
 
-async function setCompanyType(jobIdx){
-  var j=allJobs[jobIdx];if(!j||!j._id)return;
-  var types=['MSSP/MDR','Enterprise','Government','Startup',''];
-  var cur=j.companyType||'';var next=types[(types.indexOf(cur)+1)%types.length];
-  j.companyType=next;
-  // Update all jobs with same company
-  try{await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action:'bulkUpdateCompanyType',company:j.company,companyType:next})})}catch(e){console.error(e)}
-  // Refresh display
-  allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=next});
+function showCompanyTypeDD(jobIdx,el){
+  // Close any existing dropdown
+  document.querySelectorAll('.ctype-dd.open').forEach(function(d){d.remove()});
+  var j=allJobs[jobIdx];if(!j)return;
+  var dd=document.createElement('div');
+  dd.className='ctype-dd open';
+  var types=[{val:'MSSP/MDR',label:'MSSP / MDR Provider'},{val:'Enterprise',label:'Enterprise'},{val:'Government',label:'Government / Defense'},{val:'Startup',label:'Cybersecurity Startup'},{val:'IT Consulting',label:'IT Consulting / Services'},{val:'',label:'Clear Classification'}];
+  types.forEach(function(t){
+    var item=document.createElement('div');
+    item.className='ctype-dd-item'+(j.companyType===t.val?' active':'');
+    item.textContent=t.label;
+    item.onclick=function(e){e.stopPropagation();applyCompanyType(jobIdx,t.val);dd.remove()};
+    dd.appendChild(item);
+  });
+  // Position relative to badge
+  var rect=el.getBoundingClientRect();
+  dd.style.position='fixed';dd.style.top=(rect.bottom+4)+'px';dd.style.left=rect.left+'px';
+  document.body.appendChild(dd);
+  // Close on outside click
+  setTimeout(function(){document.addEventListener('click',function closeDD(){dd.remove();document.removeEventListener('click',closeDD)})},10);
+}
+
+async function applyCompanyType(jobIdx,type){
+  var j=allJobs[jobIdx];if(!j)return;
+  j.companyType=type;
+  allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=type});
   renderTable();
+  // Persist to DB - bulkUpdate works by company name so works for both web and DB results
+  try{await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'bulkUpdateCompanyType',company:j.company,companyType:type})})}catch(e){console.error(e)}
 }
 
 async function searchJobs(){
@@ -494,7 +556,7 @@ function renderTable(){
     if(sBadge)(function(idx){sBadge.onclick=function(){cycleStatus(idx,this)}})(ji);
     // Bind company type badge click
     var ctBadge=tr.querySelector('.ctype-badge');
-    if(ctBadge)(function(idx){ctBadge.onclick=function(){setCompanyType(idx)}})(ji);
+    if(ctBadge)(function(idx){ctBadge.onclick=function(e){e.stopPropagation();showCompanyTypeDD(idx,this)}})(ji);
     tb.appendChild(tr);
   });
   renderPag(tp);
