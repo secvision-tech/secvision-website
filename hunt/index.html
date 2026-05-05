@@ -188,18 +188,19 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:.6rem;margin-top:.5rem;align-items:end">
-        <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
+        <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="15days">Last 15 Days</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
         <div class="sg"><label>Depth</label><select id="sPages"><option value="3">Quick (3pg/role)</option><option value="5" selected>Standard (5pg)</option><option value="10">Deep (10pg)</option></select></div>
       </div>
       <div class="sf2" id="customDates"><div class="sg"><label>From</label><input type="date" id="dateFrom"></div><div class="sg"><label>To</label><input type="date" id="dateTo"></div></div>
       <div class="api-info" id="apiInfo"><span id="apiText"></span><div class="export-btns" id="exportBtns" style="display:none"><button class="export-btn" onclick="exportCSV()">CSV</button><button class="export-btn" onclick="exportXLSX()">Excel</button><button class="export-btn" onclick="exportPDF()">PDF</button></div></div>
       </div><!-- end webSearchPanel -->
       <div id="dbSearchPanel" style="display:none">
-        <div class="sf" style="grid-template-columns:2fr 1fr 1fr 1fr auto">
+        <div class="sf" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr auto">
           <div class="sg"><label>Search Text</label><input type="text" id="dbQuery" placeholder="Role, company, skill, tool..."></div>
           <div class="sg"><label>Status</label><select id="dbStatus"><option value="all">All Statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="contacted">Contacted</option><option value="archived">Archived</option></select></div>
-          <div class="sg"><label>Company Type</label><select id="dbCompanyType"><option value="all">All Types</option><option value="MSSP/MDR">MSSP/MDR</option><option value="Enterprise">Enterprise</option><option value="Government">Government</option><option value="Startup">Startup</option><option value="">Unclassified</option></select></div>
-          <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option><option value="United States">United States</option><option value="United Kingdom">United Kingdom</option><option value="India">India</option><option value="Canada">Canada</option><option value="Germany">Germany</option><option value="Australia">Australia</option></select></div>
+          <div class="sg"><label>Company Type</label><select id="dbCompanyType"><option value="all">All Types</option><option value="MSSP/MDR">MSSP/MDR</option><option value="Enterprise">Enterprise</option><option value="Government">Government</option><option value="Startup">Startup</option><option value="IT Consulting">IT Consulting</option><option value="">Unclassified</option></select></div>
+          <div class="sg"><label>Time Period</label><select id="dbPeriod"><option value="all">All Time</option><option value="1">Last 1 Day</option><option value="3">Last 3 Days</option><option value="7">Last 1 Week</option><option value="15">Last 15 Days</option><option value="30" selected>Last 1 Month</option></select></div>
+          <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option><option value="United States">United States</option><option value="United Kingdom">United Kingdom</option><option value="India">India</option><option value="Canada">Canada</option><option value="Germany">Germany</option><option value="Australia">Australia</option><option value="Japan">Japan</option></select></div>
           <button class="sbtn" onclick="searchDb()" style="align-self:end">Search DB</button>
         </div>
         <div class="db-info" id="dbInfo"></div>
@@ -384,12 +385,18 @@ async function searchDb(){
   var status=document.getElementById('dbStatus').value;
   var cType=document.getElementById('dbCompanyType').value;
   var country=document.getElementById('dbCountry').value;
+  var period=document.getElementById('dbPeriod').value;
+  var dateFrom='',dateTo='';
+  if(period!=='all'){
+    var d=new Date();d.setDate(d.getDate()-parseInt(period));
+    dateFrom=d.toISOString().split('T')[0];
+  }
   document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Searching database...';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,detectedCountry:country,limit:500})});
+      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,detectedCountry:country,dateFrom:dateFrom,limit:500})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -483,7 +490,10 @@ async function searchJobs(){
   document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Searching '+searchRoles.length+' role(s)... please wait.';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
-  var datePosted=document.getElementById('sPeriod').value;if(datePosted==='custom')datePosted='all';
+  var datePosted=document.getElementById('sPeriod').value;
+  var clientDateFilter=null;
+  if(datePosted==='15days'){datePosted='month';clientDateFilter=15;}
+  if(datePosted==='custom')datePosted='all';
   var pages=parseInt(document.getElementById('sPages').value)||5;
   try{
     var countryCode=document.getElementById('sCountry').value||'us';
@@ -522,6 +532,12 @@ async function searchJobs(){
       }
     }
     allJobs.forEach(function(j,i){j.idx=i+1;j.status=j.status||'new';j.companyType=j.companyType||''});
+    // 15-day filter: JSearch doesn't support 15days natively, so filter client-side
+    if(clientDateFilter){
+      var cutoff=new Date();cutoff.setDate(cutoff.getDate()-clientDateFilter);
+      allJobs=allJobs.filter(function(j){if(!j.dateRaw)return true;return new Date(j.dateRaw)>=cutoff});
+      allJobs.forEach(function(j,i){j.idx=i+1});
+    }
     var savedMsg=data.savedToDb?' | '+data.savedToDb+' saved to database':'';
     document.getElementById('apiText').textContent='Found '+data.totalResults+' jobs ('+data.apiCalls+' API calls, '+data.rolesSearched.length+' roles). '+allJobs.length+' after filters.'+savedMsg;
     colFilters={};sortCol='';sortDir=1;
@@ -562,6 +578,20 @@ function renderTable(){
   renderPag(tp);
 }
 function esc(s){return(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function formatDesc(text){
+  if(!text)return'No description available.';
+  return text
+    .replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\r\n/g,'\n')
+    .replace(/^[\s]*[•\u2022\u25CF\u25CB\u25AA\u25AB\u2023\u2043]\s*/gm,'<br>\u2022 ')
+    .replace(/^[\s]*[\-\*]\s+/gm,'<br>\u2022 ')
+    .replace(/^[\s]*\d+[\.\)]\s+/gm,function(m){return '<br>'+m.trim()+' '})
+    .replace(/\n{3,}/g,'\n\n')
+    .replace(/\n/g,'<br>')
+    .replace(/(<br>){3,}/g,'<br><br>')
+    .replace(/((?:Key\s*)?(?:Responsibilities|Requirements|Qualifications|Skills|Experience|Education|Benefits|About|Description|Duties|Overview|Summary|What\s*(?:You|We)|Who\s*(?:You|We)|Preferred|Desired|Minimum|Essential|Nice[\s-]*to[\s-]*Have|Must[\s-]*Have)[\s:]*)/gi,'<br><strong>$1</strong><br>')
+    .trim();
+}
 function contactCell(j){
   if(j.contact&&j.contact!=='See details'&&j.contact!=='Apply online'){
     // Has actual contact - add LinkedIn search link
@@ -611,7 +641,7 @@ async function viewDet(i){
   if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
-  h+='<div class="dm-sec"><h4>Full Description</h4><p>'+desc.replace(/\n/g,'<br>').slice(0,4000)+'</p></div>';
+  h+='<div class="dm-sec"><h4>Full Description</h4><div style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+formatDesc(desc.slice(0,5000))+'</div></div>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" class="dm-apply">Apply Now &rarr;</a>';
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
 }
