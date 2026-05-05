@@ -180,9 +180,45 @@ exports.handler = async (event) => {
         { $limit: 14 }
       ]).toArray();
 
+      // Partnership targets: companies with most openings, grouped by type
+      var partnerTargets = await col.aggregate([
+        { $group: { _id: { company: '$company', type: '$companyType' }, count: { $sum: 1 },
+          statuses: { $push: '$status' }, locations: { $addToSet: '$location' } } },
+        { $sort: { count: -1 } },
+        { $limit: 20 }
+      ]).toArray();
+
+      // Role distribution
+      var roleCounts = await col.aggregate([
+        { $match: { titleClean: { $ne: null } } },
+        { $group: { _id: '$titleClean', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]).toArray();
+
+      // Skills distribution (comma-separated)
+      var skillCounts = await col.aggregate([
+        { $match: { skills: { $ne: 'See details' } } },
+        { $project: { items: { $split: ['$skills', ', '] } } },
+        { $unwind: '$items' },
+        { $match: { items: { $ne: '' } } },
+        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
+
+      // Salary distribution (count by ranges)
+      var salaryJobs = await col.aggregate([
+        { $match: { salary: { $ne: 'Not disclosed' } } },
+        { $group: { _id: '$salary', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]).toArray();
+
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
-        certCounts, complianceCounts, toolsCounts, locationCounts, recentScans
+        certCounts, complianceCounts, toolsCounts, locationCounts, recentScans,
+        partnerTargets, roleCounts, skillCounts, salaryJobs
       })};
     }
 

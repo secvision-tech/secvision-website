@@ -102,6 +102,24 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .css-no-data{text-align:center;padding:2rem;color:var(--g3);font-size:.8rem}
 .dash-chart-title{font-size:.75rem;font-weight:700;color:var(--pri);margin-bottom:.5rem}
 .dash-loading{text-align:center;padding:2rem;color:var(--g3);font-size:.82rem}
+.dash-section{margin-bottom:1.2rem}
+.dash-sec-title{font-size:.9rem;font-weight:700;color:var(--pri);display:flex;align-items:center;gap:.3rem}
+.dash-sec-sub{font-size:.68rem;color:var(--g3);margin-bottom:.6rem;margin-top:.1rem}
+.dash-table-wrap{margin-top:.6rem}
+.dash-table{width:100%;border-collapse:collapse;font-size:.7rem;background:#fff;border:1px solid var(--bd);border-radius:8px;overflow:hidden}
+.dash-table th{background:var(--off);padding:.4rem .6rem;text-align:left;font-weight:600;color:var(--g5);font-size:.62rem;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid var(--g100)}
+.dash-table td{padding:.35rem .6rem;border-bottom:1px solid var(--off);color:var(--tx)}
+.dash-table tr:hover td{background:rgba(8,145,178,.02)}
+.dash-table .hot{color:#DC2626;font-weight:700}
+.dash-table .warm{color:#854F0B;font-weight:600}
+.dash-table .act-link{color:var(--ac);cursor:pointer;font-weight:600;font-size:.62rem;text-decoration:none}
+.dash-table .act-link:hover{text-decoration:underline}
+.dash-insight{margin-top:.6rem;background:#fff;border:1px solid var(--bd);border-radius:8px;padding:.8rem 1rem}
+.dash-insight-title{font-size:.75rem;font-weight:700;color:var(--pri);margin-bottom:.3rem}
+.dash-insight-row{display:flex;align-items:center;gap:.4rem;font-size:.7rem;color:var(--tx);padding:.2rem 0}
+.dash-insight-label{font-weight:600;color:var(--ac);min-width:120px}
+.dash-insight-bar{height:14px;border-radius:3px;min-width:4px}
+.dash-insight-pct{font-size:.6rem;color:var(--g5);min-width:35px;text-align:right}
 @media(max-width:768px){.dash-summary{grid-template-columns:1fr 1fr}.dash-charts{grid-template-columns:1fr}}
 .rp{background:#fff;border-radius:12px;box-shadow:var(--sh);border:1px solid var(--bd);overflow:hidden;flex:1;display:flex;flex-direction:column}
 .rp-head{padding:.5rem 1rem;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center}
@@ -228,21 +246,54 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
       <div id="dashPanel" class="dash-panel show">
         <div class="dash-loading" id="dashLoading">Loading dashboard...</div>
         <div id="dashContent" style="display:none">
+          <!-- Pipeline Summary -->
           <div class="dash-summary">
-            <div class="dash-card"><div class="dash-card-num" id="dTotal">0</div><div class="dash-card-label">Total Jobs</div></div>
-            <div class="dash-card"><div class="dash-card-num" id="dNew">0</div><div class="dash-card-label">New</div></div>
-            <div class="dash-card"><div class="dash-card-num" id="dReviewed">0</div><div class="dash-card-label">Reviewed</div></div>
-            <div class="dash-card"><div class="dash-card-num" id="dContacted">0</div><div class="dash-card-label">Contacted</div></div>
+            <div class="dash-card"><div class="dash-card-num" id="dTotal">0</div><div class="dash-card-label">Total Opportunities</div></div>
+            <div class="dash-card" style="border-left:3px solid #3B6D11"><div class="dash-card-num" id="dNew" style="color:#3B6D11">0</div><div class="dash-card-label">New (Action Needed)</div></div>
+            <div class="dash-card" style="border-left:3px solid #185FA5"><div class="dash-card-num" id="dReviewed" style="color:#185FA5">0</div><div class="dash-card-label">Under Review</div></div>
+            <div class="dash-card" style="border-left:3px solid #854F0B"><div class="dash-card-num" id="dContacted" style="color:#854F0B">0</div><div class="dash-card-label">Contacted</div></div>
           </div>
-          <div class="dash-charts">
-            <div class="dash-chart-box"><div class="dash-chart-title">Company Type Distribution</div><div id="chartType" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Companies (by job count)</div><div id="chartCompany" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Locations</div><div id="chartLocation" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Countries</div><div id="chartCountry" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Certifications Required</div><div id="chartCerts" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Compliance / Frameworks</div><div id="chartCompliance" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Technology / Tools</div><div id="chartTools" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Jobs Scanned (Last 14 Days)</div><div id="chartScans" class="css-chart"></div></div>
+
+          <!-- Section 1: Partnership Targets -->
+          <div class="dash-section">
+            <div class="dash-sec-title">🤝 Partnership Targets — MSSP/MDR Companies to Approach</div>
+            <div class="dash-sec-sub">Companies with multiple SOC openings = high staffing demand = ideal partnership candidates</div>
+            <div class="dash-charts">
+              <div class="dash-chart-box"><div class="dash-chart-title">Company Type Breakdown</div><div id="chartType" class="css-chart"></div></div>
+              <div class="dash-chart-box"><div class="dash-chart-title">Top Hiring Companies (most openings)</div><div id="chartCompany" class="css-chart"></div></div>
+            </div>
+            <div id="partnerTable" class="dash-table-wrap"></div>
+          </div>
+
+          <!-- Section 2: Consultant Demand -->
+          <div class="dash-section">
+            <div class="dash-sec-title">👤 Consultant Demand — What to Hire & Train</div>
+            <div class="dash-sec-sub">Most requested skills, certifications, and tools tell you exactly what consultants to onboard</div>
+            <div class="dash-charts">
+              <div class="dash-chart-box"><div class="dash-chart-title">Top Certifications in Demand</div><div id="chartCerts" class="css-chart"></div></div>
+              <div class="dash-chart-box"><div class="dash-chart-title">Top Technology / Platforms</div><div id="chartTools" class="css-chart"></div></div>
+            </div>
+            <div id="skillsInsight" class="dash-insight"></div>
+          </div>
+
+          <!-- Section 3: Market Geography -->
+          <div class="dash-section">
+            <div class="dash-sec-title">🌍 Market Geography — Where the Demand Is</div>
+            <div class="dash-sec-sub">Focus outreach on regions with highest concentration of openings</div>
+            <div class="dash-charts">
+              <div class="dash-chart-box"><div class="dash-chart-title">Countries</div><div id="chartCountry" class="css-chart"></div></div>
+              <div class="dash-chart-box"><div class="dash-chart-title">Top Locations (Cities)</div><div id="chartLocation" class="css-chart"></div></div>
+            </div>
+          </div>
+
+          <!-- Section 4: Compliance & Frameworks -->
+          <div class="dash-section">
+            <div class="dash-sec-title">📋 Compliance & Frameworks — Industry Requirements</div>
+            <div class="dash-sec-sub">Consultants must be trained on these frameworks to match market demand</div>
+            <div class="dash-charts">
+              <div class="dash-chart-box"><div class="dash-chart-title">Compliance / Frameworks Required</div><div id="chartCompliance" class="css-chart"></div></div>
+              <div class="dash-chart-box"><div class="dash-chart-title">Scan Activity (Last 14 Days)</div><div id="chartScans" class="css-chart"></div></div>
+            </div>
           </div>
         </div>
       </div>
@@ -741,6 +792,10 @@ async function loadDashboard(){
     renderCSSPie('chartCompliance',d.complianceCounts||[]);
     renderCSSPie('chartTools',d.toolsCounts||[]);
     renderCSSBars('chartScans',d.recentScans||[]);
+    // Partnership target table
+    renderPartnerTable(d.partnerTargets||[]);
+    // Skills & hiring insight
+    renderSkillsInsight(d.certCounts||[],d.toolsCounts||[],d.skillCounts||[],d.roleCounts||[]);
   }catch(e){
     console.error('Dashboard error:',e);
     document.getElementById('dashLoading').style.display='block';
@@ -786,6 +841,57 @@ function renderCSSBars(containerId,data){
     var label=d._id?d._id.slice(5):'';
     html+='<div style="display:flex;align-items:center;gap:.4rem;font-size:.65rem"><span style="width:40px;color:var(--g5);text-align:right">'+label+'</span><div style="flex:1;height:16px;background:var(--off);border-radius:3px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:'+PIE_COLORS[0]+';border-radius:3px"></div></div><span style="width:24px;font-weight:600;color:var(--pri)">'+d.count+'</span></div>';
   });
+  html+='</div>';
+  el.innerHTML=html;
+}
+
+function renderPartnerTable(data){
+  var el=document.getElementById('partnerTable');if(!el)return;
+  if(!data||!data.length){el.innerHTML='';return}
+  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Openings</th><th>Pipeline Status</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
+  data.slice(0,15).forEach(function(d,i){
+    var company=d._id?.company||'Unknown';
+    var type=d._id?.type||'';
+    var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'<span class="ctype-badge ctype-unknown">Unclassified</span>';
+    var hot=d.count>=3?'hot':d.count>=2?'warm':'';
+    // Count statuses
+    var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
+    var statusHtml=Object.keys(sc).map(function(k){return '<span class="status-badge status-'+k+'">'+k+':'+sc[k]+'</span>'}).join(' ');
+    var locs=(d.locations||[]).slice(0,2).join(', ');
+    var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("SOC Director" OR "VP Operations" OR "CISO" OR "recruiter" OR "HR")');
+    html+='<tr><td>'+(i+1)+'</td><td><strong>'+company+'</strong></td><td>'+typeBadge+'</td><td class="'+hot+'">'+d.count+' openings</td><td>'+statusHtml+'</td><td style="font-size:.6rem;color:var(--g5)">'+locs+'</td><td><a href="'+searchUrl+'" target="_blank" class="act-link">Find Contacts</a></td></tr>';
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+function renderSkillsInsight(certs,tools,skills,roles){
+  var el=document.getElementById('skillsInsight');if(!el)return;
+  var html='<div class="dash-insight-title">💡 Consultant Hiring & Training Priorities</div>';
+  // Roles in demand
+  if(roles&&roles.length){
+    html+='<div style="margin-top:.5rem;font-size:.7rem;font-weight:600;color:var(--pri)">Most Requested Roles:</div>';
+    var maxR=roles[0]?.count||1;
+    roles.slice(0,8).forEach(function(r){
+      var pct=Math.round(r.count/maxR*100);
+      html+='<div class="dash-insight-row"><span class="dash-insight-label">'+(r._id||'Unknown').slice(0,35)+'</span><div class="dash-insight-bar" style="width:'+pct+'%;background:'+PIE_COLORS[0]+'"></div><span class="dash-insight-pct">'+r.count+' jobs</span></div>';
+    });
+  }
+  // Top skills
+  if(skills&&skills.length){
+    html+='<div style="margin-top:.6rem;font-size:.7rem;font-weight:600;color:var(--pri)">Most Requested Technical Skills:</div>';
+    var maxS=skills[0]?.count||1;
+    skills.slice(0,10).forEach(function(s){
+      var pct=Math.round(s.count/maxS*100);
+      html+='<div class="dash-insight-row"><span class="dash-insight-label">'+(s._id||'Unknown')+'</span><div class="dash-insight-bar" style="width:'+pct+'%;background:'+PIE_COLORS[1]+'"></div><span class="dash-insight-pct">'+s.count+'</span></div>';
+    });
+  }
+  // Actionable summary
+  var topCert=certs&&certs[0]?certs[0]._id:'CISSP';
+  var topTool=tools&&tools[0]?tools[0]._id:'SIEM';
+  var topRole=roles&&roles[0]?roles[0]._id:'SOC Analyst';
+  html+='<div style="margin-top:.8rem;padding:.6rem;background:var(--off);border-radius:6px;border-left:3px solid var(--ac);font-size:.72rem;color:var(--tx);line-height:1.5">';
+  html+='<strong>Recommendation:</strong> Prioritize onboarding consultants with <strong>'+topCert+'</strong> certification and <strong>'+topTool+'</strong> expertise. The highest demand is for <strong>'+topRole+'</strong> roles. Train existing team on the top 3 tools and top 3 certifications shown above to maximize placement rate.';
   html+='</div>';
   el.innerHTML=html;
 }
