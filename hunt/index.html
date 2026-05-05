@@ -187,9 +187,9 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
     <div class="search-panel">
       <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Security Job Search & Hunting</div>
       <div class="mode-toggle" id="modeToggle">
+        <button class="mode-btn active" id="modeDash" onclick="setMode('dash')">Dashboard</button>
         <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
-        <button class="mode-btn active" id="modeDash" onclick="setMode('dash')">Dashboard</button>
       </div>
       <div id="webSearchPanel" style="display:none">
       <div class="sf">
@@ -230,12 +230,6 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
           <div class="dash-charts">
             <div class="dash-chart-box"><div class="dash-chart-title">Company Type Distribution</div><canvas id="chartType"></canvas></div>
             <div class="dash-chart-box"><div class="dash-chart-title">Top Companies (by job count)</div><canvas id="chartCompany"></canvas></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Locations</div><canvas id="chartLocation"></canvas></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Countries</div><canvas id="chartCountry"></canvas></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Certifications Required</div><canvas id="chartCerts"></canvas></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Compliance / Frameworks</div><canvas id="chartCompliance"></canvas></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Technology / Tools</div><canvas id="chartTools"></canvas></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Jobs Scanned (Last 14 Days)</div><canvas id="chartScans"></canvas></div>
           </div>
         </div>
       </div>
@@ -709,7 +703,7 @@ function findContacts(idx){
 }
 
 // Dashboard
-var COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626'];
+var COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#94A3B8'];
 var dashChartInstances={};
 
 async function loadDashboard(){
@@ -721,10 +715,8 @@ async function loadDashboard(){
     });
     if(typeof Chart==='undefined'){document.getElementById('dashLoading').textContent='Chart library failed to load. Please refresh the page.';return}
   }
-  // Disable animations globally for faster rendering
   Chart.defaults.animation=false;
   Chart.defaults.font.family='DM Sans';
-
   document.getElementById('dashLoading').style.display='block';
   document.getElementById('dashLoading').textContent='Loading dashboard...';
   document.getElementById('dashContent').style.display='none';
@@ -732,33 +724,16 @@ async function loadDashboard(){
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
     if(!r.ok)throw new Error('API returned '+r.status);
     var d=await r.json();
-
-    // Summary cards
     document.getElementById('dTotal').textContent=d.totalJobs||0;
     var sc={};(d.statusCounts||[]).forEach(function(s){sc[s._id]=s.count});
     document.getElementById('dNew').textContent=sc.new||0;
     document.getElementById('dReviewed').textContent=sc.reviewed||0;
     document.getElementById('dContacted').textContent=sc.contacted||0;
-
-    // Show content first, then render charts sequentially
     document.getElementById('dashLoading').style.display='none';
     document.getElementById('dashContent').style.display='block';
-
-    // Render charts one at a time with small delays to prevent browser hang
-    var chartFns=[
-      function(){renderDoughnut('chartType',(d.typeCounts||[]).slice(0,10))},
-      function(){renderHBar('chartCompany',(d.companyCounts||[]).slice(0,10))},
-      function(){renderHBar('chartLocation',(d.locationCounts||[]).slice(0,10))},
-      function(){renderHBar('chartCountry',(d.countryCounts||[]).slice(0,10))},
-      function(){renderHBar('chartCerts',(d.certCounts||[]).slice(0,10))},
-      function(){renderHBar('chartCompliance',(d.complianceCounts||[]).slice(0,10))},
-      function(){renderHBar('chartTools',(d.toolsCounts||[]).slice(0,10))},
-      function(){renderLine('chartScans',(d.recentScans||[]).reverse().slice(0,14))}
-    ];
-    for(var ci=0;ci<chartFns.length;ci++){
-      chartFns[ci]();
-      await new Promise(function(resolve){setTimeout(resolve,30)});
-    }
+    // Render 2 pie charts
+    renderPie('chartType',d.typeCounts||[]);
+    renderPie('chartCompany',d.companyCounts||[]);
   }catch(e){
     console.error('Dashboard error:',e);
     document.getElementById('dashLoading').style.display='block';
@@ -768,50 +743,24 @@ async function loadDashboard(){
 
 function killChart(id){if(dashChartInstances[id]){dashChartInstances[id].destroy();dashChartInstances[id]=null}}
 
-function renderDoughnut(id,data){
+function renderPie(id,data){
   killChart(id);
-  var el=document.getElementById(id);if(!el||!data||!data.length)return;
-  el.height=220;
+  var el=document.getElementById(id);if(!el)return;
+  if(!data||!data.length){el.parentNode.querySelector('.dash-chart-title').textContent+=' (no data yet)';return}
+  // Top 10 + Others
+  var top=data.slice(0,10);
+  var othersCount=0;
+  for(var i=10;i<data.length;i++)othersCount+=data[i].count;
+  if(othersCount>0)top.push({_id:'Others',count:othersCount});
+  el.height=240;
   dashChartInstances[id]=new Chart(el,{
-    type:'doughnut',
+    type:'pie',
     data:{
-      labels:data.map(function(d){return(d._id||'Other')}),
-      datasets:[{data:data.map(function(d){return d.count}),backgroundColor:COLORS.slice(0,data.length),borderWidth:2,borderColor:'#fff'}]
+      labels:top.map(function(d){return(d._id||'Unknown')+' ('+d.count+')'}),
+      datasets:[{data:top.map(function(d){return d.count}),backgroundColor:COLORS.slice(0,top.length),borderWidth:2,borderColor:'#fff'}]
     },
     options:{responsive:true,maintainAspectRatio:false,animation:false,
       plugins:{legend:{position:'right',labels:{font:{size:10},padding:6,usePointStyle:true,pointStyle:'circle'}}}}
-  });
-}
-
-function renderHBar(id,data){
-  killChart(id);
-  var el=document.getElementById(id);if(!el||!data||!data.length)return;
-  el.height=220;
-  dashChartInstances[id]=new Chart(el,{
-    type:'bar',
-    data:{
-      labels:data.map(function(d){return(d._id||'Other').slice(0,30)}),
-      datasets:[{data:data.map(function(d){return d.count}),backgroundColor:COLORS[0]+'BB',borderColor:COLORS[0],borderWidth:1,borderRadius:3}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,animation:false,indexAxis:'y',
-      plugins:{legend:{display:false}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{ticks:{font:{size:9}},grid:{display:false}}}}
-  });
-}
-
-function renderLine(id,data){
-  killChart(id);
-  var el=document.getElementById(id);if(!el||!data||!data.length)return;
-  el.height=220;
-  dashChartInstances[id]=new Chart(el,{
-    type:'line',
-    data:{
-      labels:data.map(function(d){return d._id?d._id.slice(5):''}),
-      datasets:[{label:'Jobs',data:data.map(function(d){return d.count}),borderColor:COLORS[0],backgroundColor:COLORS[0]+'22',fill:true,tension:.3,pointRadius:3,pointBackgroundColor:COLORS[0]}]
-    },
-    options:{responsive:true,maintainAspectRatio:false,animation:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{ticks:{font:{size:9}},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9}},grid:{color:'#f0f0f0'}}}}
   });
 }
 
