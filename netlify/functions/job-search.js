@@ -422,13 +422,37 @@ exports.handler = async (event) => {
       };
     });
 
-    // Auto-save to MongoDB
+    // #82: Look up existing company classifications from DB
+    // If a company was previously classified (manually or auto), reuse that classification
     var savedCount = 0;
     try {
       var { getDb } = require('./db');
       var db = await getDb();
       var col = db.collection('jobs');
       var userEmail = body.userEmail || 'anonymous';
+
+      // Get unique company names from current results
+      var companyNames = {};
+      jobs.forEach(function(j) { if (j.company) companyNames[j.company] = true; });
+      var uniqueCompanies = Object.keys(companyNames);
+
+      // Query DB for existing classifications
+      if (uniqueCompanies.length > 0) {
+        var existingTypes = await col.aggregate([
+          { $match: { company: { $in: uniqueCompanies }, companyType: { $ne: '' } } },
+          { $group: { _id: '$company', companyType: { $first: '$companyType' } } }
+        ]).toArray();
+
+        // Build lookup map
+        var typeMap = {};
+        existingTypes.forEach(function(e) { typeMap[e._id] = e.companyType; });
+
+        // Apply existing DB types over auto-classified (DB takes priority = manual overrides preserved)
+        jobs.forEach(function(j) {
+          if (typeMap[j.company]) j.companyType = typeMap[j.company];
+        });
+      }
+
       var ops = jobs.map(function(j) {
         return {
           updateOne: {

@@ -589,7 +589,7 @@ function formatDesc(text){
     .replace(/\n{3,}/g,'\n\n')
     .replace(/\n/g,'<br>')
     .replace(/(<br>){3,}/g,'<br><br>')
-    .replace(/((?:Key\s*)?(?:Responsibilities|Requirements|Qualifications|Skills|Experience|Education|Benefits|About|Description|Duties|Overview|Summary|What\s*(?:You|We)|Who\s*(?:You|We)|Preferred|Desired|Minimum|Essential|Nice[\s-]*to[\s-]*Have|Must[\s-]*Have)[\s:]*)/gi,'<br><strong>$1</strong><br>')
+    .replace(/(?:<br>|^)\s*((?:Key\s*)?(?:Responsibilities|Requirements|Qualifications|Education|Benefits|About\s*(?:Us|the|This)|Duties|Overview|Summary|Position|Role|Location|Compensation|Salary|What\s*(?:You|We)|Who\s*(?:You|We)|Preferred|Desired|Minimum|Essential|Nice[\s-]*to[\s-]*Have|Must[\s-]*Have)[^<:]{0,20})\s*(?::|(?=<br>))/gi,'<br><strong>$1:</strong><br>')
     .trim();
 }
 function contactCell(j){
