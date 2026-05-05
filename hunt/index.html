@@ -10,6 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <style>
 :root{--pri:#0F2341;--pm:#1B3A5C;--ac:#0891B2;--al:#22D3EE;--w:#FFF;--off:#F7F9FC;--g100:#DDE4ED;--g3:#8FA0B8;--g5:#5A6F87;--g7:#344054;--tx:#1D2939;--tl:#475467;--bd:rgba(8,145,178,.1);--sh:0 4px 20px rgba(15,35,65,.06)}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -84,6 +85,17 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .db-info{font-size:.62rem;color:var(--g3);margin-top:.3rem}
 .fc-btn{padding:.18rem .35rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.55rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;white-space:nowrap}
 .fc-btn:hover{background:var(--ac)}
+.dash-panel{display:none;padding:.5rem 0}
+.dash-panel.show{display:block}
+.dash-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:.6rem;margin-bottom:1rem}
+.dash-card{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:.8rem 1rem;text-align:center}
+.dash-card-num{font-size:1.6rem;font-weight:700;color:var(--ac);font-family:'Playfair Display',serif}
+.dash-card-label{font-size:.65rem;color:var(--g5);text-transform:uppercase;letter-spacing:.5px;margin-top:.15rem}
+.dash-charts{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
+.dash-chart-box{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:.8rem;min-height:260px}
+.dash-chart-title{font-size:.75rem;font-weight:700;color:var(--pri);margin-bottom:.5rem}
+.dash-loading{text-align:center;padding:2rem;color:var(--g3);font-size:.82rem}
+@media(max-width:768px){.dash-summary{grid-template-columns:1fr 1fr}.dash-charts{grid-template-columns:1fr}}
 .rp{background:#fff;border-radius:12px;box-shadow:var(--sh);border:1px solid var(--bd);overflow:hidden;flex:1;display:flex;flex-direction:column}
 .rp-head{padding:.5rem 1rem;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center}
 .rp-count{font-size:.75rem;color:var(--g5)}.rp-count strong{color:var(--pri)}
@@ -177,6 +189,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
       <div class="mode-toggle" id="modeToggle">
         <button class="mode-btn active" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
+        <button class="mode-btn" id="modeDash" onclick="setMode('dash')">Dashboard</button>
       </div>
       <div id="webSearchPanel">
       <div class="sf">
@@ -204,6 +217,27 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
           <button class="sbtn" onclick="searchDb()" style="align-self:end">Search DB</button>
         </div>
         <div class="db-info" id="dbInfo"></div>
+      </div>
+      <div id="dashPanel" class="dash-panel">
+        <div class="dash-loading" id="dashLoading">Loading dashboard...</div>
+        <div id="dashContent" style="display:none">
+          <div class="dash-summary">
+            <div class="dash-card"><div class="dash-card-num" id="dTotal">0</div><div class="dash-card-label">Total Jobs</div></div>
+            <div class="dash-card"><div class="dash-card-num" id="dNew">0</div><div class="dash-card-label">New</div></div>
+            <div class="dash-card"><div class="dash-card-num" id="dReviewed">0</div><div class="dash-card-label">Reviewed</div></div>
+            <div class="dash-card"><div class="dash-card-num" id="dContacted">0</div><div class="dash-card-label">Contacted</div></div>
+          </div>
+          <div class="dash-charts">
+            <div class="dash-chart-box"><div class="dash-chart-title">Company Type Distribution</div><canvas id="chartType"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Companies (by job count)</div><canvas id="chartCompany"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Locations</div><canvas id="chartLocation"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Countries</div><canvas id="chartCountry"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Certifications Required</div><canvas id="chartCerts"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Compliance / Frameworks</div><canvas id="chartCompliance"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Technology / Tools</div><canvas id="chartTools"></canvas></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Jobs Scanned (Last 14 Days)</div><canvas id="chartScans"></canvas></div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="rp">
@@ -349,18 +383,23 @@ function applyFilters(){
 var searchMode='web';
 var webResults={jobs:[],filtered:[],page:1,info:'',shown:false};
 var dbResults={jobs:[],filtered:[],page:1,info:'',shown:false};
+var dashCharts={};
 
 function setMode(mode){
+  // Save current results before switching
+  if(searchMode==='web'){webResults.jobs=allJobs;webResults.filtered=filtered;webResults.page=curPage;webResults.info=document.getElementById('apiText').textContent;webResults.shown=allJobs.length>0}
+  else if(searchMode==='db'){dbResults.jobs=allJobs;dbResults.filtered=filtered;dbResults.page=curPage;dbResults.info=document.getElementById('dbInfo').textContent;dbResults.shown=allJobs.length>0}
   searchMode=mode;
   document.getElementById('modeWeb').classList.toggle('active',mode==='web');
   document.getElementById('modeDb').classList.toggle('active',mode==='db');
+  document.getElementById('modeDash').classList.toggle('active',mode==='dash');
   document.getElementById('webSearchPanel').style.display=mode==='web'?'block':'none';
   document.getElementById('dbSearchPanel').style.display=mode==='db'?'block':'none';
-  // Save current results before switching
-  if(mode==='db'){
-    webResults.jobs=allJobs;webResults.filtered=filtered;webResults.page=curPage;webResults.info=document.getElementById('apiText').textContent;webResults.shown=allJobs.length>0;
-  }else{
-    dbResults.jobs=allJobs;dbResults.filtered=filtered;dbResults.page=curPage;dbResults.info=document.getElementById('dbInfo').textContent;dbResults.shown=allJobs.length>0;
+  document.getElementById('dashPanel').classList.toggle('show',mode==='dash');
+  // Show/hide results panel for search modes vs dashboard
+  document.querySelector('.rp').style.display=mode==='dash'?'none':'flex';
+  if(mode==='dash'){
+    loadDashboard();return;
   }
   // Restore previous results for the target mode
   var restore=mode==='web'?webResults:dbResults;
@@ -583,12 +622,19 @@ function formatDesc(text){
   return text
     .replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/\r\n/g,'\n')
-    .replace(/^[\s]*[•\u2022\u25CF\u25CB\u25AA\u25AB\u2023\u2043]\s*/gm,'<br>\u2022 ')
-    .replace(/^[\s]*[\-\*]\s+/gm,'<br>\u2022 ')
-    .replace(/^[\s]*\d+[\.\)]\s+/gm,function(m){return '<br>'+m.trim()+' '})
+    // Handle inline bullets (• or - appearing mid-text without newlines)
+    .replace(/\s*[•\u2022\u25CF\u25CB\u25AA\u25AB\u2023\u2043]\s*/g,'\n\u2022 ')
+    // Handle dash/asterisk bullets at line start
+    .replace(/^[\s]*[\-\*]\s+/gm,'\n\u2022 ')
+    // Handle numbered items at line start
+    .replace(/^[\s]*(\d+[\.\)])\s+/gm,'\n$1 ')
+    // Collapse excess newlines
     .replace(/\n{3,}/g,'\n\n')
+    // Convert newlines to <br>
     .replace(/\n/g,'<br>')
+    // Collapse excess <br>
     .replace(/(<br>){3,}/g,'<br><br>')
+    // Bold section headers (only at line start, followed by colon or end of line)
     .replace(/(?:<br>|^)\s*((?:Key\s*)?(?:Responsibilities|Requirements|Qualifications|Education|Benefits|About\s*(?:Us|the|This)|Duties|Overview|Summary|Position|Role|Location|Compensation|Salary|What\s*(?:You|We)|Who\s*(?:You|We)|Preferred|Desired|Minimum|Essential|Nice[\s-]*to[\s-]*Have|Must[\s-]*Have)[^<:]{0,20})\s*(?::|(?=<br>))/gi,'<br><strong>$1:</strong><br>')
     .trim();
 }
@@ -659,6 +705,72 @@ function findContacts(idx){
       body:JSON.stringify({action:'updateStatus',id:j._id,status:'reviewed'})}).catch(function(e){console.error(e)});
     renderTable();
   }
+}
+
+// Dashboard
+var COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#2563EB','#059669','#D97706','#4F46E5','#EC4899'];
+async function loadDashboard(){
+  document.getElementById('dashLoading').style.display='block';
+  document.getElementById('dashContent').style.display='none';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
+    if(!r.ok)throw new Error('Failed');var d=await r.json();
+    // Summary cards
+    document.getElementById('dTotal').textContent=d.totalJobs||0;
+    var sc={};(d.statusCounts||[]).forEach(function(s){sc[s._id]=s.count});
+    document.getElementById('dNew').textContent=sc.new||0;
+    document.getElementById('dReviewed').textContent=sc.reviewed||0;
+    document.getElementById('dContacted').textContent=sc.contacted||0;
+    // Render charts
+    renderPieChart('chartType',d.typeCounts,'Company Type');
+    renderBarChart('chartCompany',d.companyCounts,'Jobs');
+    renderBarChart('chartLocation',(d.locationCounts||[]).slice(0,10),'Jobs');
+    renderBarChart('chartCountry',d.countryCounts,'Jobs');
+    renderBarChart('chartCerts',d.certCounts,'Mentions');
+    renderBarChart('chartCompliance',d.complianceCounts,'Mentions');
+    renderBarChart('chartTools',d.toolsCounts,'Mentions');
+    renderLineChart('chartScans',(d.recentScans||[]).reverse());
+    document.getElementById('dashLoading').style.display='none';
+    document.getElementById('dashContent').style.display='block';
+  }catch(e){
+    console.error('Dashboard error:',e);
+    document.getElementById('dashLoading').textContent='Failed to load dashboard: '+e.message;
+  }
+}
+
+function destroyChart(id){if(dashCharts[id]){dashCharts[id].destroy();delete dashCharts[id]}}
+
+function renderPieChart(canvasId,data,label){
+  destroyChart(canvasId);
+  if(!data||!data.length){document.getElementById(canvasId).parentNode.querySelector('.dash-chart-title').textContent+=' (no data)';return}
+  var ctx=document.getElementById(canvasId).getContext('2d');
+  dashCharts[canvasId]=new Chart(ctx,{
+    type:'doughnut',
+    data:{labels:data.map(function(d){return d._id||'Unknown'}),datasets:[{data:data.map(function(d){return d.count}),backgroundColor:COLORS.slice(0,data.length),borderWidth:1,borderColor:'#fff'}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{font:{size:10,family:'DM Sans'},padding:8,usePointStyle:true,pointStyle:'circle'}}}}
+  });
+}
+
+function renderBarChart(canvasId,data,label){
+  destroyChart(canvasId);
+  if(!data||!data.length)return;
+  var ctx=document.getElementById(canvasId).getContext('2d');
+  dashCharts[canvasId]=new Chart(ctx,{
+    type:'bar',
+    data:{labels:data.map(function(d){return(d._id||'Unknown').slice(0,25)}),datasets:[{label:label,data:data.map(function(d){return d.count}),backgroundColor:COLORS[0]+'CC',borderColor:COLORS[0],borderWidth:1,borderRadius:4}]},
+    options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9,family:'DM Sans'}},grid:{display:false}},y:{ticks:{font:{size:9,family:'DM Sans'}},grid:{display:false}}}}
+  });
+}
+
+function renderLineChart(canvasId,data){
+  destroyChart(canvasId);
+  if(!data||!data.length)return;
+  var ctx=document.getElementById(canvasId).getContext('2d');
+  dashCharts[canvasId]=new Chart(ctx,{
+    type:'line',
+    data:{labels:data.map(function(d){return d._id?d._id.slice(5):''}),datasets:[{label:'Jobs Scanned',data:data.map(function(d){return d.count}),borderColor:COLORS[0],backgroundColor:COLORS[0]+'22',fill:true,tension:.3,pointRadius:4,pointBackgroundColor:COLORS[0]}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{font:{size:9,family:'DM Sans'}},grid:{display:false}},y:{beginAtZero:true,ticks:{font:{size:9,family:'DM Sans'}},grid:{color:'#f0f0f0'}}}}
+  });
 }
 
 // Export functions

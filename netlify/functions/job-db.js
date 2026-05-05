@@ -70,11 +70,20 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ job }) };
     }
 
-    // ACTION: updateStatus - update job status
+    // ACTION: updateStatus - update job status by _id
     if (action === 'updateStatus') {
       var { ObjectId } = require('mongodb');
       var result = await col.updateOne(
         { _id: new ObjectId(body.id) },
+        { $set: { status: body.status, statusUpdatedAt: new Date() } }
+      );
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
+    }
+
+    // ACTION: updateStatusByJobId - update job status by jobId (for web search results)
+    if (action === 'updateStatusByJobId') {
+      var result = await col.updateOne(
+        { jobId: body.jobId },
         { $set: { status: body.status, statusUpdatedAt: new Date() } }
       );
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
@@ -117,21 +126,63 @@ exports.handler = async (event) => {
       ]).toArray();
       var typeCounts = await col.aggregate([
         { $match: { companyType: { $ne: '' } } },
-        { $group: { _id: '$companyType', count: { $sum: 1 } } }
+        { $group: { _id: '$companyType', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
       ]).toArray();
       var countryCounts = await col.aggregate([
+        { $match: { detectedCountry: { $ne: null } } },
         { $group: { _id: '$detectedCountry', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
+      var companyCounts = await col.aggregate([
+        { $group: { _id: '$company', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
+      // Split comma-separated fields and count each value
+      var certCounts = await col.aggregate([
+        { $match: { certifications: { $ne: 'See details' } } },
+        { $project: { items: { $split: ['$certifications', ', '] } } },
+        { $unwind: '$items' },
+        { $match: { items: { $ne: '' } } },
+        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
+      var complianceCounts = await col.aggregate([
+        { $match: { compliance: { $ne: 'See details' } } },
+        { $project: { items: { $split: ['$compliance', ', '] } } },
+        { $unwind: '$items' },
+        { $match: { items: { $ne: '' } } },
+        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
+      var toolsCounts = await col.aggregate([
+        { $match: { tools: { $ne: 'See details' } } },
+        { $project: { items: { $split: ['$tools', ', '] } } },
+        { $unwind: '$items' },
+        { $match: { items: { $ne: '' } } },
+        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
+      var locationCounts = await col.aggregate([
+        { $match: { location: { $ne: 'Remote' } } },
+        { $group: { _id: '$location', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
       var recentScans = await col.aggregate([
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateScanned' } }, count: { $sum: 1 } } },
         { $sort: { _id: -1 } },
-        { $limit: 7 }
+        { $limit: 14 }
       ]).toArray();
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
-        totalJobs, statusCounts, typeCounts, countryCounts, recentScans
+        totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
+        certCounts, complianceCounts, toolsCounts, locationCounts, recentScans
       })};
     }
 
