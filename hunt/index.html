@@ -10,7 +10,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
 :root{--pri:#0F2341;--pm:#1B3A5C;--ac:#0891B2;--al:#22D3EE;--w:#FFF;--off:#F7F9FC;--g100:#DDE4ED;--g3:#8FA0B8;--g5:#5A6F87;--g7:#344054;--tx:#1D2939;--tl:#475467;--bd:rgba(8,145,178,.1);--sh:0 4px 20px rgba(15,35,65,.06)}
 *{margin:0;padding:0;box-sizing:border-box}
@@ -187,11 +187,11 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
     <div class="search-panel">
       <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Security Job Search & Hunting</div>
       <div class="mode-toggle" id="modeToggle">
-        <button class="mode-btn active" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
+        <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
-        <button class="mode-btn" id="modeDash" onclick="setMode('dash')">Dashboard</button>
+        <button class="mode-btn active" id="modeDash" onclick="setMode('dash')">Dashboard</button>
       </div>
-      <div id="webSearchPanel">
+      <div id="webSearchPanel" style="display:none">
       <div class="sf">
         <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (Listed Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
         <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option></select></div>
@@ -218,7 +218,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         </div>
         <div class="db-info" id="dbInfo"></div>
       </div>
-      <div id="dashPanel" class="dash-panel">
+      <div id="dashPanel" class="dash-panel show">
         <div class="dash-loading" id="dashLoading">Loading dashboard...</div>
         <div id="dashContent" style="display:none">
           <div class="dash-summary">
@@ -240,7 +240,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         </div>
       </div>
     </div>
-    <div class="rp">
+    <div class="rp" style="display:none">
       <div class="rp-head"><div class="rp-count" id="rCount">Select criteria and click Search.</div></div>
       <div class="tw" id="tableWrap">
         <table id="rTable" style="display:none"><thead><tr id="thRow"></tr><tr id="thFilter"></tr></thead><tbody id="rBody"></tbody></table>
@@ -322,6 +322,7 @@ function showApp(){
   document.getElementById('udName').textContent=n;document.getElementById('udEmail').textContent=e;document.getElementById('udLogin').textContent=new Date().toLocaleString();
   var exp=curUser.idTokenClaims?.exp;if(exp)document.getElementById('udExpiry').textContent=new Date(exp*1000).toLocaleString();
   buildTableHeader();
+  loadDashboard();
 }
 document.addEventListener('click',function(){document.getElementById('userDropdown')?.classList.remove('open')});
 
@@ -380,7 +381,7 @@ function applyFilters(){
   curPage=1;renderTable();
 }
 
-var searchMode='web';
+var searchMode='dash';
 var webResults={jobs:[],filtered:[],page:1,info:'',shown:false};
 var dbResults={jobs:[],filtered:[],page:1,info:'',shown:false};
 var dashCharts={};
@@ -710,6 +711,14 @@ function findContacts(idx){
 // Dashboard
 var COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#2563EB','#059669','#D97706','#4F46E5','#EC4899'];
 async function loadDashboard(){
+  if(typeof Chart==='undefined'){
+    document.getElementById('dashLoading').textContent='Loading charts library...';
+    await new Promise(function(resolve){
+      var check=setInterval(function(){if(typeof Chart!=='undefined'){clearInterval(check);resolve()}},200);
+      setTimeout(function(){clearInterval(check);resolve()},5000);
+    });
+    if(typeof Chart==='undefined'){document.getElementById('dashLoading').textContent='Chart library failed to load. Please refresh the page.';return}
+  }
   document.getElementById('dashLoading').style.display='block';
   document.getElementById('dashContent').style.display='none';
   try{
