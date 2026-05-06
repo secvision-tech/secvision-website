@@ -96,7 +96,9 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .css-pie{width:180px;height:180px;border-radius:50%;flex-shrink:0;position:relative}
 .css-pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--pri)}
 .css-legend{flex:1;display:flex;flex-direction:column;gap:.25rem;max-height:200px;overflow-y:auto}
-.css-legend-item{display:flex;align-items:center;gap:.4rem;font-size:.68rem;color:var(--tx)}
+.css-legend-item{display:flex;align-items:center;gap:.4rem;font-size:.68rem;color:var(--tx);cursor:default;padding:.15rem .3rem;border-radius:4px;transition:background .15s}
+.css-legend-item:hover{background:var(--off);transform:scale(1.02)}
+.css-legend-item:hover .css-legend-count{color:var(--ac)}
 .css-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .css-legend-count{margin-left:auto;font-weight:600;color:var(--pri);font-size:.65rem}
 .css-no-data{text-align:center;padding:2rem;color:var(--g3);font-size:.8rem}
@@ -380,6 +382,9 @@ function showApp(){
   document.getElementById('udName').textContent=n;document.getElementById('udEmail').textContent=e;document.getElementById('udLogin').textContent=new Date().toLocaleString();
   var exp=curUser.idTokenClaims?.exp;if(exp)document.getElementById('udExpiry').textContent=new Date(exp*1000).toLocaleString();
   buildTableHeader();
+  // #90: Set default To date to today
+  var today=new Date().toISOString().split('T')[0];
+  document.getElementById('dateTo').value=today;
   loadDashboard();
 }
 document.addEventListener('click',function(){document.getElementById('userDropdown')?.classList.remove('open')});
@@ -820,13 +825,14 @@ function renderCSSPie(containerId,data){
     gradient+=(i>0?',':'')+PIE_COLORS[i]+' '+pct.toFixed(1)+'% '+(pct+slice).toFixed(1)+'%';
     pct+=slice;
   });
-  // Build legend
+  // Build legend with tooltips
   var legend='';
   top.forEach(function(d,i){
-    var p=(d.count/total*100).toFixed(0);
-    legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+(d._id||'Unknown')+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
+    var p=(d.count/total*100).toFixed(1);
+    var name=(d._id||'Unknown');
+    legend+='<div class="css-legend-item" title="'+name+': '+d.count+' jobs ('+p+'%)"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+name+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
   });
-  el.innerHTML='<div class="css-pie" style="background:conic-gradient('+gradient+')"><div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
+  el.innerHTML='<div class="css-pie" style="background:conic-gradient('+gradient+')" title="Total: '+total+'"><div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
 }
 
 function renderCSSBars(containerId,data){

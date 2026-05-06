@@ -6,7 +6,15 @@ const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|mod
 function unique(text, re) {
   if (!text) return [];
   var m = text.match(re) || [], seen = {};
-  return m.filter(function(v) { var k = v.toLowerCase().replace(/\s+/g,' ').trim(); if (seen[k]) return false; seen[k] = true; return true; }).slice(0, 12);
+  // Known proper-case forms
+  var PROPER = {'incident response':'Incident Response','threat hunting':'Threat Hunting','threat analysis':'Threat Analysis','threat detection':'Threat Detection','threat intelligence':'Threat Intelligence','threat modeling':'Threat Modeling','threat reporting':'Threat Reporting','forensic analysis':'Forensic Analysis','forensic investigation':'Forensic Investigation','digital forensics':'Digital Forensics','malware analysis':'Malware Analysis','reverse engineering':'Reverse Engineering','vulnerability management':'Vulnerability Management','vulnerability assessment':'Vulnerability Assessment','vulnerability scanning':'Vulnerability Scanning','penetration testing':'Penetration Testing','pen testing':'Penetration Testing','red teaming':'Red Teaming','blue teaming':'Blue Teaming','purple teaming':'Purple Teaming','security monitoring':'Security Monitoring','security operations':'Security Operations','security engineering':'Security Engineering','security architecture':'Security Architecture','security automation':'Security Automation','cloud security':'Cloud Security','network security':'Network Security','endpoint security':'Endpoint Security','email security':'Email Security','container security':'Container Security','kubernetes security':'Kubernetes Security','identity management':'Identity Management','access management':'Access Management','risk assessment':'Risk Assessment','risk management':'Risk Management','compliance monitoring':'Compliance Monitoring','alert triage':'Alert Triage','detection engineering':'Detection Engineering','log analysis':'Log Analysis','log management':'Log Management','patch management':'Patch Management','asset management':'Asset Management','disaster recovery':'Disaster Recovery','business continuity':'Business Continuity','soc operations':'SOC Operations','soc monitoring':'SOC Monitoring','web application security':'Web Application Security','mobile security':'Mobile Security','iot security':'IoT Security','ot security':'OT Security','ics security':'ICS Security','scada security':'SCADA Security','microsoft sentinel':'Microsoft Sentinel','azure sentinel':'Microsoft Sentinel','microsoft defender':'Microsoft Defender','microsoft defender for endpoint':'Microsoft Defender for Endpoint','microsoft defender for cloud':'Microsoft Defender for Cloud','microsoft defender for identity':'Microsoft Defender for Identity','microsoft defender for office':'Microsoft Defender for Office','carbon black':'Carbon Black','vmware carbon black':'VMware Carbon Black','palo alto':'Palo Alto','cortex xdr':'Cortex XDR','cortex xsoar':'Cortex XSOAR','check point':'Check Point','elastic security':'Elastic Security','elastic siem':'Elastic SIEM','elastic stack':'Elastic Stack','threat intelligence platform':'Threat Intelligence Platform','cloud security tools':'Cloud Security Tools','zero trust':'Zero Trust','cyber kill chain':'Cyber Kill Chain','ids/ips':'IDS/IPS','nist sp 800-53':'NIST SP 800-53','nist sp 800-61':'NIST SP 800-61','nist sp 800-171':'NIST SP 800-171','nist csf':'NIST CSF','nist rmf':'NIST RMF','mitre att&ck':'MITRE ATT&CK','cis controls':'CIS Controls','cis benchmarks':'CIS Benchmarks','owasp top 10':'OWASP Top 10','pci-dss':'PCI-DSS','pci dss':'PCI-DSS','soc 2':'SOC 2','soc2':'SOC 2','iso 27001':'ISO 27001','iso 27002':'ISO 27002','iso 22301':'ISO 22301','iso 31000':'ISO 31000','csa star':'CSA STAR','nerc cip':'NERC CIP','tic 3.0':'TIC 3.0','lockheed martin kill chain':'Lockheed Martin Kill Chain','stix/taxii':'STIX/TAXII','cybersecurity analyst':'Cybersecurity Analyst','cyber security analyst':'Cybersecurity Analyst','cybersecurity engineer':'Cybersecurity Engineer','cyber security engineer':'Cybersecurity Engineer'};
+  return m.filter(function(v) {
+    var k = v.toLowerCase().replace(/\s+/g,' ').trim();
+    if (seen[k]) return false; seen[k] = true; return true;
+  }).map(function(v) {
+    var k = v.toLowerCase().replace(/\s+/g,' ').trim();
+    return PROPER[k] || v;
+  }).slice(0, 12);
 }
 
 function extractExp(job) {
@@ -200,6 +208,8 @@ function cleanTitle(title) {
   clean = clean.replace(/\s*\((?:TS[\s/]*SCI|Secret|Clearance)[^)]*\)\s*$/i, '').trim();
   // Remove leading/trailing dashes, pipes
   clean = clean.replace(/^[\s\-–|:]+|[\s\-–|:]+$/g, '').trim();
+  // #92: Normalize "Cyber Security" to "Cybersecurity"
+  clean = clean.replace(/\bCyber\s+Security\b/gi, 'Cybersecurity');
   return clean || title;
 }
 

@@ -140,13 +140,13 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
-      // Split comma-separated fields and count each value
+      // Split comma-separated fields, normalize case, then count
       var certCounts = await col.aggregate([
         { $match: { certifications: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$certifications', ', '] } } },
         { $unwind: '$items' },
         { $match: { items: { $ne: '' } } },
-        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
@@ -155,7 +155,7 @@ exports.handler = async (event) => {
         { $project: { items: { $split: ['$compliance', ', '] } } },
         { $unwind: '$items' },
         { $match: { items: { $ne: '' } } },
-        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
@@ -164,7 +164,7 @@ exports.handler = async (event) => {
         { $project: { items: { $split: ['$tools', ', '] } } },
         { $unwind: '$items' },
         { $match: { items: { $ne: '' } } },
-        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
@@ -188,21 +188,21 @@ exports.handler = async (event) => {
         { $limit: 20 }
       ]).toArray();
 
-      // Role distribution
+      // Role distribution - case insensitive, normalize variants
       var roleCounts = await col.aggregate([
         { $match: { titleClean: { $ne: null } } },
-        { $group: { _id: '$titleClean', count: { $sum: 1 } } },
+        { $group: { _id: { $toLower: '$titleClean' }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
 
-      // Skills distribution (comma-separated)
+      // Skills distribution (comma-separated) - case insensitive
       var skillCounts = await col.aggregate([
         { $match: { skills: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$skills', ', '] } } },
         { $unwind: '$items' },
         { $match: { items: { $ne: '' } } },
-        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $group: { _id: { $toLower: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 15 }
       ]).toArray();
@@ -214,6 +214,95 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
+
+      // Post-process: title-case, merge variants
+      function titleCase(s) {
+        if (!s) return 'Unknown';
+        // Keep acronyms uppercase
+        var acronyms = ['SIEM','SOAR','EDR','XDR','NDR','IDS','IPS','DLP','WAF','CASB','CSPM','CWPP','CNAPP','IAM','PAM','MFA','SSO','UEBA','KQL','SPL','SOC','NIST','MITRE','CISSP','CISM','CISA','CEH','OSCP','CCSP','CCNA','CCNP','GCIH','GCIA','GSEC','GREM','GPEN','ITIL','TOGAF','HIPAA','GDPR','FISMA','CMMC','CCPA','COBIT','DFARS','ITAR'];
+        return s.replace(/\w\S*/g, function(t) {
+          var upper = t.toUpperCase();
+          if (acronyms.indexOf(upper) !== -1) return upper;
+          if (/^(SC|AZ|MS)-\d+$/i.test(t)) return t.toUpperCase();
+          if (/^(NIST|ISO|PCI|SOC|CIS|CSA|TIC|NERC)/i.test(t)) return t.toUpperCase();
+          return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+        });
+      }
+      // Merge known variants
+      var VARIANTS = {
+        'cybersecurity analyst': 'Cybersecurity Analyst',
+        'cyber security analyst': 'Cybersecurity Analyst',
+        'cybersecurity engineer': 'Cybersecurity Engineer',
+        'cyber security engineer': 'Cybersecurity Engineer',
+        'microsoft sentinel': 'Microsoft Sentinel',
+        'azure sentinel': 'Microsoft Sentinel',
+        'microsoft defender': 'Microsoft Defender',
+        'microsoft defender for endpoint': 'Microsoft Defender for Endpoint',
+        'ids/ips': 'IDS/IPS',
+        'ids / ips': 'IDS/IPS',
+        'nist sp 800-53': 'NIST SP 800-53',
+        'nist sp 800-61': 'NIST SP 800-61',
+        'nist sp 800-171': 'NIST SP 800-171',
+        'nist csf': 'NIST CSF',
+        'nist rmf': 'NIST RMF',
+        'mitre att&ck': 'MITRE ATT&CK',
+        'mitre att&amp;ck': 'MITRE ATT&CK',
+        'zero trust': 'Zero Trust',
+        'pci-dss': 'PCI-DSS',
+        'pci dss': 'PCI-DSS',
+        'soc 2': 'SOC 2',
+        'soc2': 'SOC 2',
+        'cyber kill chain': 'Cyber Kill Chain',
+        'owasp top 10': 'OWASP Top 10',
+        'cis controls': 'CIS Controls',
+        'cis benchmarks': 'CIS Benchmarks',
+        'incident response': 'Incident Response',
+        'threat hunting': 'Threat Hunting',
+        'threat intelligence': 'Threat Intelligence',
+        'threat detection': 'Threat Detection',
+        'vulnerability management': 'Vulnerability Management',
+        'penetration testing': 'Penetration Testing',
+        'cloud security': 'Cloud Security',
+        'network security': 'Network Security',
+        'security operations': 'Security Operations',
+        'digital forensics': 'Digital Forensics',
+        'malware analysis': 'Malware Analysis',
+        'detection engineering': 'Detection Engineering',
+        'security monitoring': 'Security Monitoring',
+        'log analysis': 'Log Analysis',
+        'alert triage': 'Alert Triage',
+        'risk assessment': 'Risk Assessment',
+        'security architecture': 'Security Architecture',
+        'security engineering': 'Security Engineering',
+        'endpoint security': 'Endpoint Security',
+        'email security': 'Email Security',
+        'container security': 'Container Security',
+        'soc analyst': 'SOC Analyst',
+        'security engineer': 'Security Engineer',
+        'security architect': 'Security Architect',
+        'siem engineer': 'SIEM Engineer',
+        'threat hunter': 'Threat Hunter',
+        'cloud security engineer': 'Cloud Security Engineer',
+        'incident responder': 'Incident Responder',
+      };
+      function normList(arr) {
+        if (!arr) return [];
+        var merged = {};
+        arr.forEach(function(item) {
+          var key = (item._id || '').toLowerCase().trim();
+          var display = VARIANTS[key] || titleCase(item._id || '');
+          if (!merged[display]) merged[display] = 0;
+          merged[display] += item.count;
+        });
+        return Object.keys(merged).map(function(k) { return { _id: k, count: merged[k] }; })
+          .sort(function(a, b) { return b.count - a.count; });
+      }
+
+      certCounts = normList(certCounts);
+      complianceCounts = normList(complianceCounts);
+      toolsCounts = normList(toolsCounts);
+      skillCounts = normList(skillCounts);
+      roleCounts = normList(roleCounts);
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
