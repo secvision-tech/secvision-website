@@ -93,12 +93,13 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .dash-charts{display:grid;grid-template-columns:1fr 1fr;gap:.8rem}
 .dash-chart-box{background:#fff;border:1px solid var(--bd);border-radius:10px;padding:.8rem;min-height:260px}
 .css-chart{display:flex;align-items:center;gap:1rem;min-height:200px}
-.css-pie{width:180px;height:180px;border-radius:50%;flex-shrink:0;position:relative}
-.css-pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:70px;height:70px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--pri)}
+.css-pie{width:180px;height:180px;flex-shrink:0;position:relative}
+.css-pie svg{width:100%;height:100%}
+.css-pie path{transition:opacity .15s;cursor:pointer}
+.css-pie path:hover{opacity:.75;stroke:#fff;stroke-width:2}
+.css-pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--pri);pointer-events:none}
 .css-legend{flex:1;display:flex;flex-direction:column;gap:.25rem;max-height:200px;overflow-y:auto}
-.css-legend-item{display:flex;align-items:center;gap:.4rem;font-size:.68rem;color:var(--tx);cursor:default;padding:.15rem .3rem;border-radius:4px;transition:background .15s}
-.css-legend-item:hover{background:var(--off);transform:scale(1.02)}
-.css-legend-item:hover .css-legend-count{color:var(--ac)}
+.css-legend-item{display:flex;align-items:center;gap:.4rem;font-size:.68rem;color:var(--tx);padding:.1rem 0}
 .css-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .css-legend-count{margin-left:auto;font-weight:600;color:var(--pri);font-size:.65rem}
 .css-no-data{text-align:center;padding:2rem;color:var(--g3);font-size:.8rem}
@@ -747,7 +748,8 @@ async function viewDet(i){
   var quals=j.qualifications||[];
   var resps=j.responsibilities||[];
   var bens=j.benefits||[];
-  var h='<div class="dm-meta">'+[['Company','<a href="'+(j.companyUrl||'#')+'" target="_blank">'+j.company+'</a>'],['Company Type',j.companyType||'Not classified'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote||'N/A'],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var companyHtml='<a href="'+(j.companyUrl||'#')+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote||'N/A'],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
@@ -769,6 +771,25 @@ function findContacts(idx){
       body:JSON.stringify({action:'updateStatus',id:j._id,status:'reviewed'})}).catch(function(e){console.error(e)});
     renderTable();
   }
+}
+
+async function editCompanyUrl(idx){
+  var j=allJobs[idx];if(!j)return;
+  var newUrl=prompt('Enter correct website URL for '+j.company+':',j.companyUrl||'https://');
+  if(!newUrl||newUrl===j.companyUrl)return;
+  // Ensure it has protocol
+  if(!/^https?:\/\//i.test(newUrl))newUrl='https://'+newUrl;
+  // Update all jobs with same company locally
+  var oldUrl=j.companyUrl;
+  allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyUrl=newUrl});
+  // Update in database
+  try{
+    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'updateCompanyUrl',company:j.company,companyUrl:newUrl})});
+    alert('Updated '+j.company+' URL for all records.');
+    // Refresh detail view
+    viewDet(idx);
+  }catch(e){console.error(e);alert('Failed to update URL.')}
 }
 
 // Dashboard - Pure CSS pie charts, no external library
@@ -811,28 +832,33 @@ async function loadDashboard(){
 function renderCSSPie(containerId,data){
   var el=document.getElementById(containerId);if(!el)return;
   if(!data||!data.length){el.innerHTML='<div class="css-no-data">No data yet. Run some searches first.</div>';return}
-  // Top 10 + Others
   var top=data.slice(0,10);
   var othersCount=0;
   for(var i=10;i<data.length;i++)othersCount+=data[i].count;
   if(othersCount>0)top.push({_id:'Others',count:othersCount});
   var total=0;top.forEach(function(d){total+=d.count});
   if(total===0){el.innerHTML='<div class="css-no-data">No data yet.</div>';return}
-  // Build conic-gradient
-  var gradient='',pct=0;
+  // Build SVG pie with hoverable segments
+  var cx=90,cy=90,r=85,angle=0;
+  var paths='';
   top.forEach(function(d,i){
-    var slice=d.count/total*100;
-    gradient+=(i>0?',':'')+PIE_COLORS[i]+' '+pct.toFixed(1)+'% '+(pct+slice).toFixed(1)+'%';
-    pct+=slice;
+    var slice=d.count/total*2*Math.PI;
+    var x1=cx+r*Math.cos(angle),y1=cy+r*Math.sin(angle);
+    var x2=cx+r*Math.cos(angle+slice),y2=cy+r*Math.sin(angle+slice);
+    var large=slice>Math.PI?1:0;
+    var name=(d._id||'Unknown');
+    var pct=(d.count/total*100).toFixed(1);
+    paths+='<path d="M'+cx+','+cy+' L'+x1.toFixed(2)+','+y1.toFixed(2)+' A'+r+','+r+' 0 '+large+',1 '+x2.toFixed(2)+','+y2.toFixed(2)+' Z" fill="'+PIE_COLORS[i]+'"><title>'+name+': '+d.count+' ('+pct+'%)</title></path>';
+    angle+=slice;
   });
-  // Build legend with tooltips
+  var svg='<svg viewBox="0 0 180 180">'+paths+'</svg>';
+  // Build legend
   var legend='';
   top.forEach(function(d,i){
-    var p=(d.count/total*100).toFixed(1);
-    var name=(d._id||'Unknown');
-    legend+='<div class="css-legend-item" title="'+name+': '+d.count+' jobs ('+p+'%)"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+name+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
+    var p=(d.count/total*100).toFixed(0);
+    legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+(d._id||'Unknown')+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
   });
-  el.innerHTML='<div class="css-pie" style="background:conic-gradient('+gradient+')" title="Total: '+total+'"><div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
+  el.innerHTML='<div class="css-pie">'+svg+'<div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
 }
 
 function renderCSSBars(containerId,data){

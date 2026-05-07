@@ -108,6 +108,15 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
     }
 
+    // ACTION: updateCompanyUrl - fix wrong company website for all jobs of same company
+    if (action === 'updateCompanyUrl') {
+      var result = await col.updateMany(
+        { company: body.company },
+        { $set: { companyUrl: body.companyUrl, companyUrlUpdatedAt: new Date() } }
+      );
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
+    }
+
     // ACTION: updateNotes - add notes to a job
     if (action === 'updateNotes') {
       var { ObjectId } = require('mongodb');
