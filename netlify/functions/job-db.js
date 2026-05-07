@@ -193,7 +193,8 @@ exports.handler = async (event) => {
       // Partnership targets: companies with most openings, grouped by type
       var partnerTargets = await col.aggregate([
         { $group: { _id: { company: '$company', type: '$companyType' }, count: { $sum: 1 },
-          statuses: { $push: '$status' }, locations: { $addToSet: '$location' } } },
+          statuses: { $push: '$status' }, locations: { $addToSet: '$location' },
+          companyUrl: { $first: '$companyUrl' } } },
         { $sort: { count: -1 } },
         { $limit: 20 }
       ]).toArray();
