@@ -28,6 +28,7 @@ exports.handler = async (event) => {
         ];
       }
       if (body.status && body.status !== 'all') filter.status = body.status;
+      if (body.company) filter.company = body.company;
       if (body.companyType && body.companyType !== 'all') filter.companyType = body.companyType;
       if (body.jobType && body.jobType !== 'all') filter.jobType = body.jobType;
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
@@ -228,7 +229,7 @@ exports.handler = async (event) => {
       function titleCase(s) {
         if (!s) return 'Unknown';
         // Keep acronyms uppercase
-        var acronyms = ['SIEM','SOAR','EDR','XDR','NDR','IDS','IPS','DLP','WAF','CASB','CSPM','CWPP','CNAPP','IAM','PAM','MFA','SSO','UEBA','KQL','SPL','SOC','NIST','MITRE','CISSP','CISM','CISA','CEH','OSCP','CCSP','CCNA','CCNP','GCIH','GCIA','GSEC','GREM','GPEN','ITIL','TOGAF','HIPAA','GDPR','FISMA','CMMC','CCPA','COBIT','DFARS','ITAR'];
+        var acronyms = ['SIEM','SOAR','EDR','XDR','NDR','IDS','IPS','DLP','WAF','CASB','CSPM','CWPP','CNAPP','IAM','PAM','MFA','SSO','UEBA','KQL','SPL','SOC','NIST','MITRE','CISSP','CISM','CISA','CEH','OSCP','OSCE','CCSP','CCNA','CCNP','GCIH','GCIA','GSEC','GREM','GPEN','GIAC','SANS','ITIL','TOGAF','HIPAA','GDPR','FISMA','CMMC','CCPA','COBIT','DFARS','ITAR','FAIR','ISMS','OCTAVE','STRIDE','DREAD','CRISC','CGEIT','SSCP','CPTS','PNPT','HITRUST'];
         return s.replace(/\w\S*/g, function(t) {
           var upper = t.toUpperCase();
           if (acronyms.indexOf(upper) !== -1) return upper;
@@ -283,6 +284,22 @@ exports.handler = async (event) => {
         'hitrust': 'HITRUST',
         'fedramp': 'FedRAMP',
         'cmmc': 'CMMC',
+        'giac': 'GIAC',
+        'sans': 'SANS',
+        'crisc': 'CRISC',
+        'cgeit': 'CGEIT',
+        'sscp': 'SSCP',
+        'cpts': 'CPTS',
+        'ejpt': 'eJPT',
+        'ecppt': 'eCPPT',
+        'pnpt': 'PNPT',
+        'oscp': 'OSCP',
+        'osce': 'OSCE',
+        'gpen': 'GPEN',
+        'gcih': 'GCIH',
+        'gcia': 'GCIA',
+        'gsec': 'GSEC',
+        'grem': 'GREM',
         'incident response': 'Incident Response',
         'threat hunting': 'Threat Hunting',
         'threat intelligence': 'Threat Intelligence',

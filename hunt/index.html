@@ -920,10 +920,34 @@ function renderCSSBars(containerId,data){
 
 function searchCompanyOpenings(company){
   setMode('db');
-  document.getElementById('dbQuery').value=company;
+  document.getElementById('dbQuery').value='';
   document.getElementById('dbStatus').value='all';
   document.getElementById('dbCompanyType').value='all';
-  searchDb();
+  document.getElementById('dbPeriod').value='all';
+  document.getElementById('dbCountry').value='all';
+  // Search by exact company name
+  searchDbByCompany(company);
+}
+
+async function searchDbByCompany(company){
+  document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
+  document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading '+company+' openings...';
+  document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'search',company:company,limit:500})});
+    if(!r.ok)throw new Error('Failed');var data=await r.json();
+    allJobs=data.jobs||[];
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    document.getElementById('dbInfo').textContent='Found '+data.total+' openings for '+company+'.';
+    colFilters={};sortCol='';sortDir=1;
+    document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
+    if(!allJobs.length){
+      document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';
+      document.getElementById('emptyState').innerHTML='<h3>No openings found</h3><p>No saved jobs for '+company+'.</p>';
+    }else{filtered=allJobs.slice();curPage=1;renderTable();document.getElementById('exportBtns').style.display='flex'}
+  }catch(err){console.error(err);document.getElementById('loadState').style.display='none';
+    document.getElementById('emptyState').style.display='block';document.getElementById('emptyState').innerHTML='<h3>Error</h3><p>'+err.message+'</p>'}
 }
 
 function renderPartnerTable(data){
