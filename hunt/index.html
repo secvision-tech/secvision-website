@@ -98,8 +98,8 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .css-pie path{transition:opacity .15s;cursor:pointer}
 .css-pie path:hover{opacity:.75;stroke:#fff;stroke-width:2}
 .css-pie-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:60px;height:60px;background:#fff;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:var(--pri);pointer-events:none}
-.css-legend{flex:1;display:flex;flex-direction:column;gap:.25rem;max-height:200px;overflow-y:auto}
-.css-legend-item{display:flex;align-items:center;gap:.4rem;font-size:.68rem;color:var(--tx);padding:.1rem 0}
+.css-legend{flex:1;display:flex;flex-direction:column;gap:.2rem}
+.css-legend-item{display:flex;align-items:center;gap:.4rem;font-size:.66rem;color:var(--tx);padding:.08rem 0;white-space:nowrap}
 .css-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .css-legend-count{margin-left:auto;font-weight:600;color:var(--pri);font-size:.65rem}
 .css-no-data{text-align:center;padding:2rem;color:var(--g3);font-size:.8rem}
@@ -123,7 +123,7 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .dash-insight-label{font-weight:600;color:var(--ac);min-width:120px}
 .dash-insight-bar{height:14px;border-radius:3px;min-width:4px}
 .dash-insight-pct{font-size:.6rem;color:var(--g5);min-width:35px;text-align:right}
-@media(max-width:768px){.dash-summary{grid-template-columns:1fr 1fr}.dash-charts{grid-template-columns:1fr}}
+@media(max-width:768px){.dash-summary{grid-template-columns:1fr 1fr}.dash-charts{grid-template-columns:1fr}.css-chart{flex-direction:column;align-items:center}.css-pie{width:140px;height:140px}.css-legend{align-items:center}}
 .rp{background:#fff;border-radius:12px;box-shadow:var(--sh);border:1px solid var(--bd);overflow:hidden;flex:1;display:flex;flex-direction:column}
 .rp-head{padding:.5rem 1rem;border-bottom:1px solid var(--g100);display:flex;justify-content:space-between;align-items:center}
 .rp-count{font-size:.75rem;color:var(--g5)}.rp-count strong{color:var(--pri)}
@@ -213,7 +213,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
 <div class="app-page" id="appPage">
   <div class="main-content">
     <div class="search-panel">
-      <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Security Job Search & Hunting</div>
+      <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Security Demand Intelligence & Analytics</div>
       <div class="mode-toggle" id="modeToggle">
         <button class="mode-btn active" id="modeDash" onclick="setMode('dash')">Dashboard</button>
         <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
@@ -792,8 +792,46 @@ async function editCompanyUrl(idx){
   }catch(e){console.error(e);alert('Failed to update URL.')}
 }
 
-// Dashboard - Pure CSS pie charts, no external library
+// Dashboard - Pure CSS/SVG pie charts, no external library
 var PIE_COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#94A3B8'];
+var LONGFORMS={
+  'NIST SP 800-53':'NIST Special Publication 800-53 (Security & Privacy Controls)',
+  'NIST SP 800-61':'NIST SP 800-61 (Incident Handling Guide)',
+  'NIST SP 800-171':'NIST SP 800-171 (Controlled Unclassified Information)',
+  'NIST CSF':'NIST Cybersecurity Framework',
+  'NIST RMF':'NIST Risk Management Framework',
+  'MITRE ATT&CK':'MITRE ATT&CK (Adversarial Tactics, Techniques & Common Knowledge)',
+  'SOC 2':'SOC 2 (System & Organization Controls)',
+  'ISO 27001':'ISO/IEC 27001 (Information Security Management)',
+  'ISO 27002':'ISO/IEC 27002 (Information Security Controls)',
+  'ISO 22301':'ISO 22301 (Business Continuity Management)',
+  'PCI-DSS':'PCI DSS (Payment Card Industry Data Security Standard)',
+  'HIPAA':'HIPAA (Health Insurance Portability & Accountability Act)',
+  'GDPR':'GDPR (General Data Protection Regulation)',
+  'FedRAMP':'FedRAMP (Federal Risk & Authorization Management Program)',
+  'HITRUST':'HITRUST (Health Information Trust Alliance)',
+  'CMMC':'CMMC (Cybersecurity Maturity Model Certification)',
+  'CCPA':'CCPA (California Consumer Privacy Act)',
+  'FISMA':'FISMA (Federal Information Security Management Act)',
+  'SOX':'SOX (Sarbanes-Oxley Act)',
+  'COBIT':'COBIT (Control Objectives for Information Technologies)',
+  'FAIR':'FAIR (Factor Analysis of Information Risk)',
+  'ISMS':'ISMS (Information Security Management System)',
+  'OCTAVE':'OCTAVE (Operationally Critical Threat, Asset & Vulnerability Evaluation)',
+  'STRIDE':'STRIDE (Spoofing, Tampering, Repudiation, Info Disclosure, DoS, Elevation)',
+  'DREAD':'DREAD (Damage, Reproducibility, Exploitability, Affected Users, Discoverability)',
+  'CIS Controls':'CIS Controls (Center for Internet Security)',
+  'CSA STAR':'CSA STAR (Cloud Security Alliance)',
+  'NERC CIP':'NERC CIP (Critical Infrastructure Protection)',
+  'ITAR':'ITAR (International Traffic in Arms Regulations)',
+  'GLBA':'GLBA (Gramm-Leach-Bliley Act)',
+  'FERPA':'FERPA (Family Educational Rights & Privacy Act)',
+  'DFARS':'DFARS (Defense Federal Acquisition Regulation Supplement)',
+  'Cyber Kill Chain':'Cyber Kill Chain (Lockheed Martin)',
+  'OWASP Top 10':'OWASP Top 10 (Open Web Application Security Project)',
+  'Zero Trust':'Zero Trust Architecture',
+  'STIX/TAXII':'STIX/TAXII (Structured Threat Info eXchange)',
+};
 
 async function loadDashboard(){
   document.getElementById('dashLoading').style.display='block';
@@ -848,7 +886,8 @@ function renderCSSPie(containerId,data){
     var large=slice>Math.PI?1:0;
     var name=(d._id||'Unknown');
     var pct=(d.count/total*100).toFixed(1);
-    paths+='<path d="M'+cx+','+cy+' L'+x1.toFixed(2)+','+y1.toFixed(2)+' A'+r+','+r+' 0 '+large+',1 '+x2.toFixed(2)+','+y2.toFixed(2)+' Z" fill="'+PIE_COLORS[i]+'"><title>'+name+': '+d.count+' ('+pct+'%)</title></path>';
+    var tooltip=LONGFORMS[name]||name;
+    paths+='<path d="M'+cx+','+cy+' L'+x1.toFixed(2)+','+y1.toFixed(2)+' A'+r+','+r+' 0 '+large+',1 '+x2.toFixed(2)+','+y2.toFixed(2)+' Z" fill="'+PIE_COLORS[i]+'"><title>'+tooltip+': '+d.count+' ('+pct+'%)</title></path>';
     angle+=slice;
   });
   var svg='<svg viewBox="0 0 180 180">'+paths+'</svg>';
@@ -856,7 +895,9 @@ function renderCSSPie(containerId,data){
   var legend='';
   top.forEach(function(d,i){
     var p=(d.count/total*100).toFixed(0);
-    legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+(d._id||'Unknown')+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
+    var name=(d._id||'Unknown');
+    var tooltip=LONGFORMS[name]||name;
+    legend+='<div class="css-legend-item" title="'+tooltip+'"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+name+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
   });
   el.innerHTML='<div class="css-pie">'+svg+'<div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
 }
@@ -877,6 +918,14 @@ function renderCSSBars(containerId,data){
   el.innerHTML=html;
 }
 
+function searchCompanyOpenings(company){
+  setMode('db');
+  document.getElementById('dbQuery').value=company;
+  document.getElementById('dbStatus').value='all';
+  document.getElementById('dbCompanyType').value='all';
+  searchDb();
+}
+
 function renderPartnerTable(data){
   var el=document.getElementById('partnerTable');if(!el)return;
   if(!data||!data.length){el.innerHTML='';return}
@@ -886,12 +935,16 @@ function renderPartnerTable(data){
     var type=d._id?.type||'';
     var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'<span class="ctype-badge ctype-unknown">Unclassified</span>';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
-    // Count statuses
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
     var statusHtml=Object.keys(sc).map(function(k){return '<span class="status-badge status-'+k+'">'+k+':'+sc[k]+'</span>'}).join(' ');
-    var locs=(d.locations||[]).slice(0,2).join(', ');
+    var locs=(d.locations||[]).slice(0,2);
+    var allLocs=(d.locations||[]).join(', ');
+    var locsHtml='<span title="'+allLocs.replace(/"/g,'&quot;')+'" style="font-size:.6rem;color:var(--g5);cursor:help">'+locs.join(', ').slice(0,30)+(d.locations?.length>2?' +':'')+'</span>';
+    var companySearchUrl='https://www.google.com/search?btnI=1&q='+encodeURIComponent(company+' official website');
+    var companyLink='<a href="'+companySearchUrl+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none" title="Visit '+company+' website">'+company+'</a>';
+    var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none;cursor:pointer" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchCompanyOpenings(this.dataset.company)">'+d.count+' openings</a>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("SOC Director" OR "VP Operations" OR "CISO" OR "recruiter" OR "HR")');
-    html+='<tr><td>'+(i+1)+'</td><td><strong>'+company+'</strong></td><td>'+typeBadge+'</td><td class="'+hot+'">'+d.count+' openings</td><td>'+statusHtml+'</td><td style="font-size:.6rem;color:var(--g5)">'+locs+'</td><td><a href="'+searchUrl+'" target="_blank" class="act-link">Find Contacts</a></td></tr>';
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td>'+openingsLink+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="'+searchUrl+'" target="_blank" class="act-link">Find Contacts</a></td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
