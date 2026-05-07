@@ -964,7 +964,7 @@ function renderPartnerTable(data){
     var locs=(d.locations||[]).slice(0,2);
     var allLocs=(d.locations||[]).join(', ');
     var locsHtml='<span title="'+allLocs.replace(/"/g,'&quot;')+'" style="font-size:.6rem;color:var(--g5);cursor:help">'+locs.join(', ').slice(0,30)+(d.locations?.length>2?' +':'')+'</span>';
-    var companySearchUrl='https://www.google.com/search?btnI=1&q='+encodeURIComponent(company+' official website');
+    var companySearchUrl='https://www.google.com/search?q='+encodeURIComponent(company+' official website');
     var companyLink='<a href="'+companySearchUrl+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none" title="Visit '+company+' website">'+company+'</a>';
     var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none;cursor:pointer" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchCompanyOpenings(this.dataset.company)">'+d.count+' openings</a>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("SOC Director" OR "VP Operations" OR "CISO" OR "recruiter" OR "HR")');

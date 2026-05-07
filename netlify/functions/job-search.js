@@ -404,7 +404,7 @@ exports.handler = async (event) => {
       // #63: Build company URL - use employer_website if available, else Google I'm Feeling Lucky
       var companyWebUrl = job.employer_website || '';
       if (!companyWebUrl) {
-        companyWebUrl = 'https://www.google.com/search?btnI=1&q=' + encodeURIComponent(actualCompany + ' official website');
+        companyWebUrl = 'https://www.google.com/search?q=' + encodeURIComponent(actualCompany + ' official website');
       }
       return {
         idx: i + 1, id: job.job_id,
