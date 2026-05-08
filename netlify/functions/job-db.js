@@ -381,91 +381,131 @@ exports.handler = async (event) => {
       })};
     }
 
-    // ACTION: fixCountries - retroactively detect country for Unknown records
+    // ACTION: fixCountries - comprehensive country detection and fix
     if (action === 'fixCountries') {
-      // First: fix records wrongly classified (e.g. EG/MY set as United States)
       var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','SA':'Saudi Arabia','QA':'Qatar','NG':'Nigeria','KE':'Kenya','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','BE':'Belgium','AT':'Austria','TR':'Turkey','RU':'Russia','UA':'Ukraine','NO':'Norway','DK':'Denmark','FI':'Finland','HU':'Hungary','GR':'Greece','BH':'Bahrain','KW':'Kuwait','CL':'Chile','CO':'Colombia','AR':'Argentina','PE':'Peru','BD':'Bangladesh','MA':'Morocco','GH':'Ghana','LU':'Luxembourg','OM':'Oman'};
-
-      // Pass 1: Fix misclassified records by checking 2-letter country code in location
-      var allJobs = await col.find({}).project({ _id: 1, location: 1, detectedCountry: 1, title: 1, description: 1, searchCountry: 1 }).toArray();
-      var fixOps = [];
-      allJobs.forEach(function(j) {
-        var loc = j.location || '';
-        var ccMatch = loc.match(/,\s*([A-Z]{2})\s*$/);
-        if (ccMatch && ccMap[ccMatch[1]]) {
-          var correctCountry = ccMap[ccMatch[1]];
-          if (j.detectedCountry !== correctCountry) {
-            fixOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: correctCountry } } } });
-          }
-        }
-      });
-      var misclassifiedFixed = 0;
-      if (fixOps.length > 0) {
-        var r1 = await col.bulkWrite(fixOps, { ordered: false });
-        misclassifiedFixed = r1.modifiedCount || 0;
-      }
-
-      // Pass 2: Fix remaining Unknown records
-      var unknowns = await col.find({ $or: [{ detectedCountry: 'Unknown' }, { detectedCountry: null }, { detectedCountry: '' }] })
-        .project({ _id: 1, location: 1, title: 1, description: 1, searchCountry: 1 }).toArray();
-      var fixed = 0;
+      // Country patterns in URLs/domains
+      var urlCountryMap = {'egypt':'Egypt','india':'India','uk.':'United Kingdom','australia':'Australia','canada':'Canada','germany':'Germany','france':'France','japan':'Japan','singapore':'Singapore','malaysia':'Malaysia','philippines':'Philippines','brazil':'Brazil','mexico':'Mexico','southafrica':'South Africa','nigeria':'Nigeria','kenya':'Kenya','israel':'Israel','dubai':'United Arab Emirates','uae':'United Arab Emirates','hongkong':'Hong Kong','saudi':'Saudi Arabia'};
+      // Country names in text
+      var textCountryPatterns = [
+        [/\bEgypt\b/i, 'Egypt'], [/\bMalaysia\b/i, 'Malaysia'], [/\bPhilippines\b/i, 'Philippines'],
+        [/\bThailand\b/i, 'Thailand'], [/\bIndonesia\b/i, 'Indonesia'], [/\bSouth\s*Korea\b/i, 'South Korea'],
+        [/\bTaiwan\b/i, 'Taiwan'], [/\bHong\s*Kong\b/i, 'Hong Kong'], [/\bPakistan\b/i, 'Pakistan'],
+        [/\bBangladesh\b/i, 'Bangladesh'], [/\bTurkey\b|\bTürkiye\b/i, 'Turkey'],
+        [/\bSaudi\s*Arabia\b/i, 'Saudi Arabia'], [/\bQatar\b/i, 'Qatar'], [/\bBahrain\b/i, 'Bahrain'],
+        [/\bKuwait\b/i, 'Kuwait'], [/\bNigeria\b/i, 'Nigeria'], [/\bKenya\b/i, 'Kenya'],
+        [/\bGhana\b/i, 'Ghana'], [/\bMorocco\b/i, 'Morocco'],
+        [/\bUnited\s*States\b|\bUSA\b/i, 'United States'], [/\bUnited\s*Kingdom\b/i, 'United Kingdom'],
+        [/\bCanada\b/i, 'Canada'], [/\bIndia\b/i, 'India'], [/\bAustralia\b/i, 'Australia'],
+        [/\bGermany\b/i, 'Germany'], [/\bFrance\b/i, 'France'], [/\bJapan\b/i, 'Japan'],
+        [/\bSingapore\b/i, 'Singapore'], [/\bNetherlands\b/i, 'Netherlands'],
+        [/\bIreland\b/i, 'Ireland'], [/\bSwitzerland\b/i, 'Switzerland'],
+        [/\bSweden\b/i, 'Sweden'], [/\bIsrael\b/i, 'Israel'],
+        [/\bBrazil\b/i, 'Brazil'], [/\bMexico\b/i, 'Mexico'],
+        [/\bNew\s*Zealand\b/i, 'New Zealand'], [/\bSouth\s*Africa\b/i, 'South Africa'],
+        [/\bSpain\b/i, 'Spain'], [/\bItaly\b/i, 'Italy'], [/\bPoland\b/i, 'Poland'],
+      ];
       var US_STATE_NAMES = /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b/i;
       var US_STATE_CD = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
-      var US_CITIES = /\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|Dallas|San Jose|Austin|San Francisco|Seattle|Denver|Nashville|Washington|Boston|Portland|Las Vegas|Baltimore|Atlanta|Raleigh|Miami|Tampa|Orlando|Minneapolis|Cleveland|Pittsburgh|Cincinnati|Irvine|Arlington|Plano|Durham|Richmond|Huntsville|McLean|Tysons|Bethesda|Herndon|Reston|Chantilly|Springfield|Columbia|Annapolis|Fort Meade|Salt Lake City|Charlotte|San Diego|San Antonio|Sacramento|Philadelphia|Detroit|Memphis|Louisville|Milwaukee|Tucson|Fresno|Omaha|Oklahoma City|Scottsdale|Chandler|Boise)\b/i;
-      var UK_CITIES = /\b(?:London|Manchester|Birmingham|Leeds|Glasgow|Edinburgh|Bristol|Liverpool|Sheffield|Newcastle|Nottingham|Cardiff|Belfast|Cambridge|Oxford|Reading)\b/i;
-      var CA_CITIES = /\b(?:Toronto|Vancouver|Montreal|Ottawa|Calgary|Edmonton|Winnipeg|Mississauga)\b/i;
-      var IN_CITIES = /\b(?:Bangalore|Bengaluru|Mumbai|Hyderabad|Pune|Delhi|New Delhi|Chennai|Kolkata|Noida|Gurgaon|Gurugram|Ahmedabad|Kochi|Chandigarh)\b/i;
-      var AU_CITIES = /\b(?:Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra)\b/i;
-      var DE_CITIES = /\b(?:Berlin|Munich|Frankfurt|Hamburg|Stuttgart|Dusseldorf|Cologne)\b/i;
+      var US_CITIES = /\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|Dallas|San Jose|Austin|San Francisco|Seattle|Denver|Nashville|Washington|Boston|Portland|Las Vegas|Baltimore|Atlanta|Raleigh|Miami|Tampa|Orlando|Minneapolis|Cleveland|Pittsburgh|Cincinnati|Irvine|Arlington|Plano|Durham|Richmond|Huntsville|McLean|Tysons|Bethesda|Herndon|Reston|Chantilly|Springfield|Columbia|Annapolis|Fort Meade|Salt Lake City|Charlotte|San Diego|Sacramento|Philadelphia|Detroit|Memphis|Louisville|Milwaukee)\b/i;
 
-      var ops = [];
-      unknowns.forEach(function(j) {
+      function detectFromAll(j) {
         var loc = j.location || '';
-        var text = (j.title || '') + ' ' + (j.description || '').slice(0, 1500);
-        var country = null;
-        // Check location field first
-        if (US_STATE_NAMES.test(loc) || US_STATE_CD.test(loc) || US_CITIES.test(loc)) country = 'United States';
-        else if (UK_CITIES.test(loc) || /\bUnited Kingdom\b/i.test(loc)) country = 'United Kingdom';
-        else if (CA_CITIES.test(loc) || /\bCanada\b/i.test(loc)) country = 'Canada';
-        else if (IN_CITIES.test(loc) || /\bIndia\b/i.test(loc)) country = 'India';
-        else if (AU_CITIES.test(loc) || /\bAustralia\b/i.test(loc)) country = 'Australia';
-        else if (DE_CITIES.test(loc) || /\bGermany\b/i.test(loc)) country = 'Germany';
-        else if (/\bSingapore\b/i.test(loc)) country = 'Singapore';
-        else if (/\bDublin\b|\bIreland\b/i.test(loc)) country = 'Ireland';
-        else if (/\bAmsterdam\b|\bNetherlands\b/i.test(loc)) country = 'Netherlands';
-        else if (/\bParis\b|\bFrance\b/i.test(loc)) country = 'France';
-        else if (/\bTokyo\b|\bJapan\b/i.test(loc)) country = 'Japan';
-        else if (/\bDubai\b|\bAbu Dhabi\b|UAE/i.test(loc)) country = 'United Arab Emirates';
-        else if (/\bTel Aviv\b|\bIsrael\b/i.test(loc)) country = 'Israel';
-        // Fallback: check description
-        if (!country) {
-          if (/\b(?:USA|United\s*States|U\.S\.)\b/i.test(text) || US_STATE_NAMES.test(text) || US_CITIES.test(text)) country = 'United States';
-          else if (/\bUnited\s*Kingdom\b/i.test(text) || UK_CITIES.test(text)) country = 'United Kingdom';
-          else if (/\bCanada\b/i.test(text) || CA_CITIES.test(text)) country = 'Canada';
-          else if (/\bIndia\b/i.test(text) || IN_CITIES.test(text)) country = 'India';
-          else if (/\bAustralia\b/i.test(text) || AU_CITIES.test(text)) country = 'Australia';
-          else if (/\bGermany\b/i.test(text)) country = 'Germany';
+        var src = j.applyLink || j.source || '';
+        var comp = j.company || '';
+        var text = (j.title || '') + ' ' + comp + ' ' + (j.description || '').slice(0, 2000);
+
+        // Check 1: 2-letter code at end of location
+        var ccMatch = loc.match(/,\s*([A-Z]{2})\s*$/);
+        if (ccMatch && ccMap[ccMatch[1]]) return ccMap[ccMatch[1]];
+
+        // Check 2: 2-letter code anywhere in location (e.g. "HK" standalone)
+        var parts = loc.split(/[,\s]+/);
+        for (var p = 0; p < parts.length; p++) {
+          var code = parts[p].trim().toUpperCase();
+          if (code.length === 2 && ccMap[code] && code !== 'IN') return ccMap[code];
         }
-        // Final fallback: use searchCountry (the country param used when searching)
-        if (!country && j.searchCountry) {
-          var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa','es':'Spain','it':'Italy','pl':'Poland','no':'Norway','dk':'Denmark','fi':'Finland'};
-          country = scMap[j.searchCountry.toLowerCase()] || null;
+
+        // Check 3: Source URL domain
+        var srcLower = src.toLowerCase();
+        for (var uk in urlCountryMap) {
+          if (srcLower.indexOf(uk) !== -1) return urlCountryMap[uk];
         }
-        // Check 2-letter country code at end of location (e.g. ", EG", ", MY", ", US")
-        if (!country) {
-          var ccMatch = (j.location || '').match(/,\s*([A-Z]{2})\s*$/);
-          if (ccMatch) {
-            var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','NO':'Norway','DK':'Denmark','FI':'Finland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','BD':'Bangladesh','SA':'Saudi Arabia','QA':'Qatar','BH':'Bahrain','KW':'Kuwait','OM':'Oman','NG':'Nigeria','KE':'Kenya','GH':'Ghana','MA':'Morocco','CL':'Chile','CO':'Colombia','PE':'Peru','AR':'Argentina','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','HU':'Hungary','GR':'Greece','BE':'Belgium','AT':'Austria','LU':'Luxembourg','RU':'Russia','UA':'Ukraine','TR':'Turkey'};
-            country = ccMap[ccMatch[1]] || null;
-          }
+
+        // Check 4: Company name has country (e.g. "Solutions - Egypt")
+        for (var tp = 0; tp < textCountryPatterns.length; tp++) {
+          if (textCountryPatterns[tp][0].test(comp)) return textCountryPatterns[tp][1];
         }
-        if (country) {
-          ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: country } } } });
+
+        // Check 5: Location has country/state names
+        if (US_STATE_NAMES.test(loc) || US_STATE_CD.test(loc) || US_CITIES.test(loc)) return 'United States';
+
+        // Check 6: Description/title has country names
+        for (var tp2 = 0; tp2 < textCountryPatterns.length; tp2++) {
+          if (textCountryPatterns[tp2][0].test(text)) return textCountryPatterns[tp2][1];
+        }
+
+        // Check 7: searchCountry fallback
+        if (j.searchCountry) {
+          var scLower = j.searchCountry.toLowerCase();
+          if (ccMap[scLower.toUpperCase()]) return ccMap[scLower.toUpperCase()];
+        }
+
+        return null;
+      }
+
+      // Pass 1: Check ALL records for misclassification
+      var allRecs = await col.find({}).project({ _id: 1, location: 1, detectedCountry: 1, title: 1, description: 1, searchCountry: 1, applyLink: 1, source: 1, company: 1 }).toArray();
+      var fixOps = [];
+      var misclassifiedFixed = 0;
+      allRecs.forEach(function(j) {
+        var detected = detectFromAll(j);
+        if (detected && j.detectedCountry !== detected) {
+          fixOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: detected } } } });
+          misclassifiedFixed++;
+        }
+      });
+      if (fixOps.length > 0) await col.bulkWrite(fixOps, { ordered: false });
+
+      // Count remaining unknowns
+      var remaining = await col.countDocuments({ $or: [{ detectedCountry: 'Unknown' }, { detectedCountry: null }, { detectedCountry: '' }] });
+
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: allRecs.length, fixed: misclassifiedFixed, remaining: remaining }) };
+    }
+
+    // ACTION: fixDescriptions - clean HTML/CSS from stored descriptions and fix formatting
+    if (action === 'fixDescriptions') {
+      var dirty = await col.find({ description: { $regex: '<style|<script|<[a-z]|\\{\\s*[a-z-]+\\s*:', $options: 'i' } })
+        .project({ _id: 1, description: 1 }).toArray();
+      var fixed = 0;
+      var ops = [];
+      dirty.forEach(function(j) {
+        var desc = j.description || '';
+        var clean = desc
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/p>/gi, '\n\n')
+          .replace(/<\/li>/gi, '\n')
+          .replace(/<li[^>]*>/gi, '• ')
+          .replace(/<\/h[1-6]>/gi, '\n')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\{[^}]*\}/g, '')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/&amp;/gi, '&')
+          .replace(/&lt;/gi, '<')
+          .replace(/&gt;/gi, '>')
+          .replace(/&quot;/gi, '"')
+          .replace(/&#39;/gi, "'")
+          .replace(/\s{3,}/g, '\n\n')
+          .trim();
+        if (clean !== desc) {
+          ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { description: clean } } } });
           fixed++;
         }
       });
       if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: unknowns.length, fixed: fixed, remaining: unknowns.length - fixed, misclassifiedFixed: misclassifiedFixed }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: dirty.length, fixed: fixed }) };
     }
 
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
