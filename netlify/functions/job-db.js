@@ -403,6 +403,8 @@ exports.handler = async (event) => {
           var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa','es':'Spain','it':'Italy','pl':'Poland','no':'Norway','dk':'Denmark','fi':'Finland'};
           country = scMap[j.searchCountry.toLowerCase()] || null;
         }
+        // Last resort: records without searchCountry were from early US searches
+        if (!country) country = 'United States';
         if (country) {
           ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: country } } } });
           fixed++;
