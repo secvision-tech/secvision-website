@@ -749,7 +749,9 @@ async function viewDet(i){
   var resps=j.responsibilities||[];
   var bens=j.benefits||[];
   var companyHtml='<a href="'+(j.companyUrl||'#')+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Location',j.location],['Country (detected)',j.detectedCountry||'Unknown'],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote||'N/A'],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var locationHtml=j.location?'<a href="https://www.google.com/maps/search/'+encodeURIComponent(j.location)+'" target="_blank" style="color:var(--ac)" title="View on Google Maps">'+j.location+' 📍</a>':'N/A';
+  var countryHtml=(j.detectedCountry||'Unknown')+' <span onclick="editCountry('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit country">✎</span>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',j.jobType],['Remote',j.remote||'N/A'],['Experience',j.experience],['Salary',j.salary],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
@@ -771,6 +773,26 @@ function findContacts(idx){
       body:JSON.stringify({action:'updateStatus',id:j._id,status:'reviewed'})}).catch(function(e){console.error(e)});
     renderTable();
   }
+}
+
+async function editCountry(idx){
+  var j=allJobs[idx];if(!j)return;
+  var countries=['United States','United Kingdom','Canada','India','Australia','Germany','France','Japan','Singapore','Netherlands','Ireland','Switzerland','Sweden','United Arab Emirates','Israel','Brazil','Mexico','New Zealand','South Africa','Spain','Italy','Poland','Belgium','Austria','Norway','Denmark','Finland','Saudi Arabia','Qatar'];
+  var current=j.detectedCountry||'Unknown';
+  var input=prompt('Select country for this job (current: '+current+'):\n\n'+countries.join(', ')+'\n\nType country name:',current);
+  if(!input||input===current)return;
+  j.detectedCountry=input;
+  // Update in DB
+  try{
+    if(j._id){
+      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'updateCountry',id:j._id,country:input})});
+    }else if(j.id){
+      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'updateCountryByJobId',jobId:j.id,country:input})});
+    }
+    viewDet(idx);
+  }catch(e){console.error(e);alert('Failed to update country.')}
 }
 
 async function editCompanyUrl(idx){

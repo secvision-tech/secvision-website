@@ -90,6 +90,25 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
     }
 
+    // ACTION: updateCountry - update detected country by _id
+    if (action === 'updateCountry') {
+      var { ObjectId } = require('mongodb');
+      var result = await col.updateOne(
+        { _id: new ObjectId(body.id) },
+        { $set: { detectedCountry: body.country, countryUpdatedAt: new Date() } }
+      );
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
+    }
+
+    // ACTION: updateCountryByJobId - update detected country by jobId
+    if (action === 'updateCountryByJobId') {
+      var result = await col.updateOne(
+        { jobId: body.jobId },
+        { $set: { detectedCountry: body.country, countryUpdatedAt: new Date() } }
+      );
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
+    }
+
     // ACTION: updateCompanyType - classify company
     if (action === 'updateCompanyType') {
       var { ObjectId } = require('mongodb');
@@ -180,10 +199,16 @@ exports.handler = async (event) => {
       ]).toArray();
       var locationCounts = await col.aggregate([
         { $match: { location: { $ne: 'Remote' } } },
-        { $group: { _id: '$location', count: { $sum: 1 } } },
+        { $group: { _id: '$location', count: { $sum: 1 }, country: { $first: '$detectedCountry' } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
+      // Append country name to location for display
+      locationCounts.forEach(function(l) {
+        if (l.country && l.country !== 'Unknown' && l._id && l._id.indexOf(l.country) === -1) {
+          l._id = l._id + ' (' + l.country + ')';
+        }
+      });
       var recentScans = await col.aggregate([
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateScanned' } }, count: { $sum: 1 } } },
         { $sort: { _id: -1 } },
