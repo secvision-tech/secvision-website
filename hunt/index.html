@@ -282,7 +282,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
           <!-- Section 3: Market Geography -->
           <div class="dash-section">
             <div class="dash-sec-title">🌍 Market Geography — Where the Demand Is</div>
-            <div class="dash-sec-sub">Focus outreach on regions with highest concentration of openings</div>
+            <div class="dash-sec-sub">Focus outreach on regions with highest concentration of openings <button onclick="fixCountries()" style="margin-left:.5rem;padding:.15rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600" title="Re-analyze location data for all Unknown country records">⚡ Fix Unknown Countries</button> <span id="fixCountryStatus" style="font-size:.6rem;color:var(--ac)"></span></div>
             <div class="dash-charts">
               <div class="dash-chart-box"><div class="dash-chart-title">Countries</div><div id="chartCountry" class="css-chart"></div></div>
               <div class="dash-chart-box"><div class="dash-chart-title">Top Locations (Cities)</div><div id="chartLocation" class="css-chart"></div></div>
@@ -916,6 +916,18 @@ function renderCSSBars(containerId,data){
   });
   html+='</div>';
   el.innerHTML=html;
+}
+
+async function fixCountries(){
+  var st=document.getElementById('fixCountryStatus');
+  st.textContent='Fixing...';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixCountries'})});
+    if(!r.ok)throw new Error('Failed');
+    var d=await r.json();
+    st.textContent='Fixed '+d.fixed+' of '+d.total+' unknown records. '+d.remaining+' still unknown.';
+    if(d.fixed>0)loadDashboard();
+  }catch(e){st.textContent='Error: '+e.message}
 }
 
 function searchCompanyOpenings(company){

@@ -356,6 +356,57 @@ exports.handler = async (event) => {
       })};
     }
 
+    // ACTION: fixCountries - retroactively detect country for Unknown records
+    if (action === 'fixCountries') {
+      var unknowns = await col.find({ $or: [{ detectedCountry: 'Unknown' }, { detectedCountry: null }, { detectedCountry: '' }] })
+        .project({ _id: 1, location: 1, title: 1, description: 1 }).toArray();
+      var fixed = 0;
+      var US_STATE_NAMES = /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b/i;
+      var US_STATE_CD = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
+      var US_CITIES = /\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|Dallas|San Jose|Austin|San Francisco|Seattle|Denver|Nashville|Washington|Boston|Portland|Las Vegas|Baltimore|Atlanta|Raleigh|Miami|Tampa|Orlando|Minneapolis|Cleveland|Pittsburgh|Cincinnati|Irvine|Arlington|Plano|Durham|Richmond|Huntsville|McLean|Tysons|Bethesda|Herndon|Reston|Chantilly|Springfield|Columbia|Annapolis|Fort Meade|Salt Lake City|Charlotte|San Diego|San Antonio|Sacramento|Philadelphia|Detroit|Memphis|Louisville|Milwaukee|Tucson|Fresno|Omaha|Oklahoma City|Scottsdale|Chandler|Boise)\b/i;
+      var UK_CITIES = /\b(?:London|Manchester|Birmingham|Leeds|Glasgow|Edinburgh|Bristol|Liverpool|Sheffield|Newcastle|Nottingham|Cardiff|Belfast|Cambridge|Oxford|Reading)\b/i;
+      var CA_CITIES = /\b(?:Toronto|Vancouver|Montreal|Ottawa|Calgary|Edmonton|Winnipeg|Mississauga)\b/i;
+      var IN_CITIES = /\b(?:Bangalore|Bengaluru|Mumbai|Hyderabad|Pune|Delhi|New Delhi|Chennai|Kolkata|Noida|Gurgaon|Gurugram|Ahmedabad|Kochi|Chandigarh)\b/i;
+      var AU_CITIES = /\b(?:Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra)\b/i;
+      var DE_CITIES = /\b(?:Berlin|Munich|Frankfurt|Hamburg|Stuttgart|Dusseldorf|Cologne)\b/i;
+
+      var ops = [];
+      unknowns.forEach(function(j) {
+        var loc = j.location || '';
+        var text = (j.title || '') + ' ' + (j.description || '').slice(0, 1500);
+        var country = null;
+        // Check location field first
+        if (US_STATE_NAMES.test(loc) || US_STATE_CD.test(loc) || US_CITIES.test(loc)) country = 'United States';
+        else if (UK_CITIES.test(loc) || /\bUnited Kingdom\b/i.test(loc)) country = 'United Kingdom';
+        else if (CA_CITIES.test(loc) || /\bCanada\b/i.test(loc)) country = 'Canada';
+        else if (IN_CITIES.test(loc) || /\bIndia\b/i.test(loc)) country = 'India';
+        else if (AU_CITIES.test(loc) || /\bAustralia\b/i.test(loc)) country = 'Australia';
+        else if (DE_CITIES.test(loc) || /\bGermany\b/i.test(loc)) country = 'Germany';
+        else if (/\bSingapore\b/i.test(loc)) country = 'Singapore';
+        else if (/\bDublin\b|\bIreland\b/i.test(loc)) country = 'Ireland';
+        else if (/\bAmsterdam\b|\bNetherlands\b/i.test(loc)) country = 'Netherlands';
+        else if (/\bParis\b|\bFrance\b/i.test(loc)) country = 'France';
+        else if (/\bTokyo\b|\bJapan\b/i.test(loc)) country = 'Japan';
+        else if (/\bDubai\b|\bAbu Dhabi\b|UAE/i.test(loc)) country = 'United Arab Emirates';
+        else if (/\bTel Aviv\b|\bIsrael\b/i.test(loc)) country = 'Israel';
+        // Fallback: check description
+        if (!country) {
+          if (/\b(?:USA|United\s*States|U\.S\.)\b/i.test(text) || US_STATE_NAMES.test(text) || US_CITIES.test(text)) country = 'United States';
+          else if (/\bUnited\s*Kingdom\b/i.test(text) || UK_CITIES.test(text)) country = 'United Kingdom';
+          else if (/\bCanada\b/i.test(text) || CA_CITIES.test(text)) country = 'Canada';
+          else if (/\bIndia\b/i.test(text) || IN_CITIES.test(text)) country = 'India';
+          else if (/\bAustralia\b/i.test(text) || AU_CITIES.test(text)) country = 'Australia';
+          else if (/\bGermany\b/i.test(text)) country = 'Germany';
+        }
+        if (country) {
+          ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: country } } } });
+          fixed++;
+        }
+      });
+      if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: unknowns.length, fixed: fixed, remaining: unknowns.length - fixed }) };
+    }
+
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
   } catch (err) {
     console.error('DB function error:', err);

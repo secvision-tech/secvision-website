@@ -240,23 +240,95 @@ var US_STATE_CODES = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|
 
 function detectCountry(job) {
   // Priority 1: API structured country field
-  var apiCountry = job.job_country || '';
-  if (apiCountry && COUNTRY_MAP[apiCountry]) return COUNTRY_MAP[apiCountry];
-
-  // Priority 2: Location fields
-  var loc = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
-  for (var k in COUNTRY_MAP) {
-    if (loc.indexOf(k) !== -1) return COUNTRY_MAP[k];
+  var apiCountry = (job.job_country || '').trim();
+  if (apiCountry) {
+    var c = apiCountry.toUpperCase();
+    if (c === 'US' || c === 'USA' || c === 'UNITED STATES') return 'United States';
+    if (c === 'CA' || c === 'CANADA') return 'Canada';
+    if (c === 'GB' || c === 'UK' || c === 'UNITED KINGDOM') return 'United Kingdom';
+    if (c === 'IN' || c === 'INDIA') return 'India';
+    if (c === 'AU' || c === 'AUSTRALIA') return 'Australia';
+    if (c === 'DE' || c === 'GERMANY') return 'Germany';
+    if (c === 'FR' || c === 'FRANCE') return 'France';
+    if (c === 'JP' || c === 'JAPAN') return 'Japan';
+    if (c === 'SG' || c === 'SINGAPORE') return 'Singapore';
+    if (c === 'NL' || c === 'NETHERLANDS') return 'Netherlands';
+    if (c === 'IE' || c === 'IRELAND') return 'Ireland';
+    if (c === 'CH' || c === 'SWITZERLAND') return 'Switzerland';
+    if (c === 'SE' || c === 'SWEDEN') return 'Sweden';
+    if (c === 'AE' || c === 'UAE') return 'United Arab Emirates';
+    if (c === 'IL' || c === 'ISRAEL') return 'Israel';
+    if (c === 'BR' || c === 'BRAZIL') return 'Brazil';
+    if (c === 'MX' || c === 'MEXICO') return 'Mexico';
+    if (c === 'NZ' || c === 'NEW ZEALAND') return 'New Zealand';
+    if (c === 'ZA' || c === 'SOUTH AFRICA') return 'South Africa';
+    if (c === 'ES' || c === 'SPAIN') return 'Spain';
+    if (c === 'IT' || c === 'ITALY') return 'Italy';
+    if (c === 'PL' || c === 'POLAND') return 'Poland';
+    if (c === 'BE' || c === 'BELGIUM') return 'Belgium';
+    if (c === 'AT' || c === 'AUSTRIA') return 'Austria';
+    if (c === 'NO' || c === 'NORWAY') return 'Norway';
+    if (c === 'DK' || c === 'DENMARK') return 'Denmark';
+    if (c === 'FI' || c === 'FINLAND') return 'Finland';
+    if (c === 'SA' || c === 'SAUDI ARABIA') return 'Saudi Arabia';
+    if (c === 'QA' || c === 'QATAR') return 'Qatar';
   }
 
-  // Priority 3: Scan title and first 500 chars of description
-  var text = (job.job_title || '') + ' ' + (job.job_description || '').slice(0, 500);
-  if (US_STATES.test(text) || US_STATE_CODES.test(text) || /\bRemote\s*US\b|\bUSA\b|\bUnited\s*States\b/i.test(text)) return 'United States';
-  if (/\bRemote\s*(?:UK|GB)\b|\bUnited\s*Kingdom\b|\bLondon\b|\bManchester\b/i.test(text)) return 'United Kingdom';
-  if (/\bRemote\s*CA\b|\bCanada\b|\bToronto\b|\bVancouver\b|\bMontreal\b|\bOttawa\b/i.test(text)) return 'Canada';
-  if (/\bRemote\s*(?:AU)\b|\bAustralia\b|\bSydney\b|\bMelbourne\b/i.test(text)) return 'Australia';
-  if (/\bIndia\b|\bBangalore\b|\bMumbai\b|\bHyderabad\b|\bPune\b|\bDelhi\b/i.test(text)) return 'India';
-  if (/\bGermany\b|\bBerlin\b|\bMunich\b|\bFrankfurt\b/i.test(text)) return 'Germany';
+  // Priority 2: Check location/state fields for US state codes
+  var state = (job.job_state || '').trim().toUpperCase();
+  var usStates = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'];
+  if (state && usStates.indexOf(state) !== -1) return 'United States';
+
+  // Priority 3: Check full location string
+  var loc = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
+  // US state names in location
+  if (/\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b/i.test(loc)) return 'United States';
+  // US state codes in location (2-letter after comma)
+  if (/,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/.test(loc)) return 'United States';
+  // Major US cities
+  if (/\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|San Antonio|San Diego|Dallas|San Jose|Austin|Jacksonville|Fort Worth|Columbus|Charlotte|Indianapolis|San Francisco|Seattle|Denver|Nashville|Washington|Boston|Memphis|Portland|Oklahoma City|Las Vegas|Louisville|Baltimore|Milwaukee|Albuquerque|Tucson|Fresno|Sacramento|Mesa|Kansas City|Atlanta|Omaha|Colorado Springs|Raleigh|Long Beach|Virginia Beach|Miami|Tampa|Orlando|Minneapolis|Cleveland|St\.? Louis|Pittsburgh|Cincinnati|Irvine|Arlington|Plano|Durham|Richmond|Huntsville|McLean|Tysons|Bethesda|Herndon|Reston|Chantilly|Springfield|Columbia|Annapolis|Fort Meade|Fort Belvoir|Quantico|San Bernardino|Scottsdale|Chandler|Gilbert|Boise|Salt Lake City)\b/i.test(loc)) return 'United States';
+  // UK cities
+  if (/\b(?:London|Manchester|Birmingham|Leeds|Glasgow|Edinburgh|Bristol|Liverpool|Sheffield|Newcastle|Nottingham|Cardiff|Belfast|Cambridge|Oxford|Reading|Southampton|Brighton)\b/i.test(loc)) return 'United Kingdom';
+  // Canadian cities
+  if (/\b(?:Toronto|Vancouver|Montreal|Ottawa|Calgary|Edmonton|Winnipeg|Quebec|Hamilton|Mississauga)\b/i.test(loc)) return 'Canada';
+  // Indian cities
+  if (/\b(?:Bangalore|Bengaluru|Mumbai|Hyderabad|Pune|Delhi|New Delhi|Chennai|Kolkata|Noida|Gurgaon|Gurugram|Ahmedabad|Jaipur|Lucknow|Kochi|Chandigarh|Indore|Thiruvananthapuram)\b/i.test(loc)) return 'India';
+  // Australian cities
+  if (/\b(?:Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra|Hobart|Darwin|Gold Coast)\b/i.test(loc)) return 'Australia';
+  // German cities
+  if (/\b(?:Berlin|Munich|Frankfurt|Hamburg|Stuttgart|Dusseldorf|Cologne|Bonn)\b/i.test(loc)) return 'Germany';
+  // Other countries by city
+  if (/\b(?:Paris|Lyon|Marseille)\b/i.test(loc)) return 'France';
+  if (/\b(?:Tokyo|Osaka|Yokohama)\b/i.test(loc)) return 'Japan';
+  if (/\b(?:Dublin|Cork|Galway)\b/i.test(loc)) return 'Ireland';
+  if (/\b(?:Amsterdam|Rotterdam|The Hague)\b/i.test(loc)) return 'Netherlands';
+  if (/\b(?:Zurich|Geneva|Basel|Bern)\b/i.test(loc)) return 'Switzerland';
+  if (/\b(?:Stockholm|Gothenburg|Malmo)\b/i.test(loc)) return 'Sweden';
+  if (/\b(?:Dubai|Abu Dhabi)\b/i.test(loc)) return 'United Arab Emirates';
+  if (/\b(?:Tel Aviv|Jerusalem|Haifa)\b/i.test(loc)) return 'Israel';
+  if (/\b(?:Sao Paulo|Rio de Janeiro)\b/i.test(loc)) return 'Brazil';
+  if (/\b(?:Mexico City|Guadalajara|Monterrey)\b/i.test(loc)) return 'Mexico';
+  if (/\bSingapore\b/i.test(loc)) return 'Singapore';
+
+  // Priority 4: Check title + description (first 1500 chars)
+  var text = (job.job_title || '') + ' ' + (job.job_description || '').slice(0, 1500);
+  if (/\b(?:USA|United\s*States|U\.S\.)\b/i.test(text)) return 'United States';
+  if (/\bRemote\s*[-,]?\s*US\b/i.test(text)) return 'United States';
+  if (US_STATES.test(text)) return 'United States';
+  if (/\bUnited\s*Kingdom\b|\bRemote\s*UK\b/i.test(text)) return 'United Kingdom';
+  if (/\bCanada\b|\bRemote\s*CA\b/i.test(text)) return 'Canada';
+  if (/\bAustralia\b/i.test(text)) return 'Australia';
+  if (/\bIndia\b/i.test(text)) return 'India';
+  if (/\bGermany\b/i.test(text)) return 'Germany';
+  if (/\bFrance\b/i.test(text)) return 'France';
+  if (/\bJapan\b/i.test(text)) return 'Japan';
+  if (/\bSingapore\b/i.test(text)) return 'Singapore';
+  if (/\bNetherlands\b/i.test(text)) return 'Netherlands';
+  if (/\bIreland\b/i.test(text)) return 'Ireland';
+  if (/\bSwitzerland\b/i.test(text)) return 'Switzerland';
+
+  // Priority 5: If location has "Remote" only, check search country
+  if (/remote/i.test(loc) && !job.job_city && !job.job_state) return 'Unknown';
 
   return 'Unknown';
 }
