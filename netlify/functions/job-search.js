@@ -238,7 +238,7 @@ var COUNTRY_MAP = {
 var US_STATES = /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New\s*Hampshire|New\s*Jersey|New\s*Mexico|New\s*York|North\s*Carolina|North\s*Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode\s*Island|South\s*Carolina|South\s*Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West\s*Virginia|Wisconsin|Wyoming|D\.?C\.?)\b/i;
 var US_STATE_CODES = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
 
-function detectCountry(job) {
+function detectCountry(job, searchCountry) {
   // Priority 1: API structured country field
   var apiCountry = (job.job_country || '').trim();
   if (apiCountry) {
@@ -327,8 +327,11 @@ function detectCountry(job) {
   if (/\bIreland\b/i.test(text)) return 'Ireland';
   if (/\bSwitzerland\b/i.test(text)) return 'Switzerland';
 
-  // Priority 5: If location has "Remote" only, check search country
-  if (/remote/i.test(loc) && !job.job_city && !job.job_state) return 'Unknown';
+  // Priority 5: If location has "Remote" only, use search country as fallback
+  if (searchCountry) {
+    var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa'};
+    if (scMap[searchCountry.toLowerCase()]) return scMap[searchCountry.toLowerCase()];
+  }
 
   return 'Unknown';
 }
@@ -486,7 +489,7 @@ exports.handler = async (event) => {
         companyType: classifyCompany(actualCompany, desc),
         companyUrl: companyWebUrl,
         location: [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ') || 'Remote',
-        detectedCountry: detectCountry(job),
+        detectedCountry: detectCountry(job, body.country),
         experience: extractExp(job),
         skills: fs.length ? fs.join(', ') : 'See details',
         certifications: unique(fullText, CERT_RE).join(', ') || 'See details',

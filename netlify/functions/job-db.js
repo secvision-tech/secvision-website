@@ -359,7 +359,7 @@ exports.handler = async (event) => {
     // ACTION: fixCountries - retroactively detect country for Unknown records
     if (action === 'fixCountries') {
       var unknowns = await col.find({ $or: [{ detectedCountry: 'Unknown' }, { detectedCountry: null }, { detectedCountry: '' }] })
-        .project({ _id: 1, location: 1, title: 1, description: 1 }).toArray();
+        .project({ _id: 1, location: 1, title: 1, description: 1, searchCountry: 1 }).toArray();
       var fixed = 0;
       var US_STATE_NAMES = /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b/i;
       var US_STATE_CD = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
@@ -397,6 +397,11 @@ exports.handler = async (event) => {
           else if (/\bIndia\b/i.test(text) || IN_CITIES.test(text)) country = 'India';
           else if (/\bAustralia\b/i.test(text) || AU_CITIES.test(text)) country = 'Australia';
           else if (/\bGermany\b/i.test(text)) country = 'Germany';
+        }
+        // Final fallback: use searchCountry (the country param used when searching)
+        if (!country && j.searchCountry) {
+          var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa','es':'Spain','it':'Italy','pl':'Poland','no':'Norway','dk':'Denmark','fi':'Finland'};
+          country = scMap[j.searchCountry.toLowerCase()] || null;
         }
         if (country) {
           ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: country } } } });
