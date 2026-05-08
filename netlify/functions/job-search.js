@@ -327,7 +327,15 @@ function detectCountry(job, searchCountry) {
   if (/\bIreland\b/i.test(text)) return 'Ireland';
   if (/\bSwitzerland\b/i.test(text)) return 'Switzerland';
 
-  // Priority 5: If location has "Remote" only, use search country as fallback
+  // Priority 5: Check 2-letter country code at end of location (", EG", ", MY")
+  var locStr = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
+  var ccMatch = locStr.match(/,\s*([A-Z]{2})\s*$/);
+  if (ccMatch) {
+    var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','SA':'Saudi Arabia','QA':'Qatar','NG':'Nigeria','KE':'Kenya','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','BE':'Belgium','AT':'Austria','TR':'Turkey','RU':'Russia','UA':'Ukraine','NO':'Norway','DK':'Denmark','FI':'Finland','HU':'Hungary','GR':'Greece','LU':'Luxembourg','BH':'Bahrain','KW':'Kuwait','CL':'Chile','CO':'Colombia','AR':'Argentina','PE':'Peru'};
+    if (ccMap[ccMatch[1]]) return ccMap[ccMatch[1]];
+  }
+
+  // Priority 6: Use search country as fallback
   if (searchCountry) {
     var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa'};
     if (scMap[searchCountry.toLowerCase()]) return scMap[searchCountry.toLowerCase()];

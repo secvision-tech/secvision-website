@@ -383,6 +383,29 @@ exports.handler = async (event) => {
 
     // ACTION: fixCountries - retroactively detect country for Unknown records
     if (action === 'fixCountries') {
+      // First: fix records wrongly classified (e.g. EG/MY set as United States)
+      var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','SA':'Saudi Arabia','QA':'Qatar','NG':'Nigeria','KE':'Kenya','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','BE':'Belgium','AT':'Austria','TR':'Turkey','RU':'Russia','UA':'Ukraine','NO':'Norway','DK':'Denmark','FI':'Finland','HU':'Hungary','GR':'Greece','BH':'Bahrain','KW':'Kuwait','CL':'Chile','CO':'Colombia','AR':'Argentina','PE':'Peru','BD':'Bangladesh','MA':'Morocco','GH':'Ghana','LU':'Luxembourg','OM':'Oman'};
+
+      // Pass 1: Fix misclassified records by checking 2-letter country code in location
+      var allJobs = await col.find({}).project({ _id: 1, location: 1, detectedCountry: 1, title: 1, description: 1, searchCountry: 1 }).toArray();
+      var fixOps = [];
+      allJobs.forEach(function(j) {
+        var loc = j.location || '';
+        var ccMatch = loc.match(/,\s*([A-Z]{2})\s*$/);
+        if (ccMatch && ccMap[ccMatch[1]]) {
+          var correctCountry = ccMap[ccMatch[1]];
+          if (j.detectedCountry !== correctCountry) {
+            fixOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: correctCountry } } } });
+          }
+        }
+      });
+      var misclassifiedFixed = 0;
+      if (fixOps.length > 0) {
+        var r1 = await col.bulkWrite(fixOps, { ordered: false });
+        misclassifiedFixed = r1.modifiedCount || 0;
+      }
+
+      // Pass 2: Fix remaining Unknown records
       var unknowns = await col.find({ $or: [{ detectedCountry: 'Unknown' }, { detectedCountry: null }, { detectedCountry: '' }] })
         .project({ _id: 1, location: 1, title: 1, description: 1, searchCountry: 1 }).toArray();
       var fixed = 0;
@@ -428,15 +451,21 @@ exports.handler = async (event) => {
           var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa','es':'Spain','it':'Italy','pl':'Poland','no':'Norway','dk':'Denmark','fi':'Finland'};
           country = scMap[j.searchCountry.toLowerCase()] || null;
         }
-        // Last resort: records without searchCountry were from early US searches
-        if (!country) country = 'United States';
+        // Check 2-letter country code at end of location (e.g. ", EG", ", MY", ", US")
+        if (!country) {
+          var ccMatch = (j.location || '').match(/,\s*([A-Z]{2})\s*$/);
+          if (ccMatch) {
+            var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','NO':'Norway','DK':'Denmark','FI':'Finland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','BD':'Bangladesh','SA':'Saudi Arabia','QA':'Qatar','BH':'Bahrain','KW':'Kuwait','OM':'Oman','NG':'Nigeria','KE':'Kenya','GH':'Ghana','MA':'Morocco','CL':'Chile','CO':'Colombia','PE':'Peru','AR':'Argentina','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','HU':'Hungary','GR':'Greece','BE':'Belgium','AT':'Austria','LU':'Luxembourg','RU':'Russia','UA':'Ukraine','TR':'Turkey'};
+            country = ccMap[ccMatch[1]] || null;
+          }
+        }
         if (country) {
           ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: country } } } });
           fixed++;
         }
       });
       if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: unknowns.length, fixed: fixed, remaining: unknowns.length - fixed }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: unknowns.length, fixed: fixed, remaining: unknowns.length - fixed, misclassifiedFixed: misclassifiedFixed }) };
     }
 
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
