@@ -445,7 +445,17 @@ exports.handler = async (event) => {
           if (textCountryPatterns[tp2][0].test(text)) return textCountryPatterns[tp2][1];
         }
 
-        // Check 7: searchCountry fallback
+        // Check 7: Detect non-English text by script (don't default to US/UK)
+        var descSample = (j.description || '').slice(0, 500);
+        if (/[\u0600-\u06FF\u0750-\u077F]/.test(descSample)) return null; // Arabic
+        if (/[\u4E00-\u9FFF]/.test(descSample)) return null; // Chinese
+        if (/[\u3040-\u309F\u30A0-\u30FF]/.test(descSample)) return 'Japan';
+        if (/[\uAC00-\uD7AF]/.test(descSample)) return 'South Korea';
+        if (/[\u0E00-\u0E7F]/.test(descSample)) return 'Thailand';
+        if (/[\u0400-\u04FF]/.test(descSample)) return null; // Cyrillic
+        if (/[\u0900-\u097F]/.test(descSample)) return 'India'; // Hindi
+
+        // Check 8: searchCountry fallback (only for Latin-script descriptions)
         if (j.searchCountry) {
           var scLower = j.searchCountry.toLowerCase();
           if (ccMap[scLower.toUpperCase()]) return ccMap[scLower.toUpperCase()];

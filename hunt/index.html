@@ -240,9 +240,13 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
           <div class="sg"><label>Search Text</label><input type="text" id="dbQuery" placeholder="Role, company, skill, tool..."></div>
           <div class="sg"><label>Status</label><select id="dbStatus"><option value="all">All Statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="contacted">Contacted</option><option value="archived">Archived</option></select></div>
           <div class="sg"><label>Company Type</label><select id="dbCompanyType"><option value="all">All Types</option><option value="MSSP/MDR">MSSP/MDR</option><option value="Enterprise">Enterprise</option><option value="Government">Government</option><option value="Startup">Startup</option><option value="IT Consulting">IT Consulting</option><option value="">Unclassified</option></select></div>
-          <div class="sg"><label>Time Period</label><select id="dbPeriod"><option value="all">All Time</option><option value="1">Last 1 Day</option><option value="3">Last 3 Days</option><option value="7">Last 1 Week</option><option value="15">Last 15 Days</option><option value="30" selected>Last 1 Month</option></select></div>
-          <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option><option value="United States">United States</option><option value="United Kingdom">United Kingdom</option><option value="India">India</option><option value="Canada">Canada</option><option value="Germany">Germany</option><option value="Australia">Australia</option><option value="Japan">Japan</option></select></div>
+          <div class="sg"><label>Time Period</label><select id="dbPeriod" onchange="document.getElementById('dbCustomDates').style.display=this.value==='custom'?'flex':'none'"><option value="all">All Time</option><option value="1">Last 1 Day</option><option value="3">Last 3 Days</option><option value="7">Last 1 Week</option><option value="15">Last 15 Days</option><option value="30" selected>Last 1 Month</option><option value="custom">Custom Range</option></select></div>
+          <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option></select></div>
           <button class="sbtn" onclick="searchDb()" style="align-self:end">Search DB</button>
+        </div>
+        <div id="dbCustomDates" style="display:none;gap:.6rem;margin-top:.4rem;align-items:end">
+          <div class="sg"><label>From</label><input type="date" id="dbDateFrom"></div>
+          <div class="sg"><label>To</label><input type="date" id="dbDateTo"></div>
         </div>
         <div class="db-info" id="dbInfo"></div>
       </div>
@@ -395,6 +399,7 @@ function showApp(){
   // #90: Set default To date to today
   var today=new Date().toISOString().split('T')[0];
   document.getElementById('dateTo').value=today;
+  document.getElementById('dbDateTo').value=today;
   loadDashboard();
 }
 document.addEventListener('click',function(){document.getElementById('userDropdown')?.classList.remove('open')});
@@ -500,7 +505,10 @@ async function searchDb(){
   var country=document.getElementById('dbCountry').value;
   var period=document.getElementById('dbPeriod').value;
   var dateFrom='',dateTo='';
-  if(period!=='all'){
+  if(period==='custom'){
+    dateFrom=document.getElementById('dbDateFrom').value||'';
+    dateTo=document.getElementById('dbDateTo').value||'';
+  }else if(period!=='all'){
     var d=new Date();d.setDate(d.getDate()-parseInt(period));
     dateFrom=d.toISOString().split('T')[0];
   }
@@ -509,7 +517,7 @@ async function searchDb(){
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,detectedCountry:country,dateFrom:dateFrom,limit:500})});
+      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,limit:500})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -881,6 +889,16 @@ async function loadDashboard(){
     document.getElementById('dContacted').textContent=sc.contacted||0;
     document.getElementById('dashLoading').style.display='none';
     document.getElementById('dashContent').style.display='block';
+    // #115: Populate DB search country dropdown from stats
+    var dbCountrySel=document.getElementById('dbCountry');
+    if(dbCountrySel&&d.countryCounts){
+      dbCountrySel.innerHTML='<option value="all">All Countries</option>';
+      d.countryCounts.forEach(function(c){
+        if(c._id&&c._id!=='Unknown'){
+          var o=document.createElement('option');o.value=c._id;o.textContent=c._id+' ('+c.count+')';dbCountrySel.appendChild(o);
+        }
+      });
+    }
     renderCSSPie('chartType',d.typeCounts||[]);
     renderCSSPie('chartCompany',d.companyCounts||[]);
     renderCSSPie('chartLocation',d.locationCounts||[]);

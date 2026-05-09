@@ -334,8 +334,24 @@ function detectCountry(job, searchCountry) {
     var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','SA':'Saudi Arabia','QA':'Qatar','NG':'Nigeria','KE':'Kenya','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','BE':'Belgium','AT':'Austria','TR':'Turkey','RU':'Russia','UA':'Ukraine','NO':'Norway','DK':'Denmark','FI':'Finland','HU':'Hungary','GR':'Greece','LU':'Luxembourg','BH':'Bahrain','KW':'Kuwait','CL':'Chile','CO':'Colombia','AR':'Argentina','PE':'Peru'};
     if (ccMap[ccMatch[1]]) return ccMap[ccMatch[1]];
   }
+  // Also check 2-letter codes anywhere in location parts
+  var locParts = locStr.split(/[,\s]+/);
+  for (var lp = 0; lp < locParts.length; lp++) {
+    var lcode = locParts[lp].trim().toUpperCase();
+    if (lcode.length === 2 && ccMap && ccMap[lcode] && lcode !== 'IN') return ccMap[lcode];
+  }
 
-  // Priority 6: Use search country as fallback
+  // Priority 6: Detect non-English text → map by script (don't default to US/UK)
+  var descSample = (job.job_description || '').slice(0, 500);
+  if (/[\u0600-\u06FF\u0750-\u077F]/.test(descSample)) return 'Unknown'; // Arabic → could be Egypt, UAE, SA - leave Unknown, location code should catch it
+  if (/[\u4E00-\u9FFF]/.test(descSample)) return 'Unknown'; // Chinese
+  if (/[\u3040-\u309F\u30A0-\u30FF]/.test(descSample)) return 'Japan'; // Japanese hiragana/katakana
+  if (/[\uAC00-\uD7AF]/.test(descSample)) return 'South Korea'; // Korean
+  if (/[\u0E00-\u0E7F]/.test(descSample)) return 'Thailand'; // Thai
+  if (/[\u0400-\u04FF]/.test(descSample)) return 'Unknown'; // Cyrillic → Russia/Ukraine - leave Unknown
+  if (/[\u0900-\u097F]/.test(descSample)) return 'India'; // Devanagari (Hindi)
+
+  // Priority 7: Use search country as fallback (only for Latin-script descriptions)
   if (searchCountry) {
     var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa'};
     if (scMap[searchCountry.toLowerCase()]) return scMap[searchCountry.toLowerCase()];
