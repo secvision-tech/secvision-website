@@ -28,7 +28,10 @@ exports.handler = async (event) => {
         ];
       }
       if (body.status && body.status !== 'all') filter.status = body.status;
-      if (body.company) filter.company = body.company;
+      if (body.company) {
+        var compSearch = body.company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        filter.company = { $regex: compSearch, $options: 'i' };
+      }
       if (body.companyType && body.companyType !== 'all') filter.companyType = body.companyType;
       if (body.jobType && body.jobType !== 'all') filter.jobType = body.jobType;
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
