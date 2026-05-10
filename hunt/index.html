@@ -780,7 +780,7 @@ async function viewDet(i){
   if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
-  h+='<div class="dm-sec"><h4>Full Description</h4><div style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+formatDesc(desc.slice(0,5000))+'</div></div>';
+  h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center">Full Description <button onclick="toggleTranslate('+i+')" id="translateBtn" style="font-size:.6rem;padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600">🌐 Translate to English</button></h4><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+formatDesc(desc.slice(0,5000))+'</div></div>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" class="dm-apply">Apply Now &rarr;</a>';
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
 }
@@ -1115,6 +1115,68 @@ function renderSkillsInsight(certs,tools,skills,roles){
   html+='<strong>Recommendation:</strong> Prioritize onboarding consultants with <strong>'+topCert+'</strong> certification and <strong>'+topTool+'</strong> expertise. The highest demand is for <strong>'+topRole+'</strong> roles. Train existing team on the top 3 tools and top 3 certifications shown above to maximize placement rate.';
   html+='</div>';
   el.innerHTML=html;
+}
+
+// #126: Translate toggle
+var translateCache={};
+var translateState={};
+
+async function toggleTranslate(idx){
+  var j=allJobs[idx];if(!j)return;
+  var btn=document.getElementById('translateBtn');
+  var descDiv=document.getElementById('descContent');
+  if(!descDiv||!btn)return;
+  var desc=j.description||'';
+  var key='t_'+idx;
+
+  if(translateState[key]==='translated'){
+    // Switch back to original
+    descDiv.innerHTML=formatDesc(desc.slice(0,5000));
+    btn.textContent='🌐 Translate to English';
+    translateState[key]='original';
+    return;
+  }
+
+  // Check cache
+  if(translateCache[key]){
+    descDiv.innerHTML=formatDesc(translateCache[key]);
+    btn.textContent='🌐 Show Original';
+    translateState[key]='translated';
+    return;
+  }
+
+  // Translate using Google Translate (free endpoint)
+  btn.textContent='⏳ Translating...';
+  btn.disabled=true;
+  try{
+    // Split into chunks of 4000 chars (API limit)
+    var text=desc.slice(0,5000);
+    var chunks=[];
+    for(var c=0;c<text.length;c+=4000)chunks.push(text.slice(c,c+4000));
+    var translated='';
+    for(var ci=0;ci<chunks.length;ci++){
+      var url='https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=en&dt=t&q='+encodeURIComponent(chunks[ci]);
+      var r=await fetch(url);
+      var data=await r.json();
+      if(data&&data[0]){
+        data[0].forEach(function(seg){if(seg[0])translated+=seg[0]});
+      }
+    }
+    if(translated){
+      translateCache[key]=translated;
+      descDiv.innerHTML=formatDesc(translated);
+      btn.textContent='🌐 Show Original';
+      translateState[key]='translated';
+    }else{
+      btn.textContent='❌ Translation failed';
+      setTimeout(function(){btn.textContent='🌐 Translate to English'},2000);
+    }
+  }catch(e){
+    console.error('Translate error:',e);
+    btn.textContent='❌ Translation failed';
+    setTimeout(function(){btn.textContent='🌐 Translate to English'},2000);
+  }
+  btn.disabled=false;
 }
 
 // Export functions
