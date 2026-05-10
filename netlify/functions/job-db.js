@@ -494,7 +494,6 @@ exports.handler = async (event) => {
           misclassifiedFixed++;
           return;
         }
-      allRecs.forEach(function(j) {
         var detected = detectFromAll(j);
         if (detected && j.detectedCountry !== detected) {
           fixOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: detected } } } });
