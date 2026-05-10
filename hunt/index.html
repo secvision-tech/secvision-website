@@ -765,9 +765,12 @@ async function viewDet(i){
   var quals=j.qualifications||[];
   var resps=j.responsibilities||[];
   var bens=j.benefits||[];
-  var companyHtml='<a href="'+(j.companyUrl||'#')+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
+  var countryForSearch=j.detectedCountry&&j.detectedCountry!=='Unknown'?' '+j.detectedCountry:'';
+  var companyLink=j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1?j.companyUrl:'https://www.google.com/search?q='+encodeURIComponent(j.company+countryForSearch+' official website');
+  var companyHtml='<a href="'+companyLink+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
   var mapQuery=j.location||'';
   if(j.detectedCountry&&j.detectedCountry!=='Unknown'&&mapQuery.indexOf(j.detectedCountry)===-1)mapQuery+=', '+j.detectedCountry;
+  if(/^Remote$/i.test(j.location))mapQuery=j.company+(j.detectedCountry&&j.detectedCountry!=='Unknown'?', '+j.detectedCountry:'');
   var locationHtml=j.location?'<a href="https://www.google.com/maps/search/'+encodeURIComponent(mapQuery)+'" target="_blank" style="color:var(--ac)" title="View on Google Maps: '+mapQuery+'">'+j.location+' 📍</a>':'N/A';
   var countryHtml=(j.detectedCountry||'Unknown')+' <span onclick="editCountry('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit country">✎</span>';
   var jobTypeHtml=(j.jobType||'Not specified')+' <span onclick="editField('+i+',\'jobType\',\'Job Type\',\'Full-time,Contract,Part-time,Internship,Not specified\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit job type">✎</span>';
