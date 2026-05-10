@@ -184,10 +184,14 @@ exports.handler = async (event) => {
         { $limit: 10 }
       ]).toArray();
       var companyCounts = await col.aggregate([
-        { $group: { _id: '$company', count: { $sum: 1 } } },
+        { $project: { companyNorm: { $trim: { input: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: { $toLower: '$company' }, find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } }, companyUrl: 1 } },
+        { $group: { _id: '$companyNorm', count: { $sum: 1 }, url: { $first: '$companyUrl' } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
+      companyCounts.forEach(function(c) {
+        if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+      });
       // Split comma-separated fields, normalize case, then count
       var certCounts = await col.aggregate([
         { $match: { certifications: { $ne: 'See details' } } },
@@ -236,7 +240,8 @@ exports.handler = async (event) => {
 
       // Partnership targets: companies with most openings, grouped by type
       var partnerTargets = await col.aggregate([
-        { $group: { _id: { company: '$company', type: '$companyType' }, count: { $sum: 1 },
+        { $project: { companyNorm: { $trim: { input: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1 } },
+        { $group: { _id: { company: '$companyNorm', type: '$companyType' }, count: { $sum: 1 },
           statuses: { $push: '$status' }, locations: { $addToSet: '$location' },
           companyUrl: { $first: '$companyUrl' } } },
         { $sort: { count: -1 } },

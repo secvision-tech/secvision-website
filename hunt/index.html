@@ -780,7 +780,9 @@ async function viewDet(i){
   if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
-  h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center">Full Description <button onclick="toggleTranslate('+i+')" id="translateBtn" style="font-size:.6rem;padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600">🌐 Translate to English</button></h4><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+formatDesc(desc.slice(0,5000))+'</div></div>';
+  var isNonEnglish=/[\u0600-\u06FF\u0750-\u077F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0900-\u097F\u0980-\u09FF\u0C00-\u0C7F\u0B80-\u0BFF\u00C0-\u024F\u1E00-\u1EFF]/.test(desc.slice(0,500));
+  var translateBtnHtml=isNonEnglish?' <button onclick="toggleTranslate('+i+')" id="translateBtn" style="font-size:.6rem;padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600">🌐 Translate to English</button>':'';
+  h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center">Full Description'+translateBtnHtml+'</h4><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+formatDesc(desc.slice(0,5000))+'</div></div>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" class="dm-apply">Apply Now &rarr;</a>';
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
 }
@@ -981,7 +983,8 @@ function renderCSSPie(containerId,data){
     var p=(d.count/total*100).toFixed(0);
     var name=(d._id||'Unknown');
     var tooltip=LONGFORMS[name]||name;
-    legend+='<div class="css-legend-item" title="'+tooltip+'"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div><span>'+name+'</span><span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
+    var nameHtml=d.url&&d.url.indexOf('google.com/search')===-1?'<a href="'+d.url+'" target="_blank" style="color:var(--tx);text-decoration:none" title="'+tooltip+'">'+name+'</a>':'<span title="'+tooltip+'">'+name+'</span>';
+    legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div>'+nameHtml+'<span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
   });
   el.innerHTML='<div class="css-pie">'+svg+'<div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
 }
