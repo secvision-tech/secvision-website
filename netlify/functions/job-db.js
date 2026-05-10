@@ -240,13 +240,17 @@ exports.handler = async (event) => {
 
       // Partnership targets: companies with most openings, grouped by type
       var partnerTargets = await col.aggregate([
-        { $project: { companyNorm: { $trim: { input: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1 } },
+        { $project: { companyNorm: { $trim: { input: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1 } },
         { $group: { _id: { company: '$companyNorm', type: '$companyType' }, count: { $sum: 1 },
           statuses: { $push: '$status' }, locations: { $addToSet: '$location' },
           companyUrl: { $first: '$companyUrl' } } },
         { $sort: { count: -1 } },
         { $limit: 20 }
       ]).toArray();
+      // Title-case company names
+      partnerTargets.forEach(function(p) {
+        if (p._id && p._id.company) p._id.company = p._id.company.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+      });
 
       // Role distribution - case insensitive, normalize variants
       var roleCounts = await col.aggregate([
@@ -531,14 +535,39 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: allRecs.length, fixed: misclassifiedFixed, remaining: remaining }) };
     }
 
-    // ACTION: fixDescriptions - clean HTML/CSS from stored descriptions and fix formatting
+    // ACTION: fixDescriptions - clean HTML/CSS, fix URLs, fix Remote locations
     if (action === 'fixDescriptions') {
-      // Also fix old btnI company URLs
+      // Fix old btnI company URLs
       var btnIfix = await col.updateMany(
         { companyUrl: { $regex: 'btnI=1' } },
         [{ $set: { companyUrl: { $replaceAll: { input: '$companyUrl', find: 'btnI=1&', replacement: '' } } } }]
       );
       var urlsFixed = btnIfix.modifiedCount || 0;
+
+      // Fix "Remote" locations by extracting city from description
+      var remotes = await col.find({ location: 'Remote' }).project({ _id: 1, description: 1, company: 1, detectedCountry: 1 }).toArray();
+      var locsFixed = 0;
+      var locOps = [];
+      var cityPatterns = [
+        /(?:Location|Office|Based\s*in|Work\s*Location|Job\s*Location|Position\s*Location|Standort|Lieu|Ubicación)\s*:?\s*([A-Z\u00C0-\u024F][a-z\u00C0-\u024F]+(?:[\s,\-]+[A-Z\u00C0-\u024F][a-z\u00C0-\u024F]+){0,3})/,
+        /(?:Onsite|On-site|Hybrid)\s*(?:[\-–:]\s*)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/,
+      ];
+      remotes.forEach(function(j) {
+        var d = (j.description || '').slice(0, 3000);
+        for (var i = 0; i < cityPatterns.length; i++) {
+          var m = d.match(cityPatterns[i]);
+          if (m && m[1] && m[1].length > 2 && m[1].length < 50) {
+            var city = m[1].trim().replace(/[,\s]+$/, '');
+            if (/^(?:Remote|Hybrid|The|This|Our|Full|Part|Any|Not|See|TBD)$/i.test(city)) continue;
+            var newLoc = city;
+            if (j.detectedCountry && j.detectedCountry !== 'Unknown') newLoc += ', ' + j.detectedCountry;
+            locOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { location: newLoc } } } });
+            locsFixed++;
+            break;
+          }
+        }
+      });
+      if (locOps.length > 0) await col.bulkWrite(locOps, { ordered: false });
 
       var dirty = await col.find({ description: { $regex: '<style|<script|<[a-z]|\\{\\s*[a-z-]+\\s*:', $options: 'i' } })
         .project({ _id: 1, description: 1 }).toArray();
@@ -570,7 +599,7 @@ exports.handler = async (event) => {
         }
       });
       if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: dirty.length, fixed: fixed, urlsFixed: urlsFixed }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: dirty.length, fixed: fixed, urlsFixed: urlsFixed, locsFixed: locsFixed }) };
     }
 
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action: ' + action }) };

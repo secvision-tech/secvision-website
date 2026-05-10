@@ -1024,7 +1024,7 @@ async function fixDescriptions(){
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixDescriptions'})});
     if(!r.ok)throw new Error('Failed');
     var d=await r.json();
-    st.textContent='Found '+d.total+' dirty descriptions. Cleaned '+d.fixed+'.'+(d.urlsFixed?' Fixed '+d.urlsFixed+' company URLs.':'');
+    st.textContent='Found '+d.total+' dirty descriptions. Cleaned '+d.fixed+'.'+(d.urlsFixed?' Fixed '+d.urlsFixed+' URLs.':'')+(d.locsFixed?' Fixed '+d.locsFixed+' Remote locations.':'');
   }catch(e){st.textContent='Error: '+e.message}
 }
 
