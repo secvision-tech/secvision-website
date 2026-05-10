@@ -274,7 +274,7 @@ exports.handler = async (event) => {
       function titleCase(s) {
         if (!s) return 'Unknown';
         // Keep acronyms uppercase
-        var acronyms = ['SIEM','SOAR','EDR','XDR','NDR','IDS','IPS','DLP','WAF','CASB','CSPM','CWPP','CNAPP','IAM','PAM','MFA','SSO','UEBA','KQL','SPL','SOC','NIST','MITRE','CISSP','CISM','CISA','CEH','OSCP','OSCE','CCSP','CCNA','CCNP','GCIH','GCIA','GSEC','GREM','GPEN','GIAC','SANS','ITIL','TOGAF','HIPAA','GDPR','FISMA','CMMC','CCPA','COBIT','DFARS','ITAR','FAIR','ISMS','OCTAVE','STRIDE','DREAD','CRISC','CGEIT','SSCP','CPTS','PNPT','HITRUST'];
+        var acronyms = ['SIEM','SOAR','EDR','XDR','NDR','IDS','IPS','DLP','WAF','CASB','CSPM','CWPP','CNAPP','IAM','PAM','MFA','SSO','UEBA','KQL','SPL','SOC','NIST','MITRE','CISSP','CISM','CISA','CEH','OSCP','OSCE','CCSP','CCNA','CCNP','GCIH','GCIA','GSEC','GREM','GPEN','GIAC','SANS','ITIL','TOGAF','HIPAA','GDPR','FISMA','CMMC','CCPA','COBIT','DFARS','ITAR','FAIR','ISMS','OCTAVE','STRIDE','DREAD','CRISC','CGEIT','SSCP','CPTS','PNPT','HITRUST','AWS','GCP','API','SDK','CI','CD','DNS','TCP','UDP','HTTP','HTTPS','SSH','VPN','TLS','SSL'];
         return s.replace(/\w\S*/g, function(t) {
           var upper = t.toUpperCase();
           if (acronyms.indexOf(upper) !== -1) return upper;
@@ -373,6 +373,24 @@ exports.handler = async (event) => {
         'threat hunter': 'Threat Hunter',
         'cloud security engineer': 'Cloud Security Engineer',
         'incident responder': 'Incident Responder',
+        'aws': 'AWS',
+        'amazon web services': 'Amazon Web Services',
+        'guardduty': 'GuardDuty',
+        'aws security hub': 'AWS Security Hub',
+        'aws cloudtrail': 'AWS CloudTrail',
+        'gcp': 'GCP',
+        'google cloud platform': 'Google Cloud Platform',
+        'google cloud': 'Google Cloud',
+        'security command center': 'Security Command Center',
+        'google chronicle': 'Google Chronicle',
+        'azure': 'Azure',
+        'prisma cloud': 'Prisma Cloud',
+        'wiz': 'Wiz',
+        'terraform': 'Terraform',
+        'ansible': 'Ansible',
+        'kubernetes': 'Kubernetes',
+        'docker': 'Docker',
+        'jenkins': 'Jenkins',
       };
       function normList(arr) {
         if (!arr) return [];
