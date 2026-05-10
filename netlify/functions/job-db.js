@@ -124,8 +124,9 @@ exports.handler = async (event) => {
 
     // ACTION: bulkUpdateCompanyType - classify multiple jobs for same company
     if (action === 'bulkUpdateCompanyType') {
+      var compPattern = body.company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       var result = await col.updateMany(
-        { company: body.company },
+        { company: { $regex: compPattern, $options: 'i' } },
         { $set: { companyType: body.companyType, companyTypeUpdatedAt: new Date() } }
       );
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
@@ -133,8 +134,9 @@ exports.handler = async (event) => {
 
     // ACTION: updateCompanyUrl - fix wrong company website for all jobs of same company
     if (action === 'updateCompanyUrl') {
+      var compPattern = body.company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       var result = await col.updateMany(
-        { company: body.company },
+        { company: { $regex: compPattern, $options: 'i' } },
         { $set: { companyUrl: body.companyUrl, companyUrlUpdatedAt: new Date() } }
       );
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
