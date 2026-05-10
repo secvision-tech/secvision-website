@@ -137,6 +137,25 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
     }
 
+    // ACTION: updateField - update any editable field by _id
+    if (action === 'updateField') {
+      var { ObjectId } = require('mongodb');
+      var allowed = ['jobType','salary','experience','location','remote','eligibility'];
+      if (allowed.indexOf(body.field) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Field not editable: ' + body.field }) };
+      var upd = {}; upd[body.field] = body.value; upd[body.field + 'UpdatedAt'] = new Date();
+      var result = await col.updateOne({ _id: new ObjectId(body.id) }, { $set: upd });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
+    }
+
+    // ACTION: updateFieldByJobId - update any editable field by jobId
+    if (action === 'updateFieldByJobId') {
+      var allowed = ['jobType','salary','experience','location','remote','eligibility'];
+      if (allowed.indexOf(body.field) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Field not editable: ' + body.field }) };
+      var upd = {}; upd[body.field] = body.value; upd[body.field + 'UpdatedAt'] = new Date();
+      var result = await col.updateOne({ jobId: body.jobId }, { $set: upd });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
+    }
+
     // ACTION: updateNotes - add notes to a job
     if (action === 'updateNotes') {
       var { ObjectId } = require('mongodb');
@@ -468,6 +487,13 @@ exports.handler = async (event) => {
       var allRecs = await col.find({}).project({ _id: 1, location: 1, detectedCountry: 1, title: 1, description: 1, searchCountry: 1, applyLink: 1, source: 1, company: 1 }).toArray();
       var fixOps = [];
       var misclassifiedFixed = 0;
+      // Also unify GB → United Kingdom
+      allRecs.forEach(function(j) {
+        if (j.detectedCountry === 'GB' || j.detectedCountry === 'UK') {
+          fixOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { detectedCountry: 'United Kingdom' } } } });
+          misclassifiedFixed++;
+          return;
+        }
       allRecs.forEach(function(j) {
         var detected = detectFromAll(j);
         if (detected && j.detectedCountry !== detected) {
@@ -485,6 +511,13 @@ exports.handler = async (event) => {
 
     // ACTION: fixDescriptions - clean HTML/CSS from stored descriptions and fix formatting
     if (action === 'fixDescriptions') {
+      // Also fix old btnI company URLs
+      var btnIfix = await col.updateMany(
+        { companyUrl: { $regex: 'btnI=1' } },
+        [{ $set: { companyUrl: { $replaceAll: { input: '$companyUrl', find: 'btnI=1&', replacement: '' } } } }]
+      );
+      var urlsFixed = btnIfix.modifiedCount || 0;
+
       var dirty = await col.find({ description: { $regex: '<style|<script|<[a-z]|\\{\\s*[a-z-]+\\s*:', $options: 'i' } })
         .project({ _id: 1, description: 1 }).toArray();
       var fixed = 0;
@@ -515,7 +548,7 @@ exports.handler = async (event) => {
         }
       });
       if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: dirty.length, fixed: fixed }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: dirty.length, fixed: fixed, urlsFixed: urlsFixed }) };
     }
 
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action: ' + action }) };

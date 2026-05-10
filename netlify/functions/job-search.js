@@ -97,6 +97,21 @@ function extractSalary(job) {
   // Pattern: "total compensation ... $X - $Y" or "compensation ... $X,000"
   var m4 = d.match(/(?:compensation|salary|pay)\s*(?:[\w\s]*?)\$\s*([\d,]+)\s*[\-\u2013to]+\s*\$?\s*([\d,]+)/i);
   if (m4) return '$'+m4[1]+'-$'+m4[2]+'/yr';
+  // Pattern: £ (GBP) range: "£65,000 - £85,000" or "£65,000-£85,000"
+  var m5 = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+(?:\.\d{1,2})?)\s*\+?\s*(?:\/?\s*)?(per\s*hour|per\s*year|per\s*annum|hourly|annually|pa|p\.a\.|\/hr|\/yr)?/i);
+  if (m5) {
+    var sfx5 = /hour|hr/i.test(m5[3]||'') ? '/hr' : '/yr';
+    return '£'+m5[1]+'-£'+m5[2]+sfx5;
+  }
+  // Pattern: £ single salary: "Salary: £65,000" or "£65,000 base"
+  var m6 = d.match(/(?:salary|compensation|pay|package|base)\s*:?\s*[£]\s*([\d,]+(?:\.\d{1,2})?)/i);
+  if (m6) return '£'+m6[1]+'/yr';
+  // Pattern: € (EUR) range
+  var m7 = d.match(/[€]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[€]?\s*([\d,]+(?:\.\d{1,2})?)/i);
+  if (m7) return '€'+m7[1]+'-€'+m7[2]+'/yr';
+  // Pattern: € single salary
+  var m8 = d.match(/(?:salary|compensation)\s*:?\s*[€]\s*([\d,]+)/i);
+  if (m8) return '€'+m8[1]+'/yr';
   return 'Not disclosed';
 }
 
@@ -163,6 +178,7 @@ function detectJobType(job) {
   if (/\b(?:annual|yearly)\s*(?:salary|compensation|bonus)\b/i.test(d)) fulltimeSignals += 2;
   if (/\btotal\s*compensation\b/i.test(d)) fulltimeSignals += 2;
   if (/\/\s*(?:yr|year)\b/i.test(salary) && !salary.includes('Not disclosed')) fulltimeSignals += 1;
+  if (/[£€]\s*\d/.test(salary)) fulltimeSignals += 2; // GBP/EUR salary = likely full-time
   if (/\bsalaried\b/i.test(d)) fulltimeSignals += 3;
 
   // Part-time indicators
