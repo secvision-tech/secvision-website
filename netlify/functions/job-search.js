@@ -184,6 +184,8 @@ function detectJobType(job) {
 
   // Strong full-time indicators
   if (/\bfull[\s-]*time\s*(?:position|role|opportunity|employee|employment)\b/i.test(d)) fulltimeSignals += 3;
+  if (/\b(?:position|employment|job)\s*(?:type|status)\s*:?\s*full[\s-]*time\b/i.test(d)) fulltimeSignals += 4;
+  if (/\bfull[\s-]*time\b/i.test(title)) fulltimeSignals += 3;
   if (/\b(?:benefits|401k|401\(k\)|PTO|paid\s*time\s*off|medical|dental|vision)\b/i.test(d)) fulltimeSignals += 2;
   if (/\b(?:annual|yearly)\s*(?:salary|compensation|bonus)\b/i.test(d)) fulltimeSignals += 2;
   if (/\btotal\s*compensation\b/i.test(d)) fulltimeSignals += 2;
@@ -191,11 +193,17 @@ function detectJobType(job) {
   if (/[£€]\s*\d/.test(salary)) fulltimeSignals += 2; // GBP/EUR salary = likely full-time
   if (/\bsalaried\b/i.test(d)) fulltimeSignals += 3;
 
+  // "Position Type: Contract" in JD
+  if (/\b(?:position|employment|job)\s*(?:type|status)\s*:?\s*contract\b/i.test(d)) contractSignals += 4;
+
   // Part-time indicators
   var partTimeSignals = /\bpart[\s-]*time\b/i.test(d) ? 3 : 0;
+  if (/\b(?:position|employment|job)\s*(?:type|status)\s*:?\s*part[\s-]*time\b/i.test(d)) partTimeSignals += 4;
+  if (/\bpart[\s-]*time\b/i.test(title)) partTimeSignals += 3;
 
   // Internship indicators
   var internSignals = /\bintern(?:ship)?\b/i.test(d) ? 3 : 0;
+  if (/\bintern(?:ship)?\b/i.test(title)) internSignals += 3;
 
   // Decision logic: description analysis overrides API type only if strong signals
   if (contractSignals >= 3 && contractSignals > fulltimeSignals) return 'Contract';
@@ -215,7 +223,10 @@ function detectRemote(job) {
   if (job.job_is_remote) return 'Yes';
   var d = (job.job_description || '') + ' ' + (job.job_title || '');
   if (/\b(?:fully\s*remote|100%\s*remote|remote\s*(?:position|role|opportunity|work|only)|work\s*(?:from\s*home|remotely)|telecommute|telework)\b/i.test(d)) return 'Yes';
+  if (/\bLocation\s*:\s*Remote\b/i.test(d)) return 'Yes';
+  if (/\b(?:Remote\s*[\|\/\-–]\s*(?:Hybrid|Onsite|On-site)|(?:Hybrid|Onsite|On-site)\s*[\|\/\-–]\s*Remote)\b/i.test(d)) return 'Hybrid';
   if (/\bhybrid\b/i.test(d)) return 'Hybrid';
+  if (/\b(?:on[\s-]*site|onsite)\s*[\-–]\s*\d+\s*days?\b/i.test(d)) return 'Hybrid';
   return 'No';
 }
 
