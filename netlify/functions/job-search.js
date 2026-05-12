@@ -212,10 +212,8 @@ function detectJobType(job) {
   if (internSignals >= 3) return 'Internship';
   // Fall back to API type if available
   if (mapped) return mapped;
-  // Final fallback: analyze salary hints
-  if (salary.includes('/hr')) return 'Contract';
-  if (salary.includes('/yr')) return 'Full-time';
-  return 'Not specified';
+  // Final fallback: assume Full-time (most cybersecurity jobs are)
+  return 'Full-time';
 }
 
 // #60: Detect remote from both API field and description

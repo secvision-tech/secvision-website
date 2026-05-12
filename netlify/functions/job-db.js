@@ -432,6 +432,94 @@ exports.handler = async (event) => {
       })};
     }
 
+    // ACTION: reExtract - re-process all jobs to update extracted fields from stored descriptions
+    if (action === 'reExtract') {
+      var allJobs = await col.find({}).project({ _id: 1, title: 1, description: 1, jobType: 1, remote: 1, tools: 1, compliance: 1, experience: 1, salary: 1 }).toArray();
+      var TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|KQL|SPL|YARA|Sigma|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|Prisma\s*Cloud|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA/gi;
+      var COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s\/]*TAXII|\bNIST\b/gi;
+      function uniqueMatch(text, re) {
+        if (!text) return [];
+        var m = text.match(re) || [], seen = {};
+        return m.filter(function(v) { var k = v.toLowerCase().trim(); if (seen[k]) return false; seen[k] = true; return true; }).slice(0, 12);
+      }
+      var updated = 0, ops = [];
+      allJobs.forEach(function(j) {
+        var d = (j.description || '');
+        var t = (j.title || '');
+        var fullText = t + ' ' + d;
+        var changes = {};
+
+        // Re-detect job type
+        var contractSig = 0, fulltimeSig = 0;
+        if (/\bcontract\b/i.test(t)) contractSig += 4;
+        if (/\b(?:position|employment|job)\s*(?:type|status)\s*:?\s*contract\b/i.test(d)) contractSig += 4;
+        if (/\bcontract\s*(?:position|role|opportunity|assignment|engagement)\b/i.test(d)) contractSig += 3;
+        if (/\binitial\s*contract\s*:?\s*\d+/i.test(d)) contractSig += 3;
+        if (/\b(?:IR35|W-?2|1099|C2C)\b/i.test(d)) contractSig += 3;
+        if (/\b\d+\+?\s*(?:month|months)\s*(?:contract|engagement)\b/i.test(d)) contractSig += 3;
+        if (/\bfull[\s-]*time\b/i.test(t)) fulltimeSig += 3;
+        if (/\b(?:position|employment|job)\s*(?:type|status)\s*:?\s*full[\s-]*time\b/i.test(d)) fulltimeSig += 4;
+        if (/\bfull[\s-]*time\s*(?:position|role|opportunity|employee)\b/i.test(d)) fulltimeSig += 3;
+        if (/\b(?:benefits|401k|PTO|paid\s*time\s*off|medical|dental)\b/i.test(d)) fulltimeSig += 2;
+        if (/[£€]\s*\d/.test(j.salary || '')) fulltimeSig += 2;
+        var newType = null;
+        if (contractSig >= 3 && contractSig > fulltimeSig) newType = 'Contract';
+        else if (fulltimeSig >= 3 && fulltimeSig > contractSig) newType = 'Full-time';
+        if (newType && (!j.jobType || j.jobType === 'Not specified')) changes.jobType = newType;
+        // Default: if no contract/part-time signals, assume Full-time
+        if (!changes.jobType && (!j.jobType || j.jobType === 'Not specified')) changes.jobType = 'Full-time';
+
+        // Re-detect remote
+        var newRemote = null;
+        if (/\bLocation\s*:\s*Remote\b/i.test(d)) newRemote = 'Yes';
+        else if (/\b(?:fully\s*remote|100%\s*remote|remote\s*(?:position|role|work|only)|work\s*(?:from\s*home|remotely))\b/i.test(d)) newRemote = 'Yes';
+        else if (/\bhybrid\b/i.test(d)) newRemote = 'Hybrid';
+        if (newRemote && (!j.remote || j.remote === 'No')) changes.remote = newRemote;
+
+        // Re-extract tools (only if current is 'See details' or missing)
+        if (!j.tools || j.tools === 'See details') {
+          var newTools = uniqueMatch(fullText, TOOL_RE).join(', ');
+          if (newTools) changes.tools = newTools;
+        }
+
+        // Re-extract compliance
+        if (!j.compliance || j.compliance === 'See details') {
+          var newComp = uniqueMatch(fullText, COMP_RE).join(', ');
+          if (newComp) changes.compliance = newComp;
+        }
+
+        // Re-extract salary (£/€ patterns)
+        if (!j.salary || j.salary === 'Not disclosed') {
+          var salM = d.match(/[£]\s*([\d,]+)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+)/i);
+          if (salM) changes.salary = '£' + salM[1] + '-£' + salM[2] + '/yr';
+          else {
+            var salS = d.match(/(?:salary|compensation|pay|base)\s*:?\s*[£]\s*([\d,]+)/i);
+            if (salS) changes.salary = '£' + salS[1] + '/yr';
+          }
+          if (!changes.salary) {
+            var salE = d.match(/[€]\s*([\d,]+)\s*[\-\u2013to]+\s*[€]?\s*([\d,]+)/i);
+            if (salE) changes.salary = '€' + salE[1] + '-€' + salE[2] + '/yr';
+          }
+        }
+
+        // Dedup experience
+        if (j.experience && j.experience !== 'Not specified') {
+          var expParts = j.experience.split(', ');
+          var seen = {}, deduped = [];
+          expParts.forEach(function(p) { var k = p.toLowerCase().trim(); if (!seen[k]) { seen[k] = true; deduped.push(p); } });
+          if (deduped.length < expParts.length) changes.experience = deduped.join(', ');
+        }
+
+        if (Object.keys(changes).length > 0) {
+          changes.reExtractedAt = new Date();
+          ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: changes } } });
+          updated++;
+        }
+      });
+      if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: allJobs.length, updated: updated }) };
+    }
+
     // ACTION: fixCountries - comprehensive country detection and fix
     if (action === 'fixCountries') {
       var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','SA':'Saudi Arabia','QA':'Qatar','NG':'Nigeria','KE':'Kenya','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','BE':'Belgium','AT':'Austria','TR':'Turkey','RU':'Russia','UA':'Ukraine','NO':'Norway','DK':'Denmark','FI':'Finland','HU':'Hungary','GR':'Greece','BH':'Bahrain','KW':'Kuwait','CL':'Chile','CO':'Colombia','AR':'Argentina','PE':'Peru','BD':'Bangladesh','MA':'Morocco','GH':'Ghana','LU':'Luxembourg','OM':'Oman'};

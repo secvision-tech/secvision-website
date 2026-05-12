@@ -307,8 +307,10 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
             <div style="display:flex;gap:.5rem;margin-top:.3rem;flex-wrap:wrap">
               <button onclick="fixCountries()" style="padding:.2rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⚡ Fix Countries</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
+              <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <span id="fixCountryStatus" style="font-size:.6rem;color:var(--ac);align-self:center"></span>
               <span id="fixDescStatus" style="font-size:.6rem;color:var(--pri);align-self:center"></span>
+              <span id="reExtractStatus" style="font-size:.6rem;color:#3B6D11;align-self:center"></span>
             </div>
           </div>
         </div>
@@ -1025,6 +1027,18 @@ async function fixDescriptions(){
     if(!r.ok)throw new Error('Failed');
     var d=await r.json();
     st.textContent='Found '+d.total+' dirty descriptions. Cleaned '+d.fixed+'.'+(d.urlsFixed?' Fixed '+d.urlsFixed+' URLs.':'')+(d.locsFixed?' Fixed '+d.locsFixed+' Remote locations.':'');
+  }catch(e){st.textContent='Error: '+e.message}
+}
+
+async function reExtractFields(){
+  var st=document.getElementById('reExtractStatus');
+  st.textContent='Re-extracting fields from all descriptions...';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reExtract'})});
+    if(!r.ok)throw new Error('Failed');
+    var d=await r.json();
+    st.textContent='Processed '+d.total+' jobs. Updated '+d.updated+' records.';
+    if(d.updated>0)loadDashboard();
   }catch(e){st.textContent='Error: '+e.message}
 }
 
