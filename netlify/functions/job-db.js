@@ -313,7 +313,6 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
-      contractSkills = normList(contractSkills);
       // Average salary for contracts
       var contractSalaries = await col.find({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } }).project({ salary: 1 }).limit(100).toArray();
       var avgRate = '-';
@@ -469,6 +468,7 @@ exports.handler = async (event) => {
       toolsCounts = normList(toolsCounts);
       skillCounts = normList(skillCounts);
       roleCounts = normList(roleCounts);
+      contractSkills = normList(contractSkills);
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
