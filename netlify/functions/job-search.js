@@ -1,5 +1,5 @@
 const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-500|AZ-900|MS-500|CCSP|CCNA|CCNP|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF/gi;
-const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII/gi;
+const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII|\bNIST\b/gi;
 const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|Prisma\s*Cloud|Prisma\s*Access|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|GitHub\s*Actions|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)/gi;
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|patch\s*management|asset\s*management|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
 
@@ -60,7 +60,13 @@ function extractExp(job) {
   }
   if (parts.length === 0 && job.job_required_experience?.required_experience_in_months)
     parts.push(Math.round(job.job_required_experience.required_experience_in_months / 12) + '+ years');
-  return parts.length ? parts.join(', ') : 'Not specified';
+  // Final dedup - remove exact duplicate entries
+  var uniqueParts = [], seenParts = {};
+  parts.forEach(function(p) {
+    var k = p.toLowerCase().trim();
+    if (!seenParts[k]) { seenParts[k] = true; uniqueParts.push(p); }
+  });
+  return uniqueParts.length ? uniqueParts.join(', ') : 'Not specified';
 }
 
 function extractElig(job) {
@@ -161,15 +167,19 @@ function detectJobType(job) {
   var contractSignals = 0, fulltimeSignals = 0;
 
   // Strong contract indicators
+  var title = job.job_title || '';
+  if (/\bcontract\b/i.test(title)) contractSignals += 4; // "Contract" in job title is strongest signal
   if (/\bcontract\s*(?:position|role|opportunity|assignment|engagement|basis|duration|length)\b/i.test(d)) contractSignals += 3;
   if (/\b(?:W-?2|1099|C2C|Corp[\s-]*to[\s-]*Corp)\b/i.test(d)) contractSignals += 3;
   if (/\b(?:contract[\s-]*to[\s-]*hire|temp[\s-]*to[\s-]*perm)\b/i.test(d)) contractSignals += 3;
   if (/\b\d+\+?\s*(?:month|months|mo)\s*(?:contract|engagement|assignment|duration)\b/i.test(d)) contractSignals += 3;
   if (/\bduration\s*:?\s*\d+\+?\s*(?:month|months|week|weeks)\b/i.test(d)) contractSignals += 3;
   if (/\b(?:contract|engagement)\s*(?:length|duration|period)\s*:?\s*\d+/i.test(d)) contractSignals += 3;
-  if (/\b(?:with\s*(?:possible\s*)?extension)\b/i.test(d)) contractSignals += 2;
+  if (/\binitial\s*contract\s*:?\s*\d+/i.test(d)) contractSignals += 3;
+  if (/\b(?:with\s*(?:possible\s*)?extension|likelihood\s*of\s*extension|option\s*to\s*extend)\b/i.test(d)) contractSignals += 2;
   if (/\/\s*(?:hr|hour)\b/i.test(salary)) contractSignals += 2;
   if (/\bcontract\s*(?:only|worker|staff|employee|personnel)\b/i.test(d)) contractSignals += 2;
+  if (/\b(?:outside\s*IR35|inside\s*IR35|IR35)\b/i.test(d)) contractSignals += 3; // UK contract term
   // Weak: just "contractor" mentioned in passing (like "manage contractor staff") - not counted
 
   // Strong full-time indicators
@@ -517,7 +527,7 @@ exports.handler = async (event) => {
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s{2,}/g, ' ')
         .trim();
-      var fullText = desc + ' ' + (job.job_highlights?.Qualifications || []).join(' ') + ' ' + (job.job_highlights?.Responsibilities || []).join(' ');
+      var fullText = (job.job_title || '') + ' ' + desc + ' ' + (job.job_highlights?.Qualifications || []).join(' ') + ' ' + (job.job_highlights?.Responsibilities || []).join(' ');
       var apiSkills = (job.job_required_skills || []).slice(0, 6);
       var exSkills = unique(fullText, SKILL_RE);
       var ss = {}, fs = [];
