@@ -284,6 +284,51 @@ exports.handler = async (event) => {
         { $limit: 10 }
       ]).toArray();
 
+      // Contract-specific aggregations
+      var contractFilter = { jobType: 'Contract' };
+      var contractTotal = await col.countDocuments(contractFilter);
+      var contractNew = await col.countDocuments({ jobType: 'Contract', status: 'new' });
+      var contractByCountry = await col.aggregate([
+        { $match: contractFilter },
+        { $group: { _id: '$detectedCountry', count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]).toArray();
+      var contractByCompany = await col.aggregate([
+        { $match: contractFilter },
+        { $project: { companyNorm: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '\u00AE', replacement: '' } }, find: '\u2122', replacement: '' } }, find: '\u00A9', replacement: '' } } }, status: 1, location: 1, companyUrl: 1, salary: 1, companyType: 1 } },
+        { $group: { _id: '$companyNorm', count: { $sum: 1 }, statuses: { $push: '$status' }, locations: { $addToSet: '$location' }, companyUrl: { $first: '$companyUrl' }, salary: { $first: '$salary' }, companyType: { $first: '$companyType' } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
+      contractByCompany.forEach(function(c) {
+        if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
+      });
+      var contractSkills = await col.aggregate([
+        { $match: { jobType: 'Contract', tools: { $ne: 'See details' } } },
+        { $project: { items: { $split: ['$tools', ', '] } } },
+        { $unwind: '$items' },
+        { $match: { items: { $ne: '' } } },
+        { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 10 }
+      ]).toArray();
+      contractSkills = normList(contractSkills);
+      // Average salary for contracts
+      var contractSalaries = await col.find({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } }).project({ salary: 1 }).limit(100).toArray();
+      var avgRate = '-';
+      if (contractSalaries.length > 0) {
+        var rates = [];
+        contractSalaries.forEach(function(s) {
+          var m = (s.salary || '').match(/[\$£€]\s*([\d,]+)/);
+          if (m) rates.push(parseInt(m[1].replace(/,/g, '')));
+        });
+        if (rates.length > 0) {
+          var sum = 0; rates.forEach(function(r) { sum += r; });
+          avgRate = '$' + Math.round(sum / rates.length).toLocaleString();
+        }
+      }
+
       // Post-process: title-case, merge variants
       function titleCase(s) {
         if (!s) return 'Unknown';
@@ -428,7 +473,8 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
         certCounts, complianceCounts, toolsCounts, locationCounts, recentScans,
-        partnerTargets, roleCounts, skillCounts, salaryJobs
+        partnerTargets, roleCounts, skillCounts, salaryJobs,
+        contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, avgRate
       })};
     }
 

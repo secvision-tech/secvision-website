@@ -221,7 +221,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
       </div>
       <div id="webSearchPanel" style="display:none">
       <div class="sf">
-        <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (Listed Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option></select></div>
+        <div class="sg"><label>Role</label><select id="sRole" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (Listed Roles)</option><option value="SOC Analyst">SOC Analyst</option><option value="Security Engineer">Security Engineer</option><option value="Security Architect">Security Architect</option><option value="Threat Hunter">Threat Hunter</option><option value="Incident Responder">Incident Responder</option><option value="SIEM Engineer">SIEM Engineer</option><option value="Cloud Security Engineer">Cloud Security Engineer</option><option value="Cybersecurity Analyst">Cybersecurity Analyst</option><option value="SOC Consultant">SOC Consultant</option><option value="Security Consultant">Security Consultant</option><option value="SIEM Consultant">SIEM Consultant</option><option value="Cybersecurity Contractor">Cybersecurity Contractor</option><option value="Security Operations Consultant">Security Ops Consultant</option><option value="InfoSec Consultant">InfoSec Consultant</option><option value="Cloud Security Consultant">Cloud Security Consultant</option><option value="Cyber Contractor">Cyber Contractor</option></select></div>
         <div class="sg"><label>Job Source</label><select id="sSource" multiple onchange="handleAnyToggle(this)"><option value="Any" selected>Any (All Sources)</option><option value="LinkedIn">LinkedIn</option><option value="Indeed">Indeed</option><option value="Glassdoor">Glassdoor</option><option value="ZipRecruiter">ZipRecruiter</option><option value="Dice">Dice</option><option value="JobLeads">JobLeads</option><option value="Learn4Good">Learn4Good</option><option value="SimplyHired">SimplyHired</option><option value="CareerBuilder">CareerBuilder</option><option value="Monster">Monster</option></select></div>
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
         <div class="sg"><label>Region</label><select id="sRegion" onchange="updateCountries()"><option value="Any">Any (All Regions)</option><option value="NA" selected>North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select></div>
@@ -273,7 +273,24 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
             <div id="partnerTable" class="dash-table-wrap"></div>
           </div>
 
-          <!-- Section 2: Consultant Demand -->
+          <!-- Section 2: Contract Pipeline -->
+          <div class="dash-section">
+            <div class="dash-sec-title">🎯 Contract Pipeline — Immediate Revenue Opportunities</div>
+            <div class="dash-sec-sub">Contract positions where you can place SOC/security consultants for immediate billing</div>
+            <div class="dash-summary" style="grid-template-columns:repeat(4,1fr);margin-bottom:.6rem">
+              <div class="dash-card" style="border-left:3px solid #DC2626"><div class="dash-card-num" id="dContract" style="color:#DC2626">0</div><div class="dash-card-label">Contract Jobs</div></div>
+              <div class="dash-card" style="border-left:3px solid #854F0B"><div class="dash-card-num" id="dContractNew" style="color:#854F0B">0</div><div class="dash-card-label">New (Unactioned)</div></div>
+              <div class="dash-card" style="border-left:3px solid #534AB7"><div class="dash-card-num" id="dAvgRate" style="color:#534AB7">-</div><div class="dash-card-label">Avg Rate / Salary</div></div>
+              <div class="dash-card" style="border-left:3px solid #0F6E56"><div class="dash-card-num" id="dContractCountries" style="color:#0F6E56">0</div><div class="dash-card-label">Countries</div></div>
+            </div>
+            <div class="dash-charts">
+              <div class="dash-chart-box"><div class="dash-chart-title">Contract Jobs by Country</div><div id="chartContractCountry" class="css-chart"></div></div>
+              <div class="dash-chart-box"><div class="dash-chart-title">Top Contract Skills in Demand</div><div id="chartContractSkills" class="css-chart"></div></div>
+            </div>
+            <div id="contractTable" class="dash-table-wrap"></div>
+          </div>
+
+          <!-- Section 3: Consultant Demand -->
           <div class="dash-section">
             <div class="dash-sec-title">👤 Consultant Demand — What to Hire & Train</div>
             <div class="dash-sec-sub">Most requested skills, certifications, and tools tell you exactly what consultants to onboard</div>
@@ -608,7 +625,7 @@ async function searchJobs(){
   var roles=Array.from(document.getElementById('sRole').selectedOptions).map(function(o){return o.value});
   if(!roles.length){alert('Select at least one role.');return}
   // #44: Any = all listed roles only
-  var searchRoles=roles.includes('Any')?['SOC Analyst','Security Engineer','Security Architect','Threat Hunter','Incident Responder','SIEM Engineer','Cloud Security Engineer','Cybersecurity Analyst']:roles;
+  var searchRoles=roles.includes('Any')?['SOC Analyst','Security Engineer','Security Architect','Threat Hunter','Incident Responder','SIEM Engineer','Cloud Security Engineer','Cybersecurity Analyst','SOC Consultant','Security Consultant','SIEM Consultant','Cybersecurity Contractor','Security Operations Consultant','InfoSec Consultant','Cloud Security Consultant','Cyber Contractor']:roles;
   var sources=Array.from(document.getElementById('sSource').selectedOptions).map(function(o){return o.value});
   var types=Array.from(document.getElementById('sType').selectedOptions).map(function(o){return o.value});
   var btn=document.getElementById('searchBtn');btn.textContent='Searching...';btn.disabled=true;
@@ -1008,6 +1025,14 @@ async function loadDashboard(){
     renderCSSBars('chartScans',d.recentScans||[]);
     // Partnership target table
     renderPartnerTable(d.partnerTargets||[]);
+    // Contract pipeline
+    document.getElementById('dContract').textContent=d.contractTotal||0;
+    document.getElementById('dContractNew').textContent=d.contractNew||0;
+    document.getElementById('dAvgRate').textContent=d.avgRate||'-';
+    document.getElementById('dContractCountries').textContent=(d.contractByCountry||[]).length;
+    renderCSSPie('chartContractCountry',d.contractByCountry||[]);
+    renderCSSPie('chartContractSkills',d.contractSkills||[]);
+    renderContractTable(d.contractByCompany||[]);
     // Skills & hiring insight
     renderSkillsInsight(d.certCounts||[],d.toolsCounts||[],d.skillCounts||[],d.roleCounts||[]);
   }catch(e){
@@ -1163,6 +1188,41 @@ function renderPartnerTable(data){
   });
   html+='</tbody></table>';
   el.innerHTML=html;
+}
+
+function renderContractTable(data){
+  var el=document.getElementById('contractTable');if(!el)return;
+  if(!data||!data.length){el.innerHTML='<div class="css-no-data">No contract jobs yet. Run searches with contract-specific roles.</div>';return}
+  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Contracts</th><th>Rate/Salary</th><th>Pipeline</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
+  data.forEach(function(d,i){
+    var company=d._id||'Unknown';
+    var type=d.companyType||'';
+    var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
+    var hot=d.count>=3?'hot':d.count>=2?'warm':'';
+    var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
+    var statusHtml=Object.keys(sc).map(function(k){return '<span class="status-badge status-'+k+'">'+k+':'+sc[k]+'</span>'}).join(' ');
+    var locs=(d.locations||[]).slice(0,2);
+    var allLocs=(d.locations||[]).join(', ');
+    var locsHtml='<span title="'+allLocs.replace(/"/g,'&quot;')+'" style="font-size:.6rem;color:var(--g5);cursor:help">'+locs.join(', ').slice(0,30)+(d.locations?.length>2?' +':'')+'</span>';
+    var companyLink=d.companyUrl&&d.companyUrl.indexOf('google.com/search')===-1?'<a href="'+d.companyUrl+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none">'+company+'</a>':'<a href="https://www.google.com/search?q='+encodeURIComponent(company+' official website')+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none">'+company+'</a>';
+    var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchContractOpenings(this.dataset.company)">'+d.count+'</a>';
+    var salaryHtml='<span style="font-size:.6rem;color:var(--g5)">'+(d.salary||'N/A')+'</span>';
+    var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("recruiter" OR "HR" OR "hiring manager" OR "talent acquisition")');
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="'+searchUrl+'" target="_blank" class="act-link">Find Contacts</a></td></tr>';
+  });
+  html+='</tbody></table>';
+  el.innerHTML=html;
+}
+
+function searchContractOpenings(company){
+  setMode('db');
+  document.getElementById('dbQuery').value='';
+  document.getElementById('dbStatus').value='all';
+  document.getElementById('dbCompanyType').value='all';
+  document.getElementById('dbJobType').value='Contract';
+  document.getElementById('dbPeriod').value='all';
+  document.getElementById('dbCountry').value='all';
+  searchDbByCompany(company);
 }
 
 function renderSkillsInsight(certs,tools,skills,roles){
