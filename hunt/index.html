@@ -240,6 +240,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
           <div class="sg"><label>Search Text</label><input type="text" id="dbQuery" placeholder="Role, company, skill, tool..."></div>
           <div class="sg"><label>Status</label><select id="dbStatus"><option value="all">All Statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="contacted">Contacted</option><option value="archived">Archived</option></select></div>
           <div class="sg"><label>Company Type</label><select id="dbCompanyType"><option value="all">All Types</option><option value="MSSP/MDR">MSSP/MDR</option><option value="Enterprise">Enterprise</option><option value="Government">Government</option><option value="Startup">Startup</option><option value="IT Consulting">IT Consulting</option><option value="">Unclassified</option></select></div>
+          <div class="sg"><label>Job Type</label><select id="dbJobType"><option value="all">All Types</option><option value="Full-time">Full-time</option><option value="Contract">Contract</option><option value="Part-time">Part-time</option><option value="Internship">Internship</option></select></div>
           <div class="sg"><label>Time Period</label><select id="dbPeriod" onchange="document.getElementById('dbCustomDates').style.display=this.value==='custom'?'flex':'none'"><option value="all">All Time</option><option value="1">Last 1 Day</option><option value="3">Last 3 Days</option><option value="7">Last 1 Week</option><option value="15">Last 15 Days</option><option value="30" selected>Last 1 Month</option><option value="custom">Custom Range</option></select></div>
           <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option></select></div>
           <button class="sbtn" onclick="searchDb()" style="align-self:end">Search DB</button>
@@ -504,6 +505,7 @@ async function searchDb(){
   var q=document.getElementById('dbQuery').value;
   var status=document.getElementById('dbStatus').value;
   var cType=document.getElementById('dbCompanyType').value;
+  var jType=document.getElementById('dbJobType').value;
   var country=document.getElementById('dbCountry').value;
   var period=document.getElementById('dbPeriod').value;
   var dateFrom='',dateTo='';
@@ -519,7 +521,7 @@ async function searchDb(){
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,limit:500})});
+      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,limit:500})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -701,6 +703,15 @@ function renderTable(){
   renderPag(tp);
 }
 function esc(s){return(s||'').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
+function addTooltips(text){
+  if(!text||text==='See details'||text==='N/A')return text;
+  return text.split(', ').map(function(item){
+    var trimmed=item.trim();
+    var lf=LONGFORMS[trimmed];
+    if(lf)return '<span title="'+lf+'" style="border-bottom:1px dotted var(--g3);cursor:help">'+trimmed+'</span>';
+    return trimmed;
+  }).join(', ');
+}
 function formatDesc(text){
   if(!text)return'No description available.';
   return text
@@ -778,7 +789,7 @@ async function viewDet(i){
   var jobTypeHtml=(j.jobType||'Not specified')+' <span onclick="editField('+i+',\'jobType\',\'Job Type\',\'Full-time,Contract,Part-time,Internship,Not specified\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit job type">✎</span>';
   var salaryHtml=(j.salary||'Not disclosed')+' <span onclick="editFieldFree('+i+',\'salary\',\'Salary/Rate\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit salary">✎</span>';
   var experienceHtml=(j.experience||'Not specified')+' <span onclick="editFieldFree('+i+',\'experience\',\'Experience\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit experience">✎</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',j.certifications],['Compliance',j.compliance],['Tools',j.tools],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
@@ -873,11 +884,13 @@ async function editCompanyUrl(idx){
 // Dashboard - Pure CSS/SVG pie charts, no external library
 var PIE_COLORS=['#0891B2','#185FA5','#3B6D11','#854F0B','#993C1D','#534AB7','#0F6E56','#B45309','#7C3AED','#DC2626','#94A3B8'];
 var LONGFORMS={
+  // Compliance/Frameworks
   'NIST SP 800-53':'NIST Special Publication 800-53 (Security & Privacy Controls)',
   'NIST SP 800-61':'NIST SP 800-61 (Incident Handling Guide)',
   'NIST SP 800-171':'NIST SP 800-171 (Controlled Unclassified Information)',
   'NIST CSF':'NIST Cybersecurity Framework',
   'NIST RMF':'NIST Risk Management Framework',
+  'NIST':'National Institute of Standards and Technology',
   'MITRE ATT&CK':'MITRE ATT&CK (Adversarial Tactics, Techniques & Common Knowledge)',
   'SOC 2':'SOC 2 (System & Organization Controls)',
   'ISO 27001':'ISO/IEC 27001 (Information Security Management)',
@@ -907,8 +920,57 @@ var LONGFORMS={
   'DFARS':'DFARS (Defense Federal Acquisition Regulation Supplement)',
   'Cyber Kill Chain':'Cyber Kill Chain (Lockheed Martin)',
   'OWASP Top 10':'OWASP Top 10 (Open Web Application Security Project)',
-  'Zero Trust':'Zero Trust Architecture',
-  'STIX/TAXII':'STIX/TAXII (Structured Threat Info eXchange)',
+  'Zero Trust':'Zero Trust Architecture (Never Trust, Always Verify)',
+  'STIX/TAXII':'STIX/TAXII (Structured Threat Information eXchange)',
+  // Certifications
+  'CISSP':'CISSP (Certified Information Systems Security Professional)',
+  'CISM':'CISM (Certified Information Security Manager)',
+  'CISA':'CISA (Certified Information Systems Auditor)',
+  'CEH':'CEH (Certified Ethical Hacker)',
+  'OSCP':'OSCP (Offensive Security Certified Professional)',
+  'OSCE':'OSCE (Offensive Security Certified Expert)',
+  'CCSP':'CCSP (Certified Cloud Security Professional)',
+  'CCNA':'CCNA (Cisco Certified Network Associate)',
+  'CCNP':'CCNP (Cisco Certified Network Professional)',
+  'GCIH':'GCIH (GIAC Certified Incident Handler)',
+  'GCIA':'GCIA (GIAC Certified Intrusion Analyst)',
+  'GSEC':'GSEC (GIAC Security Essentials Certification)',
+  'GREM':'GREM (GIAC Reverse Engineering Malware)',
+  'GPEN':'GPEN (GIAC Penetration Tester)',
+  'GIAC':'GIAC (Global Information Assurance Certification)',
+  'SANS':'SANS (SysAdmin, Audit, Network, Security Institute)',
+  'CRISC':'CRISC (Certified in Risk and Information Systems Control)',
+  'CGEIT':'CGEIT (Certified in Governance of Enterprise IT)',
+  'SSCP':'SSCP (Systems Security Certified Practitioner)',
+  'ITIL':'ITIL (Information Technology Infrastructure Library)',
+  'SC-200':'SC-200 (Microsoft Security Operations Analyst)',
+  'SC-100':'SC-100 (Microsoft Cybersecurity Architect Expert)',
+  'AZ-500':'AZ-500 (Microsoft Azure Security Technologies)',
+  'AZ-900':'AZ-900 (Microsoft Azure Fundamentals)',
+  'MS-500':'MS-500 (Microsoft 365 Security Administration)',
+  // Tools/Technology
+  'SIEM':'SIEM (Security Information & Event Management)',
+  'SOAR':'SOAR (Security Orchestration, Automation & Response)',
+  'EDR':'EDR (Endpoint Detection & Response)',
+  'XDR':'XDR (Extended Detection & Response)',
+  'NDR':'NDR (Network Detection & Response)',
+  'IDS/IPS':'IDS/IPS (Intrusion Detection/Prevention System)',
+  'DLP':'DLP (Data Loss Prevention)',
+  'WAF':'WAF (Web Application Firewall)',
+  'CASB':'CASB (Cloud Access Security Broker)',
+  'CSPM':'CSPM (Cloud Security Posture Management)',
+  'CWPP':'CWPP (Cloud Workload Protection Platform)',
+  'CNAPP':'CNAPP (Cloud-Native Application Protection Platform)',
+  'IAM':'IAM (Identity & Access Management)',
+  'PAM':'PAM (Privileged Access Management)',
+  'MFA':'MFA (Multi-Factor Authentication)',
+  'SSO':'SSO (Single Sign-On)',
+  'UEBA':'UEBA (User & Entity Behavior Analytics)',
+  'KQL':'KQL (Kusto Query Language)',
+  'SPL':'SPL (Splunk Processing Language)',
+  'AWS':'AWS (Amazon Web Services)',
+  'GCP':'GCP (Google Cloud Platform)',
+  'YARA':'YARA (Yet Another Ridiculous Acronym - Malware Rules)',
 };
 
 async function loadDashboard(){
