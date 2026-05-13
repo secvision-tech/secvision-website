@@ -81,43 +81,60 @@ function extractElig(job) {
 // #46: Handle $XX.XX/hr, total compensation, salary range formats
 function extractSalary(job) {
   if (job.job_min_salary && job.job_max_salary) {
-    var s = job.job_salary_period === 'HOUR' ? '/hr' : '/yr';
+    var p = (job.job_salary_period || '').toUpperCase();
+    var s = p === 'HOUR' ? '/hr' : p === 'MONTH' ? '/mo' : '/yr';
     return '$'+Math.round(job.job_min_salary).toLocaleString()+'-$'+Math.round(job.job_max_salary).toLocaleString()+s;
   }
   var d = job.job_description || '';
-  // Pattern: $XX.XX/hr - $YY.YY/hr or "set between $X and $Y"
+  // Helper: detect period from context
+  function detectPeriod(text, matchStr) {
+    var ctx = text.substring(Math.max(0, text.indexOf(matchStr) - 40), text.indexOf(matchStr) + matchStr.length + 60);
+    if (/per\s*hour|hourly|\/\s*hr|\/\s*hour/i.test(ctx)) return '/hr';
+    if (/per\s*month|monthly|\/\s*mo|\/\s*month|p\.m\./i.test(ctx)) return '/mo';
+    if (/per\s*day|daily|\/\s*day/i.test(ctx)) return '/day';
+    if (/per\s*week|weekly|\/\s*week/i.test(ctx)) return '/wk';
+    if (/per\s*year|per\s*annum|annual|yearly|\/\s*yr|\/\s*year|p\.a\./i.test(ctx)) return '/yr';
+    return null;
+  }
+  // Pattern: $XX.XX/hr - $YY.YY/hr
   var m1 = d.match(/\$\s*([\d,.]+)\s*\/\s*(hr|hour)\s*(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/?\s*(?:hr|hour)?/i);
   if (m1) return '$'+m1[1]+'/hr - $'+m1[3]+'/hr';
-  // Pattern: "between $X/hr and $Y/hr" or "set between $X and $Y"
+  // Pattern: "between $X and $Y"
   var m2 = d.match(/(?:between|from)\s*\$\s*([\d,.]+)\s*(?:\/\s*(?:hr|hour)\s*)?(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*(?:\/?\s*(?:hr|hour))?/i);
   if (m2) {
-    var isHourly = /\/\s*(?:hr|hour)|per\s*hour|hourly/i.test(d.substring(Math.max(0,d.indexOf(m2[0])-30), d.indexOf(m2[0])+m2[0].length+30));
-    return '$'+m2[1]+'-$'+m2[2]+(isHourly?'/hr':'/yr');
+    var p2 = detectPeriod(d, m2[0]) || '/yr';
+    return '$'+m2[1]+'-$'+m2[2]+p2;
   }
-  // Pattern: "$X,000 - $Y,000" with optional /yr /hr
-  var m3 = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)\s*\+?\s*(?:\/?\s*)?(per\s*hour|per\s*year|hourly|annually|\/hr|\/yr|\/hour|\/year)?/i);
+  // Pattern: "$X,000 - $Y,000" with optional period
+  var m3 = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)\s*\+?\s*(?:\/?\s*)?(per\s*hour|per\s*month|per\s*year|per\s*day|per\s*week|per\s*annum|hourly|monthly|annually|daily|weekly|\/hr|\/yr|\/mo|\/day|\/wk|\/hour|\/year|\/month|p\.a\.|p\.m\.)?/i);
   if (m3) {
-    var suffix = /hour|hr/i.test(m3[3]||'') ? '/hr' : '/yr';
-    return '$'+m3[1]+'-$'+m3[2]+suffix;
+    var sfx3 = m3[3] ? ((/hour|hr/i.test(m3[3])?'/hr':(/month|mo|p\.m/i.test(m3[3])?'/mo':(/day|daily/i.test(m3[3])?'/day':(/week|wk/i.test(m3[3])?'/wk':'/yr'))))) : (detectPeriod(d, m3[0]) || '/yr');
+    return '$'+m3[1]+'-$'+m3[2]+sfx3;
   }
-  // Pattern: "total compensation ... $X - $Y" or "compensation ... $X,000"
-  var m4 = d.match(/(?:compensation|salary|pay)\s*(?:[\w\s]*?)\$\s*([\d,]+)\s*[\-\u2013to]+\s*\$?\s*([\d,]+)/i);
-  if (m4) return '$'+m4[1]+'-$'+m4[2]+'/yr';
-  // Pattern: £ (GBP) range: "£65,000 - £85,000" or "£65,000-£85,000"
-  var m5 = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+(?:\.\d{1,2})?)\s*\+?\s*(?:\/?\s*)?(per\s*hour|per\s*year|per\s*annum|hourly|annually|pa|p\.a\.|\/hr|\/yr)?/i);
+  // Pattern: "Pay/Salary: $X" single amount with period context
+  var m4 = d.match(/(?:compensation|salary|pay|rate)\s*:?\s*\$\s*([\d,]+(?:\.\d{1,2})?)/i);
+  if (m4) {
+    var p4 = detectPeriod(d, m4[0]) || '/yr';
+    return '$'+m4[1]+p4;
+  }
+  // Pattern: £ range
+  var m5 = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+(?:\.\d{1,2})?)/i);
   if (m5) {
-    var sfx5 = /hour|hr/i.test(m5[3]||'') ? '/hr' : '/yr';
-    return '£'+m5[1]+'-£'+m5[2]+sfx5;
+    var p5 = detectPeriod(d, m5[0]) || '/yr';
+    return '£'+m5[1]+'-£'+m5[2]+p5;
   }
-  // Pattern: £ single salary: "Salary: £65,000" or "£65,000 base"
-  var m6 = d.match(/(?:salary|compensation|pay|package|base)\s*:?\s*[£]\s*([\d,]+(?:\.\d{1,2})?)/i);
-  if (m6) return '£'+m6[1]+'/yr';
-  // Pattern: € (EUR) range
+  // Pattern: £ single
+  var m6 = d.match(/(?:salary|compensation|pay|package|base|rate)\s*:?\s*[£]\s*([\d,]+(?:\.\d{1,2})?)/i);
+  if (m6) {
+    var p6 = detectPeriod(d, m6[0]) || '/yr';
+    return '£'+m6[1]+p6;
+  }
+  // Pattern: € range
   var m7 = d.match(/[€]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[€]?\s*([\d,]+(?:\.\d{1,2})?)/i);
-  if (m7) return '€'+m7[1]+'-€'+m7[2]+'/yr';
-  // Pattern: € single salary
+  if (m7) return '€'+m7[1]+'-€'+m7[2]+(detectPeriod(d,m7[0])||'/yr');
+  // Pattern: € single
   var m8 = d.match(/(?:salary|compensation)\s*:?\s*[€]\s*([\d,]+)/i);
-  if (m8) return '€'+m8[1]+'/yr';
+  if (m8) return '€'+m8[1]+(detectPeriod(d,m8[0])||'/yr');
   return 'Not disclosed';
 }
 

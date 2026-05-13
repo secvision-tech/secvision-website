@@ -216,6 +216,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
       <div class="search-title"><svg viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>Security Demand Intelligence & Analytics</div>
       <div class="mode-toggle" id="modeToggle">
         <button class="mode-btn active" id="modeDash" onclick="setMode('dash')">Dashboard</button>
+        <button class="mode-btn" id="modeContract" onclick="setMode('contract')">Contract Pipeline</button>
         <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
       </div>
@@ -273,24 +274,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
             <div id="partnerTable" class="dash-table-wrap"></div>
           </div>
 
-          <!-- Section 2: Contract Pipeline -->
-          <div class="dash-section">
-            <div class="dash-sec-title">🎯 Contract Pipeline — Immediate Revenue Opportunities</div>
-            <div class="dash-sec-sub">Contract positions where you can place SOC/security consultants for immediate billing</div>
-            <div class="dash-summary" style="grid-template-columns:repeat(4,1fr);margin-bottom:.6rem">
-              <div class="dash-card" style="border-left:3px solid #DC2626"><div class="dash-card-num" id="dContract" style="color:#DC2626">0</div><div class="dash-card-label">Contract Jobs</div></div>
-              <div class="dash-card" style="border-left:3px solid #854F0B"><div class="dash-card-num" id="dContractNew" style="color:#854F0B">0</div><div class="dash-card-label">New (Unactioned)</div></div>
-              <div class="dash-card" style="border-left:3px solid #534AB7"><div class="dash-card-num" id="dAvgRate" style="color:#534AB7">-</div><div class="dash-card-label">Avg Rate / Salary</div></div>
-              <div class="dash-card" style="border-left:3px solid #0F6E56"><div class="dash-card-num" id="dContractCountries" style="color:#0F6E56">0</div><div class="dash-card-label">Countries</div></div>
-            </div>
-            <div class="dash-charts">
-              <div class="dash-chart-box"><div class="dash-chart-title">Contract Jobs by Country</div><div id="chartContractCountry" class="css-chart"></div></div>
-              <div class="dash-chart-box"><div class="dash-chart-title">Top Contract Skills in Demand</div><div id="chartContractSkills" class="css-chart"></div></div>
-            </div>
-            <div id="contractTable" class="dash-table-wrap"></div>
-          </div>
-
-          <!-- Section 3: Consultant Demand -->
+          <!-- Section 2: Consultant Demand -->
           <div class="dash-section">
             <div class="dash-sec-title">👤 Consultant Demand — What to Hire & Train</div>
             <div class="dash-sec-sub">Most requested skills, certifications, and tools tell you exactly what consultants to onboard</div>
@@ -331,6 +315,26 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
               <span id="reExtractStatus" style="font-size:.6rem;color:#3B6D11;align-self:center"></span>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+    <div id="contractPanel" class="dash-panel">
+      <div class="dash-loading" id="contractLoading">Loading contract pipeline...</div>
+      <div id="contractContent" style="display:none">
+        <div class="dash-summary" style="grid-template-columns:repeat(4,1fr)">
+          <div class="dash-card" style="border-left:3px solid #DC2626"><div class="dash-card-num" id="dContract" style="color:#DC2626">0</div><div class="dash-card-label">Contract Jobs</div></div>
+          <div class="dash-card" style="border-left:3px solid #854F0B"><div class="dash-card-num" id="dContractNew" style="color:#854F0B">0</div><div class="dash-card-label">New (Unactioned)</div></div>
+          <div class="dash-card" style="border-left:3px solid #534AB7"><div class="dash-card-num" id="dAvgRate" style="color:#534AB7">-</div><div class="dash-card-label">Avg Rate / Salary</div></div>
+          <div class="dash-card" style="border-left:3px solid #0F6E56"><div class="dash-card-num" id="dContractCountries" style="color:#0F6E56">0</div><div class="dash-card-label">Countries</div></div>
+        </div>
+        <div class="dash-section">
+          <div class="dash-sec-title">🎯 Contract Pipeline — Immediate Revenue Opportunities</div>
+          <div class="dash-sec-sub">Contract positions where you can place SOC/security consultants for immediate billing</div>
+          <div class="dash-charts">
+            <div class="dash-chart-box"><div class="dash-chart-title">Contract Jobs by Country</div><div id="chartContractCountry" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Contract Skills in Demand</div><div id="chartContractSkills" class="css-chart"></div></div>
+          </div>
+          <div id="contractTable" class="dash-table-wrap"></div>
         </div>
       </div>
     </div>
@@ -492,13 +496,18 @@ function setMode(mode){
   document.getElementById('modeWeb').classList.toggle('active',mode==='web');
   document.getElementById('modeDb').classList.toggle('active',mode==='db');
   document.getElementById('modeDash').classList.toggle('active',mode==='dash');
+  document.getElementById('modeContract').classList.toggle('active',mode==='contract');
   document.getElementById('webSearchPanel').style.display=mode==='web'?'block':'none';
   document.getElementById('dbSearchPanel').style.display=mode==='db'?'block':'none';
   document.getElementById('dashPanel').classList.toggle('show',mode==='dash');
+  document.getElementById('contractPanel').classList.toggle('show',mode==='contract');
   // Show/hide results panel for search modes vs dashboard
-  document.querySelector('.rp').style.display=mode==='dash'?'none':'flex';
+  document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract')?'none':'flex';
   if(mode==='dash'){
     loadDashboard();return;
+  }
+  if(mode==='contract'){
+    loadContractPipeline();return;
   }
   // Restore previous results for the target mode
   var restore=mode==='web'?webResults:dbResults;
@@ -1025,14 +1034,6 @@ async function loadDashboard(){
     renderCSSBars('chartScans',d.recentScans||[]);
     // Partnership target table
     renderPartnerTable(d.partnerTargets||[]);
-    // Contract pipeline
-    document.getElementById('dContract').textContent=d.contractTotal||0;
-    document.getElementById('dContractNew').textContent=d.contractNew||0;
-    document.getElementById('dAvgRate').textContent=d.avgRate||'-';
-    document.getElementById('dContractCountries').textContent=(d.contractByCountry||[]).length;
-    renderCSSPie('chartContractCountry',d.contractByCountry||[]);
-    renderCSSPie('chartContractSkills',d.contractSkills||[]);
-    renderContractTable(d.contractByCompany||[]);
     // Skills & hiring insight
     renderSkillsInsight(d.certCounts||[],d.toolsCounts||[],d.skillCounts||[],d.roleCounts||[]);
   }catch(e){
@@ -1129,6 +1130,28 @@ async function reExtractFields(){
   }catch(e){st.textContent='Error: '+e.message}
 }
 
+async function loadContractPipeline(){
+  document.getElementById('contractLoading').style.display='block';
+  document.getElementById('contractContent').style.display='none';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
+    if(!r.ok)throw new Error('API returned '+r.status);
+    var d=await r.json();
+    document.getElementById('dContract').textContent=d.contractTotal||0;
+    document.getElementById('dContractNew').textContent=d.contractNew||0;
+    document.getElementById('dAvgRate').textContent=d.avgRate||'-';
+    document.getElementById('dContractCountries').textContent=(d.contractByCountry||[]).length;
+    document.getElementById('contractLoading').style.display='none';
+    document.getElementById('contractContent').style.display='block';
+    renderCSSPie('chartContractCountry',d.contractByCountry||[]);
+    renderCSSPie('chartContractSkills',d.contractSkills||[]);
+    renderContractTable(d.contractByCompany||[]);
+  }catch(e){
+    console.error('Contract pipeline error:',e);
+    document.getElementById('contractLoading').textContent='Failed to load: '+e.message;
+  }
+}
+
 function searchCompanyOpenings(company){
   setMode('db');
   document.getElementById('dbQuery').value='';
@@ -1222,7 +1245,29 @@ function searchContractOpenings(company){
   document.getElementById('dbJobType').value='Contract';
   document.getElementById('dbPeriod').value='all';
   document.getElementById('dbCountry').value='all';
-  searchDbByCompany(company);
+  searchDbByCompanyAndType(company,'Contract');
+}
+
+async function searchDbByCompanyAndType(company,jobType){
+  document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
+  document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading '+company+' '+(jobType||'')+' openings...';
+  document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
+  try{
+    var body={action:'search',company:company,limit:500};
+    if(jobType)body.jobType=jobType;
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    if(!r.ok)throw new Error('Failed');var data=await r.json();
+    allJobs=data.jobs||[];
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    document.getElementById('dbInfo').textContent='Found '+data.total+' '+(jobType||'')+' openings for '+company+'.';
+    colFilters={};sortCol='';sortDir=1;
+    document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
+    if(!allJobs.length){
+      document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';
+      document.getElementById('emptyState').innerHTML='<h3>No openings found</h3><p>No '+(jobType||'')+' jobs for '+company+'.</p>';
+    }else{filtered=allJobs.slice();curPage=1;renderTable();document.getElementById('exportBtns').style.display='flex'}
+  }catch(err){console.error(err);document.getElementById('loadState').style.display='none';
+    document.getElementById('emptyState').style.display='block';document.getElementById('emptyState').innerHTML='<h3>Error</h3><p>'+err.message+'</p>'}
 }
 
 function renderSkillsInsight(certs,tools,skills,roles){
