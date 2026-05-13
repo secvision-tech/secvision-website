@@ -1,13 +1,13 @@
 const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|MB-\d{3}|MD-\d{3}|AWS\s*Certified\s*[\w\s-]+|AWS\s*(?:Solutions?\s*Architect|Security\s*Specialty|Cloud\s*Practitioner|SysOps)|Google\s*Cloud\s*(?:Professional|Associate)\s*[\w\s-]+|CCSP|CCNA|CCNP|CCIE|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF|SABSA|CISSP-ISSAP|CISSP-ISSEP|CISSP-ISSMP|Zero\s*Trust|PCNSE|CKA|CKAD|CKS/gi;
 const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII|\bNIST\b/gi;
-const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|Prisma\s*Cloud|Prisma\s*Access|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|GitHub\s*Actions|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)/gi;
+const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|Prisma\s*Cloud|Prisma\s*Access|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|GitHub\s*Actions|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)|Python|Bash|PowerShell|Go(?:lang)?|Ruby|Perl/gi;
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|patch\s*management|asset\s*management|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
 
 function unique(text, re) {
   if (!text) return [];
   var m = text.match(re) || [], seen = {};
   // Known proper-case forms
-  var PROPER = {'incident response':'Incident Response','threat hunting':'Threat Hunting','threat analysis':'Threat Analysis','threat detection':'Threat Detection','threat intelligence':'Threat Intelligence','threat modeling':'Threat Modeling','threat reporting':'Threat Reporting','forensic analysis':'Forensic Analysis','forensic investigation':'Forensic Investigation','digital forensics':'Digital Forensics','malware analysis':'Malware Analysis','reverse engineering':'Reverse Engineering','vulnerability management':'Vulnerability Management','vulnerability assessment':'Vulnerability Assessment','vulnerability scanning':'Vulnerability Scanning','penetration testing':'Penetration Testing','pen testing':'Penetration Testing','red teaming':'Red Teaming','blue teaming':'Blue Teaming','purple teaming':'Purple Teaming','security monitoring':'Security Monitoring','security operations':'Security Operations','security engineering':'Security Engineering','security architecture':'Security Architecture','security automation':'Security Automation','cloud security':'Cloud Security','network security':'Network Security','endpoint security':'Endpoint Security','email security':'Email Security','container security':'Container Security','kubernetes security':'Kubernetes Security','identity management':'Identity Management','access management':'Access Management','risk assessment':'Risk Assessment','risk management':'Risk Management','compliance monitoring':'Compliance Monitoring','alert triage':'Alert Triage','detection engineering':'Detection Engineering','log analysis':'Log Analysis','log management':'Log Management','patch management':'Patch Management','asset management':'Asset Management','disaster recovery':'Disaster Recovery','business continuity':'Business Continuity','soc operations':'SOC Operations','soc monitoring':'SOC Monitoring','web application security':'Web Application Security','mobile security':'Mobile Security','iot security':'IoT Security','ot security':'OT Security','ics security':'ICS Security','scada security':'SCADA Security','microsoft sentinel':'Microsoft Sentinel','azure sentinel':'Microsoft Sentinel','microsoft defender':'Microsoft Defender','microsoft defender for endpoint':'Microsoft Defender for Endpoint','microsoft defender for cloud':'Microsoft Defender for Cloud','microsoft defender for identity':'Microsoft Defender for Identity','microsoft defender for office':'Microsoft Defender for Office','carbon black':'Carbon Black','vmware carbon black':'VMware Carbon Black','palo alto':'Palo Alto','cortex xdr':'Cortex XDR','cortex xsoar':'Cortex XSOAR','check point':'Check Point','elastic security':'Elastic Security','elastic siem':'Elastic SIEM','elastic stack':'Elastic Stack','threat intelligence platform':'Threat Intelligence Platform','cloud security tools':'Cloud Security Tools','zero trust':'Zero Trust','cyber kill chain':'Cyber Kill Chain','ids/ips':'IDS/IPS','nist sp 800-53':'NIST SP 800-53','nist sp 800-61':'NIST SP 800-61','nist sp 800-171':'NIST SP 800-171','nist csf':'NIST CSF','nist rmf':'NIST RMF','mitre att&ck':'MITRE ATT&CK','cis controls':'CIS Controls','cis benchmarks':'CIS Benchmarks','owasp top 10':'OWASP Top 10','pci-dss':'PCI-DSS','pci dss':'PCI-DSS','soc 2':'SOC 2','soc2':'SOC 2','iso 27001':'ISO 27001','iso 27002':'ISO 27002','iso 22301':'ISO 22301','iso 31000':'ISO 31000','csa star':'CSA STAR','nerc cip':'NERC CIP','tic 3.0':'TIC 3.0','lockheed martin kill chain':'Lockheed Martin Kill Chain','stix/taxii':'STIX/TAXII','cybersecurity analyst':'Cybersecurity Analyst','cyber security analyst':'Cybersecurity Analyst','cybersecurity engineer':'Cybersecurity Engineer','cyber security engineer':'Cybersecurity Engineer','aws':'AWS','amazon web services':'Amazon Web Services','guardduty':'GuardDuty','aws security hub':'AWS Security Hub','aws cloudtrail':'AWS CloudTrail','aws waf':'AWS WAF','aws shield':'AWS Shield','aws inspector':'AWS Inspector','aws config':'AWS Config','aws macie':'AWS Macie','gcp':'GCP','google cloud platform':'Google Cloud Platform','google cloud':'Google Cloud','security command center':'Security Command Center','cloud armor':'Cloud Armor','google chronicle':'Google Chronicle','azure':'Azure','prisma cloud':'Prisma Cloud','prisma access':'Prisma Access','wiz':'Wiz','lacework':'Lacework','orca security':'Orca Security','snyk':'Snyk','aqua security':'Aqua Security','hashicorp vault':'HashiCorp Vault','terraform':'Terraform','ansible':'Ansible','kubernetes':'Kubernetes','docker':'Docker','jenkins':'Jenkins','github actions':'GitHub Actions'};
+  var PROPER = {'incident response':'Incident Response','threat hunting':'Threat Hunting','threat analysis':'Threat Analysis','threat detection':'Threat Detection','threat intelligence':'Threat Intelligence','threat modeling':'Threat Modeling','threat reporting':'Threat Reporting','forensic analysis':'Forensic Analysis','forensic investigation':'Forensic Investigation','digital forensics':'Digital Forensics','malware analysis':'Malware Analysis','reverse engineering':'Reverse Engineering','vulnerability management':'Vulnerability Management','vulnerability assessment':'Vulnerability Assessment','vulnerability scanning':'Vulnerability Scanning','penetration testing':'Penetration Testing','pen testing':'Penetration Testing','red teaming':'Red Teaming','blue teaming':'Blue Teaming','purple teaming':'Purple Teaming','security monitoring':'Security Monitoring','security operations':'Security Operations','security engineering':'Security Engineering','security architecture':'Security Architecture','security automation':'Security Automation','cloud security':'Cloud Security','network security':'Network Security','endpoint security':'Endpoint Security','email security':'Email Security','container security':'Container Security','kubernetes security':'Kubernetes Security','identity management':'Identity Management','access management':'Access Management','risk assessment':'Risk Assessment','risk management':'Risk Management','compliance monitoring':'Compliance Monitoring','alert triage':'Alert Triage','detection engineering':'Detection Engineering','log analysis':'Log Analysis','log management':'Log Management','patch management':'Patch Management','asset management':'Asset Management','disaster recovery':'Disaster Recovery','business continuity':'Business Continuity','soc operations':'SOC Operations','soc monitoring':'SOC Monitoring','web application security':'Web Application Security','mobile security':'Mobile Security','iot security':'IoT Security','ot security':'OT Security','ics security':'ICS Security','scada security':'SCADA Security','microsoft sentinel':'Microsoft Sentinel','azure sentinel':'Microsoft Sentinel','microsoft defender':'Microsoft Defender','microsoft defender for endpoint':'Microsoft Defender for Endpoint','microsoft defender for cloud':'Microsoft Defender for Cloud','microsoft defender for identity':'Microsoft Defender for Identity','microsoft defender for office':'Microsoft Defender for Office','carbon black':'Carbon Black','vmware carbon black':'VMware Carbon Black','palo alto':'Palo Alto','cortex xdr':'Cortex XDR','cortex xsoar':'Cortex XSOAR','check point':'Check Point','elastic security':'Elastic Security','elastic siem':'Elastic SIEM','elastic stack':'Elastic Stack','threat intelligence platform':'Threat Intelligence Platform','cloud security tools':'Cloud Security Tools','zero trust':'Zero Trust','cyber kill chain':'Cyber Kill Chain','ids/ips':'IDS/IPS','nist sp 800-53':'NIST SP 800-53','nist sp 800-61':'NIST SP 800-61','nist sp 800-171':'NIST SP 800-171','nist csf':'NIST CSF','nist rmf':'NIST RMF','mitre att&ck':'MITRE ATT&CK','cis controls':'CIS Controls','cis benchmarks':'CIS Benchmarks','owasp top 10':'OWASP Top 10','pci-dss':'PCI-DSS','pci dss':'PCI-DSS','soc 2':'SOC 2','soc2':'SOC 2','iso 27001':'ISO 27001','iso 27002':'ISO 27002','iso 22301':'ISO 22301','iso 31000':'ISO 31000','csa star':'CSA STAR','nerc cip':'NERC CIP','tic 3.0':'TIC 3.0','lockheed martin kill chain':'Lockheed Martin Kill Chain','stix/taxii':'STIX/TAXII','cybersecurity analyst':'Cybersecurity Analyst','cyber security analyst':'Cybersecurity Analyst','cybersecurity engineer':'Cybersecurity Engineer','cyber security engineer':'Cybersecurity Engineer','aws':'AWS','amazon web services':'Amazon Web Services','guardduty':'GuardDuty','aws security hub':'AWS Security Hub','aws cloudtrail':'AWS CloudTrail','aws waf':'AWS WAF','aws shield':'AWS Shield','aws inspector':'AWS Inspector','aws config':'AWS Config','aws macie':'AWS Macie','gcp':'GCP','google cloud platform':'Google Cloud Platform','google cloud':'Google Cloud','security command center':'Security Command Center','cloud armor':'Cloud Armor','google chronicle':'Google Chronicle','azure':'Azure','prisma cloud':'Prisma Cloud','prisma access':'Prisma Access','wiz':'Wiz','lacework':'Lacework','orca security':'Orca Security','snyk':'Snyk','aqua security':'Aqua Security','hashicorp vault':'HashiCorp Vault','terraform':'Terraform','ansible':'Ansible','kubernetes':'Kubernetes','docker':'Docker','jenkins':'Jenkins','github actions':'GitHub Actions','python':'Python','bash':'Bash','powershell':'PowerShell','golang':'Golang','ruby':'Ruby','perl':'Perl'};
   return m.filter(function(v) {
     var k = v.toLowerCase().replace(/\s+/g,' ').trim();
     if (seen[k]) return false; seen[k] = true; return true;
@@ -97,7 +97,7 @@ function extractSalary(job) {
     var ctx = text.substring(Math.max(0, text.indexOf(matchStr) - 40), text.indexOf(matchStr) + matchStr.length + 60);
     if (/per\s*hour|hourly|\/\s*hr|\/\s*hour/i.test(ctx)) return '/hr';
     if (/per\s*month|monthly|\/\s*mo|\/\s*month|p\.m\./i.test(ctx)) return '/mo';
-    if (/per\s*day|daily|\/\s*day/i.test(ctx)) return '/day';
+    if (/per\s*day|\bday\b|daily|\/\s*day/i.test(ctx)) return '/day';
     if (/per\s*week|weekly|\/\s*week/i.test(ctx)) return '/wk';
     if (/per\s*year|per\s*annum|annual|yearly|\/\s*yr|\/\s*year|p\.a\./i.test(ctx)) return '/yr';
     return null;
@@ -142,8 +142,15 @@ function extractSalary(job) {
     var p5 = detectPeriod(d, m5[0]) || '/yr';
     return '£'+m5[1]+'-£'+m5[2]+p5;
   }
+  // Pattern: £ with explicit period: "£600/day" or "£600 day" or "£500 per day"
+  var m6a = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*(?:\/|\s+)(per\s*day|day|per\s*hour|hour|per\s*week|week|per\s*month|month)/i);
+  if (m6a) {
+    var s6a = m6a[2].toLowerCase();
+    var sfx6a = /day/.test(s6a)?'/day':/hour/.test(s6a)?'/hr':/week/.test(s6a)?'/wk':/month/.test(s6a)?'/mo':'/day';
+    return '£'+m6a[1]+sfx6a;
+  }
   // Pattern: £ single
-  var m6 = d.match(/(?:salary|compensation|pay|package|base|rate)\s*:?\s*[£]\s*([\d,]+(?:\.\d{1,2})?)/i);
+  var m6 = d.match(/(?:salary|compensation|pay|package|base|contract\s*rate|rate)\s*:?\s*[£]\s*([\d,]+(?:\.\d{1,2})?)/i);
   if (m6) {
     var p6 = detectPeriod(d, m6[0]) || '/yr';
     return '£'+m6[1]+p6;
@@ -154,6 +161,15 @@ function extractSalary(job) {
   // Pattern: € single
   var m8 = d.match(/(?:salary|compensation)\s*:?\s*[€]\s*([\d,]+)/i);
   if (m8) return '€'+m8[1]+(detectPeriod(d,m8[0])||'/yr');
+  // Pattern: single rate "$60/hr" or "Rate: $60/hr"
+  var m9 = d.match(/(?:pay\s*rate|rate|hourly\s*rate)\s*:?\s*\$\s*([\d,.]+)\s*(?:\/|\s*per\s*)(hr|hour|day|mo|month|yr|year|week|wk)/i);
+  if (m9) {
+    var sfx9 = {'hr':'/hr','hour':'/hr','day':'/day','mo':'/mo','month':'/mo','yr':'/yr','year':'/yr','week':'/wk','wk':'/wk'};
+    return '$'+m9[1]+(sfx9[m9[2].toLowerCase()]||'/hr');
+  }
+  // Pattern: standalone "$XX/hr" anywhere
+  var m10 = d.match(/\$\s*([\d,.]+)\s*\/(hr|hour)/i);
+  if (m10) return '$'+m10[1]+'/hr';
   return 'Not disclosed';
 }
 
@@ -479,6 +495,28 @@ function classifyCompany(company, desc) {
   return bestScore >= 3 ? best : '';
 }
 
+// #153: Extract contract duration from JD
+function extractDuration(desc) {
+  if (!desc) return '';
+  var patterns = [
+    /(?:initial\s*)?(?:contract|engagement|assignment|duration|period|length)\s*(?:of|:)?\s*(\d+)\s*(?:\+\s*)?(?:months?|mos?)\b/i,
+    /(\d+)\s*(?:\+\s*)?(?:months?|mos?)\s*(?:contract|engagement|assignment|duration|renewable)\b/i,
+    /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*(?:\+\s*)?(?:weeks?|wks?)\b/i,
+    /(\d+)\s*(?:\+\s*)?(?:weeks?|wks?)\s*(?:contract|engagement|assignment)\b/i,
+    /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*(?:\+\s*)?(?:years?|yrs?)\b/i,
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = desc.match(patterns[i]);
+    if (m) {
+      var num = m[1];
+      if (/week/i.test(m[0])) return num + ' Weeks';
+      if (/year/i.test(m[0])) return num + ' Years';
+      return num + ' Months';
+    }
+  }
+  return '';
+}
+
 // #123: Enrich location with city from JD when API location is sparse
 function enrichLocation(job) {
   var loc = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
@@ -606,7 +644,7 @@ exports.handler = async (event) => {
         idx: i + 1, id: job.job_id,
         date: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString('en-US') : 'N/A',
         dateRaw: job.job_posted_at_datetime_utc || '',
-        title: job.job_title || 'N/A', titleClean: cleanTitle(job.job_title), company: actualCompany,
+        title: job.job_title || 'N/A', titleClean: (function(){ var tc=cleanTitle(job.job_title); var dur=extractDuration(desc); return (dur&&!/\d+\s*(?:month|week|year)/i.test(tc))?tc+' - '+dur:tc; })(), company: actualCompany,
         companyType: classifyCompany(actualCompany, desc),
         companyUrl: companyWebUrl,
         location: enrichLocation(job),
