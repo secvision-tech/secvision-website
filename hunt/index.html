@@ -244,7 +244,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
           <div class="sg"><label>Job Type</label><select id="dbJobType"><option value="all">All Types</option><option value="Full-time">Full-time</option><option value="Contract">Contract</option><option value="Part-time">Part-time</option><option value="Internship">Internship</option></select></div>
           <div class="sg"><label>Time Period</label><select id="dbPeriod" onchange="document.getElementById('dbCustomDates').style.display=this.value==='custom'?'flex':'none'"><option value="all">All Time</option><option value="1">Last 1 Day</option><option value="3">Last 3 Days</option><option value="7">Last 1 Week</option><option value="15">Last 15 Days</option><option value="30" selected>Last 1 Month</option><option value="custom">Custom Range</option></select></div>
           <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option></select></div>
-          <button class="sbtn" onclick="searchDb()" style="align-self:end">Search DB</button>
+          <button class="sbtn" onclick="searchDb()" style="align-self:end;margin-left:auto">Search DB</button>
         </div>
         <div id="dbCustomDates" style="display:none;gap:.6rem;margin-top:.4rem;align-items:end">
           <div class="sg"><label>From</label><input type="date" id="dbDateFrom"></div>
