@@ -1,4 +1,4 @@
-const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-500|AZ-900|MS-500|CCSP|CCNA|CCNP|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF/gi;
+const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|MB-\d{3}|MD-\d{3}|AWS\s*Certified\s*[\w\s-]+|AWS\s*(?:Solutions?\s*Architect|Security\s*Specialty|Cloud\s*Practitioner|SysOps)|Google\s*Cloud\s*(?:Professional|Associate)\s*[\w\s-]+|CCSP|CCNA|CCNP|CCIE|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF|SABSA|CISSP-ISSAP|CISSP-ISSEP|CISSP-ISSMP|Zero\s*Trust|PCNSE|CKA|CKAD|CKS/gi;
 const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII|\bNIST\b/gi;
 const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|Prisma\s*Cloud|Prisma\s*Access|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|GitHub\s*Actions|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)/gi;
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|patch\s*management|asset\s*management|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
@@ -60,11 +60,17 @@ function extractExp(job) {
   }
   if (parts.length === 0 && job.job_required_experience?.required_experience_in_months)
     parts.push(Math.round(job.job_required_experience.required_experience_in_months / 12) + '+ years');
-  // Final dedup - remove exact duplicate entries
+  // Final dedup - remove exact duplicates and substrings
   var uniqueParts = [], seenParts = {};
   parts.forEach(function(p) {
-    var k = p.toLowerCase().trim();
-    if (!seenParts[k]) { seenParts[k] = true; uniqueParts.push(p); }
+    var k = p.toLowerCase().replace(/\s+/g,' ').trim();
+    if (seenParts[k]) return;
+    // Also check if this is a substring of an existing entry or vice versa
+    var isDup = false;
+    for (var sk in seenParts) {
+      if (sk.indexOf(k) !== -1 || k.indexOf(sk) !== -1) { isDup = true; break; }
+    }
+    if (!isDup) { seenParts[k] = true; uniqueParts.push(p); }
   });
   return uniqueParts.length ? uniqueParts.join(', ') : 'Not specified';
 }
@@ -99,6 +105,12 @@ function extractSalary(job) {
   // Pattern: $XX.XX/hr - $YY.YY/hr
   var m1 = d.match(/\$\s*([\d,.]+)\s*\/\s*(hr|hour)\s*(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/?\s*(?:hr|hour)?/i);
   if (m1) return '$'+m1[1]+'/hr - $'+m1[3]+'/hr';
+  // Pattern: "$X to $Y/hr" or "$X - $Y/hr" (explicit /hr at end)
+  var m1b = d.match(/\$\s*([\d,.]+)\s*(?:to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/(hr|hour|mo|month|day|wk|week|yr|year)/i);
+  if (m1b) {
+    var sfx1b = {'hr':'/hr','hour':'/hr','mo':'/mo','month':'/mo','day':'/day','wk':'/wk','week':'/wk','yr':'/yr','year':'/yr'};
+    return '$'+m1b[1]+'-$'+m1b[2]+(sfx1b[m1b[3].toLowerCase()]||'/yr');
+  }
   // Pattern: "between $X and $Y"
   var m2 = d.match(/(?:between|from)\s*\$\s*([\d,.]+)\s*(?:\/\s*(?:hr|hour)\s*)?(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*(?:\/?\s*(?:hr|hour))?/i);
   if (m2) {
@@ -106,9 +118,16 @@ function extractSalary(job) {
     return '$'+m2[1]+'-$'+m2[2]+p2;
   }
   // Pattern: "$X,000 - $Y,000" with optional period
-  var m3 = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)\s*\+?\s*(?:\/?\s*)?(per\s*hour|per\s*month|per\s*year|per\s*day|per\s*week|per\s*annum|hourly|monthly|annually|daily|weekly|\/hr|\/yr|\/mo|\/day|\/wk|\/hour|\/year|\/month|p\.a\.|p\.m\.)?/i);
+  var m3 = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)\s*\+?\s*(\/hr|\/hour|\/mo|\/month|\/yr|\/year|\/day|\/wk|\/week|per\s*hour|per\s*month|per\s*year|per\s*day|per\s*week|per\s*annum|hourly|monthly|annually|daily|weekly|p\.a\.|p\.m\.)?/i);
   if (m3) {
-    var sfx3 = m3[3] ? ((/hour|hr/i.test(m3[3])?'/hr':(/month|mo|p\.m/i.test(m3[3])?'/mo':(/day|daily/i.test(m3[3])?'/day':(/week|wk/i.test(m3[3])?'/wk':'/yr'))))) : (detectPeriod(d, m3[0]) || '/yr');
+    var sfx3 = '/yr';
+    if (m3[3]) {
+      var s3 = m3[3].toLowerCase();
+      if (/hour|hr/.test(s3)) sfx3='/hr';
+      else if (/month|mo|p\.m/.test(s3)) sfx3='/mo';
+      else if (/day|daily/.test(s3)) sfx3='/day';
+      else if (/week|wk/.test(s3)) sfx3='/wk';
+    } else { sfx3 = detectPeriod(d, m3[0]) || '/yr'; }
     return '$'+m3[1]+'-$'+m3[2]+sfx3;
   }
   // Pattern: "Pay/Salary: $X" single amount with period context

@@ -755,8 +755,10 @@ function formatDesc(text){
     .replace(/\n/g,'<br>')
     // Collapse excess <br>
     .replace(/(<br>){3,}/g,'<br><br>')
-    // Bold section headers (only at line start, followed by colon or end of line)
+    // Bold section headers (only at line start, followed by colon)
     .replace(/(?:<br>|^)\s*((?:Key\s*)?(?:Responsibilities|Requirements|Qualifications|Education|Benefits|About\s*(?:Us|the|This)|Duties|Overview|Summary|Position|Role|Location|Compensation|Salary|What\s*(?:You|We)|Who\s*(?:You|We)|Preferred|Desired|Minimum|Essential|Nice[\s-]*to[\s-]*Have|Must[\s-]*Have|Soft\s*Skills|Technical\s*Skills|Hard\s*Skills|Core\s*Skills|Required\s*Skills|Key\s*Skills|Experience|Work\s*Experience|Professional\s*Experience|Job\s*Description|Job\s*Summary|Job\s*Purpose|Company\s*Description|About\s*Company|Why\s*Join|Perks|How\s*to\s*Apply|Application|Instructions|Note|Important|Disclaimer)[^<:]{0,20})\s*(?::|(?=<br>))/gi,'<br><strong>$1:</strong><br>')
+    // Sub-headers: "Capitalized Words & More:" inline (2+ words, ends with colon)
+    .replace(/([.!?]|<br>)\s*([A-Z][a-zA-Z]+(?:\s+(?:&|and|of|for|in|the|with|to)?\s*[A-Z][a-zA-Z]+){1,6})\s*:/g,'$1<br><strong>$2:</strong>')
     .trim();
 }
 function contactCell(j){
@@ -974,6 +976,23 @@ var LONGFORMS={
   'AZ-500':'AZ-500 (Microsoft Azure Security Technologies)',
   'AZ-900':'AZ-900 (Microsoft Azure Fundamentals)',
   'MS-500':'MS-500 (Microsoft 365 Security Administration)',
+  'AZ-104':'AZ-104 (Microsoft Azure Administrator)',
+  'AZ-204':'AZ-204 (Microsoft Azure Developer)',
+  'AZ-305':'AZ-305 (Microsoft Azure Solutions Architect)',
+  'AZ-400':'AZ-400 (Microsoft DevOps Engineer)',
+  'AZ-700':'AZ-700 (Microsoft Azure Network Engineer)',
+  'DP-203':'DP-203 (Microsoft Azure Data Engineer)',
+  'DP-300':'DP-300 (Microsoft Azure Database Administrator)',
+  'AI-102':'AI-102 (Microsoft Azure AI Engineer)',
+  'PL-300':'PL-300 (Microsoft Power BI Data Analyst)',
+  'SC-300':'SC-300 (Microsoft Identity and Access Administrator)',
+  'SC-400':'SC-400 (Microsoft Information Protection Administrator)',
+  'CKA':'CKA (Certified Kubernetes Administrator)',
+  'CKAD':'CKAD (Certified Kubernetes Application Developer)',
+  'CKS':'CKS (Certified Kubernetes Security Specialist)',
+  'PCNSE':'PCNSE (Palo Alto Networks Certified Security Engineer)',
+  'CCIE':'CCIE (Cisco Certified Internetwork Expert)',
+  'SABSA':'SABSA (Sherwood Applied Business Security Architecture)',
   // Tools/Technology
   'SIEM':'SIEM (Security Information & Event Management)',
   'SOAR':'SOAR (Security Orchestration, Automation & Response)',
