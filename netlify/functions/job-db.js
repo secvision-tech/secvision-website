@@ -480,7 +480,7 @@ exports.handler = async (event) => {
 
     // ACTION: reExtract - re-process all jobs to update extracted fields from stored descriptions
     if (action === 'reExtract') {
-      var allJobs = await col.find({}).project({ _id: 1, title: 1, description: 1, jobType: 1, remote: 1, tools: 1, compliance: 1, experience: 1, salary: 1 }).toArray();
+      var allJobs = await col.find({}).project({ _id: 1, title: 1, description: 1, jobType: 1, jobTypeUpdatedAt: 1, remote: 1, tools: 1, compliance: 1, experience: 1, salary: 1 }).toArray();
       var TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|KQL|SPL|YARA|Sigma|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|Prisma\s*Cloud|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA/gi;
       var COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s\/]*TAXII|\bNIST\b/gi;
       function uniqueMatch(text, re) {
@@ -495,7 +495,7 @@ exports.handler = async (event) => {
         var fullText = t + ' ' + d;
         var changes = {};
 
-        // Re-detect job type
+        // Re-detect job type (re-evaluate all except manually edited)
         var contractSig = 0, fulltimeSig = 0;
         if (/\bcontract\b/i.test(t)) contractSig += 4;
         if (/\b(?:position|employment|job)\s*(?:type|status)\s*:?\s*contract\b/i.test(d)) contractSig += 4;
@@ -503,17 +503,21 @@ exports.handler = async (event) => {
         if (/\binitial\s*contract\s*:?\s*\d+/i.test(d)) contractSig += 3;
         if (/\b(?:IR35|W-?2|1099|C2C)\b/i.test(d)) contractSig += 3;
         if (/\b\d+\+?\s*(?:month|months)\s*(?:contract|engagement)\b/i.test(d)) contractSig += 3;
+        if (/\b(?:likelihood\s*of\s*extension|option\s*to\s*extend)\b/i.test(d)) contractSig += 2;
+        if (/\bcontract\s*(?:only|worker|staff)\b/i.test(d)) contractSig += 2;
+        if (/\/\s*(?:hr|hour)\b/i.test(j.salary||'')) contractSig += 2;
+        if (/\/\s*day\b/i.test(j.salary||'')) contractSig += 2;
         if (/\bfull[\s-]*time\b/i.test(t)) fulltimeSig += 3;
         if (/\b(?:position|employment|job)\s*(?:type|status)\s*:?\s*full[\s-]*time\b/i.test(d)) fulltimeSig += 4;
         if (/\bfull[\s-]*time\s*(?:position|role|opportunity|employee)\b/i.test(d)) fulltimeSig += 3;
         if (/\b(?:benefits|401k|PTO|paid\s*time\s*off|medical|dental)\b/i.test(d)) fulltimeSig += 2;
         if (/[£€]\s*\d/.test(j.salary || '')) fulltimeSig += 2;
-        var newType = null;
+        var newType = 'Full-time'; // default
         if (contractSig >= 3 && contractSig > fulltimeSig) newType = 'Contract';
-        else if (fulltimeSig >= 3 && fulltimeSig > contractSig) newType = 'Full-time';
-        if (newType && (!j.jobType || j.jobType === 'Not specified')) changes.jobType = newType;
-        // Default: if no contract/part-time signals, assume Full-time
-        if (!changes.jobType && (!j.jobType || j.jobType === 'Not specified')) changes.jobType = 'Full-time';
+        else if (/\bpart[\s-]*time\b/i.test(t) || /\b(?:position|employment)\s*(?:type|status)\s*:?\s*part[\s-]*time\b/i.test(d)) newType = 'Part-time';
+        else if (/\bintern(?:ship)?\b/i.test(t)) newType = 'Internship';
+        // Only update if not manually edited (no jobTypeUpdatedAt) or still default
+        if (!j.jobTypeUpdatedAt && j.jobType !== newType) changes.jobType = newType;
 
         // Re-detect remote
         var newRemote = null;
@@ -534,17 +538,29 @@ exports.handler = async (event) => {
           if (newComp) changes.compliance = newComp;
         }
 
-        // Re-extract salary (£/€ patterns)
+        // Re-extract salary
         if (!j.salary || j.salary === 'Not disclosed') {
-          var salM = d.match(/[£]\s*([\d,]+)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+)/i);
-          if (salM) changes.salary = '£' + salM[1] + '-£' + salM[2] + '/yr';
+          // Check for explicit /hr pattern first
+          var salHr = d.match(/\$\s*([\d,.]+)\s*(?:to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/(hr|hour)/i);
+          if (salHr) { changes.salary = '$'+salHr[1]+'-$'+salHr[2]+'/hr'; }
           else {
-            var salS = d.match(/(?:salary|compensation|pay|base)\s*:?\s*[£]\s*([\d,]+)/i);
-            if (salS) changes.salary = '£' + salS[1] + '/yr';
-          }
-          if (!changes.salary) {
-            var salE = d.match(/[€]\s*([\d,]+)\s*[\-\u2013to]+\s*[€]?\s*([\d,]+)/i);
-            if (salE) changes.salary = '€' + salE[1] + '-€' + salE[2] + '/yr';
+            // Check context for period
+            var salRange = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i);
+            if (salRange) {
+              var ctx = d.substring(Math.max(0,d.indexOf(salRange[0])-40), d.indexOf(salRange[0])+salRange[0].length+60);
+              var prd = '/yr';
+              if (/per\s*hour|hourly|\/\s*hr/i.test(ctx)) prd = '/hr';
+              else if (/per\s*month|monthly|\/\s*mo/i.test(ctx)) prd = '/mo';
+              else if (/per\s*day|daily|\/\s*day/i.test(ctx)) prd = '/day';
+              changes.salary = '$'+salRange[1]+'-$'+salRange[2]+prd;
+            } else {
+              var salGBP = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+)/i);
+              if (salGBP) changes.salary = '£'+salGBP[1]+'-£'+salGBP[2]+'/yr';
+              else {
+                var salSingle = d.match(/(?:salary|compensation|pay|rate|base)\s*:?\s*[£]\s*([\d,]+)/i);
+                if (salSingle) changes.salary = '£'+salSingle[1]+'/yr';
+              }
+            }
           }
         }
 
