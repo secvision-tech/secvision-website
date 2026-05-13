@@ -519,50 +519,90 @@ exports.handler = async (event) => {
         // Only update if not manually edited (no jobTypeUpdatedAt) or still default
         if (!j.jobTypeUpdatedAt && j.jobType !== newType) changes.jobType = newType;
 
-        // Re-detect remote
-        var newRemote = null;
-        if (/\bLocation\s*:\s*Remote\b/i.test(d)) newRemote = 'Yes';
-        else if (/\b(?:fully\s*remote|100%\s*remote|remote\s*(?:position|role|work|only)|work\s*(?:from\s*home|remotely))\b/i.test(d)) newRemote = 'Yes';
+        // Re-detect remote (always re-evaluate)
+        var newRemote = 'No';
+        if (/\bLocation\s*:\s*Remote\b/i.test(d) || /\b(?:fully\s*remote|100%\s*remote|remote\s*(?:position|role|work|only)|work\s*(?:from\s*home|remotely))\b/i.test(d)) newRemote = 'Yes';
         else if (/\bhybrid\b/i.test(d)) newRemote = 'Hybrid';
-        if (newRemote && (!j.remote || j.remote === 'No')) changes.remote = newRemote;
+        if (newRemote !== 'No' && j.remote !== newRemote) changes.remote = newRemote;
 
-        // Re-extract tools (only if current is 'See details' or missing)
-        if (!j.tools || j.tools === 'See details') {
-          var newTools = uniqueMatch(fullText, TOOL_RE).join(', ');
-          if (newTools) changes.tools = newTools;
+        // Re-extract tools (always - merge new with existing)
+        var newToolsArr = uniqueMatch(fullText, TOOL_RE);
+        if (newToolsArr.length > 0) {
+          var existingTools = (j.tools && j.tools !== 'See details') ? j.tools.split(', ') : [];
+          var merged = {}, mergedArr = [];
+          existingTools.concat(newToolsArr).forEach(function(t) {
+            var k = t.toLowerCase().trim();
+            if (!merged[k]) { merged[k] = true; mergedArr.push(t); }
+          });
+          var newToolsStr = mergedArr.slice(0, 15).join(', ');
+          if (newToolsStr !== j.tools) changes.tools = newToolsStr;
         }
 
-        // Re-extract compliance
-        if (!j.compliance || j.compliance === 'See details') {
-          var newComp = uniqueMatch(fullText, COMP_RE).join(', ');
-          if (newComp) changes.compliance = newComp;
+        // Re-extract compliance (always - merge new with existing)
+        var newCompArr = uniqueMatch(fullText, COMP_RE);
+        if (newCompArr.length > 0) {
+          var existingComp = (j.compliance && j.compliance !== 'See details') ? j.compliance.split(', ') : [];
+          var mergedC = {}, mergedCArr = [];
+          existingComp.concat(newCompArr).forEach(function(c) {
+            var k = c.toLowerCase().trim();
+            if (!mergedC[k]) { mergedC[k] = true; mergedCArr.push(c); }
+          });
+          var newCompStr = mergedCArr.slice(0, 15).join(', ');
+          if (newCompStr !== j.compliance) changes.compliance = newCompStr;
         }
 
-        // Re-extract salary
-        if (!j.salary || j.salary === 'Not disclosed') {
-          // Check for explicit /hr pattern first
-          var salHr = d.match(/\$\s*([\d,.]+)\s*(?:to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/(hr|hour)/i);
-          if (salHr) { changes.salary = '$'+salHr[1]+'-$'+salHr[2]+'/hr'; }
-          else {
-            // Check context for period
-            var salRange = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i);
-            if (salRange) {
-              var ctx = d.substring(Math.max(0,d.indexOf(salRange[0])-40), d.indexOf(salRange[0])+salRange[0].length+60);
-              var prd = '/yr';
-              if (/per\s*hour|hourly|\/\s*hr/i.test(ctx)) prd = '/hr';
-              else if (/per\s*month|monthly|\/\s*mo/i.test(ctx)) prd = '/mo';
-              else if (/per\s*day|daily|\/\s*day/i.test(ctx)) prd = '/day';
-              changes.salary = '$'+salRange[1]+'-$'+salRange[2]+prd;
-            } else {
-              var salGBP = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+)/i);
-              if (salGBP) changes.salary = '£'+salGBP[1]+'-£'+salGBP[2]+'/yr';
-              else {
-                var salSingle = d.match(/(?:salary|compensation|pay|rate|base)\s*:?\s*[£]\s*([\d,]+)/i);
-                if (salSingle) changes.salary = '£'+salSingle[1]+'/yr';
-              }
-            }
+        // Re-extract salary (always - fix wrong periods)
+        var newSalary = null;
+        // £ with explicit day/hour
+        var salGBPday = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*(?:\/|\s+)(per\s*day|day|per\s*hour|hour|per\s*week|week|per\s*month|month)/i);
+        if (salGBPday) {
+          var s6a = salGBPday[2].toLowerCase();
+          newSalary = '£'+salGBPday[1]+(/day/.test(s6a)?'/day':/hour/.test(s6a)?'/hr':/week/.test(s6a)?'/wk':/month/.test(s6a)?'/mo':'/day');
+        }
+        if (!newSalary) {
+          // $X to $Y/hr explicit
+          var salExplicit = d.match(/\$\s*([\d,.]+)\s*(?:to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/(hr|hour|mo|month|day|wk|week)/i);
+          if (salExplicit) {
+            var sfxE = {'hr':'/hr','hour':'/hr','mo':'/mo','month':'/mo','day':'/day','wk':'/wk','week':'/wk'};
+            newSalary = '$'+salExplicit[1]+'-$'+salExplicit[2]+(sfxE[salExplicit[3].toLowerCase()]||'/hr');
           }
         }
+        if (!newSalary) {
+          // $ range with context
+          var salRange = d.match(/\$\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*\$?\s*([\d,]+(?:\.\d{1,2})?)/i);
+          if (salRange) {
+            var ctx = d.substring(Math.max(0,d.indexOf(salRange[0])-40), d.indexOf(salRange[0])+salRange[0].length+60);
+            var prd = '/yr';
+            if (/per\s*hour|hourly|\/\s*hr|\bhr\b/i.test(ctx)) prd = '/hr';
+            else if (/per\s*month|monthly|\/\s*mo/i.test(ctx)) prd = '/mo';
+            else if (/per\s*day|\bday\b|daily|\/\s*day/i.test(ctx)) prd = '/day';
+            else if (/per\s*week|weekly|\/\s*wk/i.test(ctx)) prd = '/wk';
+            newSalary = '$'+salRange[1]+'-$'+salRange[2]+prd;
+          }
+        }
+        if (!newSalary) {
+          // Pay Rate: $60/hr
+          var salRate = d.match(/(?:pay\s*rate|rate|hourly\s*rate)\s*:?\s*\$\s*([\d,.]+)\s*(?:\/|\s*per\s*)(hr|hour|day|mo|month)/i);
+          if (salRate) {
+            var sfxR = {'hr':'/hr','hour':'/hr','day':'/day','mo':'/mo','month':'/mo'};
+            newSalary = '$'+salRate[1]+(sfxR[salRate[2].toLowerCase()]||'/hr');
+          }
+        }
+        if (!newSalary) {
+          // Standalone $XX/hr
+          var salStandalone = d.match(/\$\s*([\d,.]+)\s*\/(hr|hour)/i);
+          if (salStandalone) newSalary = '$'+salStandalone[1]+'/hr';
+        }
+        if (!newSalary) {
+          // £ range
+          var salGBP = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+)/i);
+          if (salGBP) {
+            var ctxG = d.substring(Math.max(0,d.indexOf(salGBP[0])-40), d.indexOf(salGBP[0])+salGBP[0].length+60);
+            var prdG = /day/.test(ctxG)?'/day':/hour|hr/.test(ctxG)?'/hr':/month|mo/.test(ctxG)?'/mo':'/yr';
+            newSalary = '£'+salGBP[1]+'-£'+salGBP[2]+prdG;
+          }
+        }
+        if (newSalary && newSalary !== j.salary) changes.salary = newSalary;
 
         // Dedup experience
         if (j.experience && j.experience !== 'Not specified') {
