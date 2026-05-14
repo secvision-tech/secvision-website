@@ -629,6 +629,7 @@ exports.handler = async (event) => {
         if (!/\d+\s*(?:month|week|year)/i.test(tc)) {
           var durPatterns = [
             /(\d+)[\s-]+(?:months?|mos?)[\s-]+(?:contract|engagement|assignment|mandate|placement)/i,
+            /(\d+)[\s-]+(?:months?|mos?)[\s\w-]{0,20}(?:contract|engagement|assignment|mandate|placement)/i,
             /\((\d+)[\s-]+(?:months?|mos?)[\s-]*(?:contract|engagement|mandate)?\)/i,
             /(?:initial\s*)?(?:contract|engagement|assignment|duration|period|length|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:months?|mos?)\b/i,
             /(\d+)[\s-]*\+?\s*(?:months?|mos?)[\s-]*(?:contract|engagement|assignment|duration|renewable|mandate|placement)\b/i,
