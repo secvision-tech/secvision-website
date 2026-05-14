@@ -493,7 +493,7 @@ exports.handler = async (event) => {
 
     // ACTION: reExtract - re-process all jobs to update extracted fields from stored descriptions
     if (action === 'reExtract') {
-      var allJobs = await col.find({}).project({ _id: 1, title: 1, description: 1, jobType: 1, jobTypeUpdatedAt: 1, remote: 1, tools: 1, compliance: 1, experience: 1, salary: 1 }).toArray();
+      var allJobs = await col.find({}).project({ _id: 1, title: 1, titleClean: 1, description: 1, jobType: 1, jobTypeUpdatedAt: 1, remote: 1, tools: 1, compliance: 1, experience: 1, salary: 1 }).toArray();
       var TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|KQL|SPL|YARA|Sigma|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|Prisma\s*Cloud|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA/gi;
       var COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s\/]*TAXII|\bNIST\b/gi;
       function uniqueMatch(text, re) {
@@ -616,6 +616,27 @@ exports.handler = async (event) => {
           }
         }
         if (newSalary && newSalary !== j.salary) changes.salary = newSalary;
+
+        // Append contract duration to titleClean
+        var tc = j.titleClean || j.title || '';
+        if (!/\d+\s*(?:month|week|year)/i.test(tc)) {
+          var durPatterns = [
+            /(?:initial\s*)?(?:contract|engagement|assignment|duration|period|length)\s*(?:of|:)?\s*(\d+)\s*\+?\s*(?:months?|mos?)\b/i,
+            /(\d+)\s*\+?\s*(?:months?|mos?)\s*(?:contract|engagement|assignment|duration|renewable)\b/i,
+            /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*\+?\s*(?:weeks?|wks?)\b/i,
+            /(\d+)\s*\+?\s*(?:weeks?|wks?)\s*(?:contract|engagement|assignment)\b/i,
+            /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*\+?\s*(?:years?|yrs?)\b/i,
+          ];
+          for (var dp = 0; dp < durPatterns.length; dp++) {
+            var durMatch = d.match(durPatterns[dp]);
+            if (durMatch) {
+              var durNum = durMatch[1];
+              var durUnit = /week/i.test(durMatch[0]) ? ' Weeks' : /year/i.test(durMatch[0]) ? ' Years' : ' Months';
+              changes.titleClean = tc + ' - ' + durNum + durUnit;
+              break;
+            }
+          }
+        }
 
         // Dedup experience
         if (j.experience && j.experience !== 'Not specified') {
