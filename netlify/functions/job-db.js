@@ -621,14 +621,19 @@ exports.handler = async (event) => {
         var tc = j.titleClean || j.title || '';
         if (!/\d+\s*(?:month|week|year)/i.test(tc)) {
           var durPatterns = [
-            /(?:initial\s*)?(?:contract|engagement|assignment|duration|period|length)\s*(?:of|:)?\s*(\d+)\s*\+?\s*(?:months?|mos?)\b/i,
-            /(\d+)\s*\+?\s*(?:months?|mos?)\s*(?:contract|engagement|assignment|duration|renewable)\b/i,
-            /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*\+?\s*(?:weeks?|wks?)\b/i,
-            /(\d+)\s*\+?\s*(?:weeks?|wks?)\s*(?:contract|engagement|assignment)\b/i,
-            /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*\+?\s*(?:years?|yrs?)\b/i,
+            /(\d+)[\s-]+(?:months?|mos?)[\s-]+(?:contract|engagement|assignment|mandate|placement)/i,
+            /\((\d+)[\s-]+(?:months?|mos?)[\s-]*(?:contract|engagement|mandate)?\)/i,
+            /(?:initial\s*)?(?:contract|engagement|assignment|duration|period|length|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:months?|mos?)\b/i,
+            /(\d+)[\s-]*\+?\s*(?:months?|mos?)[\s-]*(?:contract|engagement|assignment|duration|renewable|mandate|placement)\b/i,
+            /(?:for\s*a?\s*)(\d+)[\s-]*(?:months?|mos?)[\s-]*(?:contract|mandate|engagement|assignment|period|placement)\b/i,
+            /\ba\s+(\d+)[\s-]*(?:months?|mos?)\b[^.]{0,40}\b(?:contract|mandate|engagement)\b/i,
+            /(\d+)[\s-]*\+?\s*(?:weeks?|wks?)[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
+            /(?:contract|engagement|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:weeks?|wks?)\b/i,
+            /(\d+)[\s-]*\+?\s*(?:years?|yrs?)[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
+            /(?:contract|engagement|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:years?|yrs?)\b/i,
           ];
           for (var dp = 0; dp < durPatterns.length; dp++) {
-            var durMatch = d.match(durPatterns[dp]);
+            var durMatch = (t + ' ' + d).match(durPatterns[dp]);
             if (durMatch) {
               var durNum = durMatch[1];
               var durUnit = /week/i.test(durMatch[0]) ? ' Weeks' : /year/i.test(durMatch[0]) ? ' Years' : ' Months';

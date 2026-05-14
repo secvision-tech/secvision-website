@@ -499,11 +499,24 @@ function classifyCompany(company, desc) {
 function extractDuration(desc) {
   if (!desc) return '';
   var patterns = [
-    /(?:initial\s*)?(?:contract|engagement|assignment|duration|period|length)\s*(?:of|:)?\s*(\d+)\s*(?:\+\s*)?(?:months?|mos?)\b/i,
-    /(\d+)\s*(?:\+\s*)?(?:months?|mos?)\s*(?:contract|engagement|assignment|duration|renewable)\b/i,
-    /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*(?:\+\s*)?(?:weeks?|wks?)\b/i,
-    /(\d+)\s*(?:\+\s*)?(?:weeks?|wks?)\s*(?:contract|engagement|assignment)\b/i,
-    /(?:initial\s*)?(?:contract|engagement)\s*(?:of|:)?\s*(\d+)\s*(?:\+\s*)?(?:years?|yrs?)\b/i,
+    // "6-Month Contract" or "12-month contract" (hyphenated)
+    /(\d+)[\s-]+(?:months?|mos?)[\s-]+(?:contract|engagement|assignment|mandate|placement)/i,
+    // "(6-Month Contract)" in parentheses
+    /\((\d+)[\s-]+(?:months?|mos?)[\s-]*(?:contract|engagement|mandate)?\)/i,
+    // "contract of 12 months" or "contract: 6 months"
+    /(?:initial\s*)?(?:contract|engagement|assignment|duration|period|length|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:months?|mos?)\b/i,
+    // "6 months contract" or "12 month mandate"
+    /(\d+)[\s-]*\+?\s*(?:months?|mos?)[\s-]*(?:contract|engagement|assignment|duration|renewable|mandate|placement)\b/i,
+    // "onboard a consultant for a 6-month mandate"
+    /(?:for\s*a?\s*)(\d+)[\s-]*(?:months?|mos?)[\s-]*(?:contract|mandate|engagement|assignment|period|placement)\b/i,
+    // "a 12-month...contract" (month and contract separated by other words)
+    /\ba\s+(\d+)[\s-]*(?:months?|mos?)\b[^.]{0,40}\b(?:contract|mandate|engagement)\b/i,
+    // Weeks
+    /(\d+)[\s-]*\+?\s*(?:weeks?|wks?)[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
+    /(?:contract|engagement|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:weeks?|wks?)\b/i,
+    // Years
+    /(\d+)[\s-]*\+?\s*(?:years?|yrs?)[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
+    /(?:contract|engagement|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:years?|yrs?)\b/i,
   ];
   for (var i = 0; i < patterns.length; i++) {
     var m = desc.match(patterns[i]);
@@ -644,7 +657,7 @@ exports.handler = async (event) => {
         idx: i + 1, id: job.job_id,
         date: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString('en-US') : 'N/A',
         dateRaw: job.job_posted_at_datetime_utc || '',
-        title: job.job_title || 'N/A', titleClean: (function(){ var tc=cleanTitle(job.job_title); var dur=extractDuration(desc); return (dur&&!/\d+\s*(?:month|week|year)/i.test(tc))?tc+' - '+dur:tc; })(), company: actualCompany,
+        title: job.job_title || 'N/A', titleClean: (function(){ var tc=cleanTitle(job.job_title); var dur=extractDuration((job.job_title||'')+' '+desc); return (dur&&!/\d+\s*(?:month|week|year)/i.test(tc))?tc+' - '+dur:tc; })(), company: actualCompany,
         companyType: classifyCompany(actualCompany, desc),
         companyUrl: companyWebUrl,
         location: enrichLocation(job),
