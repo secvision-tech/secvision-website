@@ -1062,7 +1062,7 @@ async function loadDashboard(){
   }
 }
 
-function renderCSSPie(containerId,data){
+function renderCSSPie(containerId,data,linkFn){
   var el=document.getElementById(containerId);if(!el)return;
   if(!data||!data.length){el.innerHTML='<div class="css-no-data">No data yet. Run some searches first.</div>';return}
   var top=data.slice(0,10);
@@ -1093,7 +1093,13 @@ function renderCSSPie(containerId,data){
     var name=(d._id||'Unknown');
     var tooltip=LONGFORMS[name]||name;
     var nameHtml=d.url&&d.url.indexOf('google.com/search')===-1?'<a href="'+d.url+'" target="_blank" style="color:var(--tx);text-decoration:none" title="'+tooltip+'">'+name+'</a>':'<span title="'+tooltip+'">'+name+'</span>';
-    legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div>'+nameHtml+'<span class="css-legend-count">'+d.count+' ('+p+'%)</span></div>';
+    var countHtml;
+    if(linkFn){
+      countHtml='<a href="#" onclick="event.preventDefault();'+linkFn(name)+'" class="css-legend-count" style="color:var(--ac);cursor:pointer;text-decoration:none" title="Click to view openings">'+d.count+' ('+p+'%)</a>';
+    }else{
+      countHtml='<span class="css-legend-count">'+d.count+' ('+p+'%)</span>';
+    }
+    legend+='<div class="css-legend-item"><div class="css-legend-dot" style="background:'+PIE_COLORS[i]+'"></div>'+nameHtml+countHtml+'</div>';
   });
   el.innerHTML='<div class="css-pie">'+svg+'<div class="css-pie-center">'+total+'</div></div><div class="css-legend">'+legend+'</div>';
 }
@@ -1162,7 +1168,7 @@ async function loadContractPipeline(){
     document.getElementById('dContractCountries').textContent=(d.contractByCountry||[]).length;
     document.getElementById('contractLoading').style.display='none';
     document.getElementById('contractContent').style.display='block';
-    renderCSSPie('chartContractCountry',d.contractByCountry||[]);
+    renderCSSPie('chartContractCountry',d.contractByCountry||[],function(country){return "searchContractByCountry('"+country.replace(/'/g,"\\'")+"')"});
     renderCSSPie('chartContractSkills',d.contractSkills||[]);
     renderContractTable(d.contractByCompany||[]);
   }catch(e){
@@ -1254,6 +1260,29 @@ function renderContractTable(data){
   });
   html+='</tbody></table>';
   el.innerHTML=html;
+}
+
+function searchContractByCountry(country){
+  setMode('db');
+  document.getElementById('dbQuery').value='';
+  document.getElementById('dbStatus').value='all';
+  document.getElementById('dbCompanyType').value='all';
+  document.getElementById('dbJobType').value='Contract';
+  document.getElementById('dbPeriod').value='all';
+  try{document.getElementById('dbCountry').value=country}catch(e){}
+  document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading contract jobs in '+country+'...';
+  document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
+  document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
+  fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'search',jobType:'Contract',detectedCountry:country,limit:500})})
+  .then(function(r){return r.json()}).then(function(data){
+    allJobs=data.jobs||[];
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    document.getElementById('dbInfo').textContent='Found '+data.total+' contract jobs in '+country+'.';
+    colFilters={};sortCol='';sortDir=1;
+    if(!allJobs.length){document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';document.getElementById('emptyState').innerHTML='<h3>No contract jobs</h3><p>No contract positions found in '+country+'.</p>'}
+    else{filtered=allJobs.slice();curPage=1;renderTable();document.getElementById('exportBtns').style.display='flex'}
+  }).catch(function(e){document.getElementById('loadState').style.display='none';document.getElementById('emptyState').innerHTML='<h3>Error</h3><p>'+e.message+'</p>'});
 }
 
 function searchContractOpenings(company){

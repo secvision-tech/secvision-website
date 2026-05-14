@@ -313,18 +313,31 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
-      // Average salary for contracts
-      var contractSalaries = await col.find({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } }).project({ salary: 1 }).limit(100).toArray();
+      // Average hourly rate for contracts (convert all to hourly USD)
+      var contractSalaries = await col.find({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } }).project({ salary: 1 }).limit(200).toArray();
       var avgRate = '-';
       if (contractSalaries.length > 0) {
-        var rates = [];
+        var hourlyRates = [];
         contractSalaries.forEach(function(s) {
-          var m = (s.salary || '').match(/[\$£€]\s*([\d,]+)/);
-          if (m) rates.push(parseInt(m[1].replace(/,/g, '')));
+          var sal = s.salary || '';
+          var m = sal.match(/([\$£€])\s*([\d,]+(?:\.\d{1,2})?)/);
+          if (!m) return;
+          var amount = parseFloat(m[2].replace(/,/g, ''));
+          if (isNaN(amount) || amount === 0) return;
+          // Convert currency to USD (approximate)
+          if (m[1] === '£') amount *= 1.27;
+          else if (m[1] === '€') amount *= 1.08;
+          // Convert period to hourly (assuming 2080 hrs/yr, 160 hrs/mo, 8 hrs/day, 40 hrs/wk)
+          if (/\/yr/i.test(sal)) amount = amount / 2080;
+          else if (/\/mo/i.test(sal)) amount = amount / 160;
+          else if (/\/day/i.test(sal)) amount = amount / 8;
+          else if (/\/wk/i.test(sal)) amount = amount / 40;
+          // /hr is already hourly
+          if (amount > 0 && amount < 500) hourlyRates.push(amount); // sanity check
         });
-        if (rates.length > 0) {
-          var sum = 0; rates.forEach(function(r) { sum += r; });
-          avgRate = '$' + Math.round(sum / rates.length).toLocaleString();
+        if (hourlyRates.length > 0) {
+          var sum = 0; hourlyRates.forEach(function(r) { sum += r; });
+          avgRate = '$' + Math.round(sum / hourlyRates.length) + '/hr';
         }
       }
 
