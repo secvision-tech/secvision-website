@@ -631,12 +631,15 @@ exports.handler = async (event) => {
             /(?:contract|engagement|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:weeks?|wks?)\b/i,
             /(\d+)[\s-]*\+?\s*(?:years?|yrs?)[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
             /(?:contract|engagement|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:years?|yrs?)\b/i,
+            /(\d+)[\s-]*\+?\s*days?[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
+            /(?:contract|engagement|mandate|duration)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*days?\b/i,
+            /duration\s*:?\s*[\n\r\s]*(\d+)\s*(?:days?|months?|weeks?|years?)\b/i,
           ];
           for (var dp = 0; dp < durPatterns.length; dp++) {
             var durMatch = (t + ' ' + d).match(durPatterns[dp]);
             if (durMatch) {
               var durNum = durMatch[1];
-              var durUnit = /week/i.test(durMatch[0]) ? ' Weeks' : /year/i.test(durMatch[0]) ? ' Years' : ' Months';
+              var durUnit = /week/i.test(durMatch[0]) ? ' Weeks' : /year/i.test(durMatch[0]) ? ' Years' : /day/i.test(durMatch[0]) ? ' Days' : ' Months';
               changes.titleClean = tc + ' - ' + durNum + durUnit;
               break;
             }

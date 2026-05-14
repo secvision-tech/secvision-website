@@ -53,6 +53,19 @@ function extractExp(job) {
   }
   // P4: Broad fallback
   if (parts.length === 0) {
+    // P7: Written-out numbers: "five (5) years" or "over five years"
+    var WORD_NUMS = {'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,'eleven':11,'twelve':12,'fifteen':15,'twenty':20};
+    var p7 = /(?:over\s+|at\s*least\s+|minimum\s+)?(?:(\w+)\s*\((\d+)\)|(\w+))\s*(?:\+\s*)?years?\s*(?:of\s*)?(?:[\w\s]*?)(?:experience|expertise)\s*(?:in|with|developing|managing|working)?\s*([\w\s,\/&\-]+?)(?:\.|;|\n|$)/gi;
+    while ((m = p7.exec(d)) !== null && parts.length < 5) {
+      var numVal = m[2] ? parseInt(m[2]) : (WORD_NUMS[(m[1]||m[3]||'').toLowerCase()] || 0);
+      if (numVal < 1 || numVal > 30) continue;
+      var c7 = (m[4]||'').trim().slice(0, 40);
+      if (c7.length < 3) continue;
+      var k7 = 'p7'+numVal+c7.toLowerCase();
+      if (!seen[k7]) { seen[k7] = true; parts.push(numVal+'+ yr '+c7); }
+    }
+  }
+  if (parts.length === 0) {
     var p4 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\s,\-\u2010\u2011]*?)(?:experience|expertise)/gi;
     while ((m = p4.exec(d)) !== null && parts.length < 3) {
       var k4 = 'f'+m[1]; if (!seen[k4]) { seen[k4] = true; parts.push(m[1]+'+ years'); }
@@ -517,6 +530,11 @@ function extractDuration(desc) {
     // Years
     /(\d+)[\s-]*\+?\s*(?:years?|yrs?)[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
     /(?:contract|engagement|mandate)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*(?:years?|yrs?)\b/i,
+    // Days
+    /(\d+)[\s-]*\+?\s*days?[\s-]*(?:contract|engagement|assignment|mandate)\b/i,
+    /(?:contract|engagement|mandate|duration)\s*(?:of|:)?\s*(\d+)[\s-]*\+?\s*days?\b/i,
+    // "Duration:\n100 days" or "Duration: 100 days" (multiline)
+    /duration\s*:?\s*[\n\r\s]*(\d+)\s*(?:days?|months?|weeks?|years?)\b/i,
   ];
   for (var i = 0; i < patterns.length; i++) {
     var m = desc.match(patterns[i]);
@@ -524,6 +542,7 @@ function extractDuration(desc) {
       var num = m[1];
       if (/week/i.test(m[0])) return num + ' Weeks';
       if (/year/i.test(m[0])) return num + ' Years';
+      if (/day/i.test(m[0])) return num + ' Days';
       return num + ' Months';
     }
   }
