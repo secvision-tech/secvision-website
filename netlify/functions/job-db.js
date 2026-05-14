@@ -566,6 +566,13 @@ exports.handler = async (event) => {
 
         // Re-extract salary (always - fix wrong periods)
         var newSalary = null;
+        // £ IR35 rate (always daily in UK)
+        var salIR35 = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*day\s*)?(?:inside|outside)\s*IR35/i);
+        if (salIR35) newSalary = '£'+salIR35[1]+'-£'+salIR35[2]+'/day';
+        if (!newSalary) {
+          var salIR35s = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*day\s*)?(?:inside|outside)\s*IR35/i);
+          if (salIR35s) newSalary = '£'+salIR35s[1]+'/day';
+        }
         // £ with explicit day/hour
         var salGBPday = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*(?:\/|\s+)(per\s*day|day|per\s*hour|hour|per\s*week|week|per\s*month|month)/i);
         if (salGBPday) {
@@ -588,7 +595,7 @@ exports.handler = async (event) => {
             var prd = '/yr';
             if (/per\s*hour|hourly|\/\s*hr|\bhr\b/i.test(ctx)) prd = '/hr';
             else if (/per\s*month|monthly|\/\s*mo/i.test(ctx)) prd = '/mo';
-            else if (/per\s*day|\bday\b|daily|\/\s*day/i.test(ctx)) prd = '/day';
+            else if (/per\s*day|\bday\b|daily|\/\s*day|IR35/i.test(ctx)) prd = '/day';
             else if (/per\s*week|weekly|\/\s*wk/i.test(ctx)) prd = '/wk';
             newSalary = '$'+salRange[1]+'-$'+salRange[2]+prd;
           }

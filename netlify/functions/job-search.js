@@ -110,7 +110,7 @@ function extractSalary(job) {
     var ctx = text.substring(Math.max(0, text.indexOf(matchStr) - 40), text.indexOf(matchStr) + matchStr.length + 60);
     if (/per\s*hour|hourly|\/\s*hr|\/\s*hour/i.test(ctx)) return '/hr';
     if (/per\s*month|monthly|\/\s*mo|\/\s*month|p\.m\./i.test(ctx)) return '/mo';
-    if (/per\s*day|\bday\b|daily|\/\s*day/i.test(ctx)) return '/day';
+    if (/per\s*day|\bday\b|daily|\/\s*day|IR35/i.test(ctx)) return '/day';
     if (/per\s*week|weekly|\/\s*week/i.test(ctx)) return '/wk';
     if (/per\s*year|per\s*annum|annual|yearly|\/\s*yr|\/\s*year|p\.a\./i.test(ctx)) return '/yr';
     return null;
@@ -155,6 +155,12 @@ function extractSalary(job) {
     var p5 = detectPeriod(d, m5[0]) || '/yr';
     return '£'+m5[1]+'-£'+m5[2]+p5;
   }
+  // Pattern: £ IR35 rate (always daily in UK): "£550 - £650 Inside IR35"
+  var mIR35 = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*day\s*)?(?:inside|outside)\s*IR35/i);
+  if (mIR35) return '£'+mIR35[1]+'-£'+mIR35[2]+'/day';
+  // Single £ IR35: "£600 Inside IR35"
+  var mIR35s = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*day\s*)?(?:inside|outside)\s*IR35/i);
+  if (mIR35s) return '£'+mIR35s[1]+'/day';
   // Pattern: £ with explicit period: "£600/day" or "£600 day" or "£500 per day"
   var m6a = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*(?:\/|\s+)(per\s*day|day|per\s*hour|hour|per\s*week|week|per\s*month|month)/i);
   if (m6a) {
