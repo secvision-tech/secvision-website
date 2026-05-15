@@ -1194,7 +1194,7 @@ async function searchDbByCompany(company){
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'search',company:company,limit:500})});
+      body:JSON.stringify({action:'search',company:company,limit:500,sort:JSON.stringify({datePosted:-1})})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -1274,7 +1274,7 @@ function searchContractByCountry(country){
   document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({action:'search',jobType:'Contract',detectedCountry:country,limit:500})})
+    body:JSON.stringify({action:'search',jobType:'Contract',detectedCountry:country,limit:500,sort:JSON.stringify({datePosted:-1})})})
   .then(function(r){return r.json()}).then(function(data){
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -1301,7 +1301,7 @@ async function searchDbByCompanyAndType(company,jobType){
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading '+company+' '+(jobType||'')+' openings...';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
-    var body={action:'search',company:company,limit:500};
+    var body={action:'search',company:company,limit:500,sort:JSON.stringify({datePosted:-1})};
     if(jobType)body.jobType=jobType;
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok)throw new Error('Failed');var data=await r.json();

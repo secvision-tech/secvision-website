@@ -708,9 +708,11 @@ exports.handler = async (event) => {
     // #167: Filter out non-cybersecurity jobs (e.g., mental health "Incident Responder")
     jobs = jobs.filter(function(j) {
       var text = (j.title + ' ' + j.description).toLowerCase();
-      // Non-IT indicators
+      // Non-IT job title indicators
+      var nonITTitle = /\b(?:compensation\s*analyst|benefits\s*analyst|payroll|human\s*resources|hr\s*(?:analyst|manager|coordinator|generalist|specialist|director|assistant)|recruiter|talent\s*acquisition|staffing\s*(?:coordinator|specialist)|financial\s*analyst|accountant|bookkeeper|tax\s*(?:analyst|specialist)|auditor(?!\s*(?:security|IT|cyber))|marketing\s*(?:analyst|manager|coordinator|specialist)|sales\s*(?:rep|representative|executive|manager)|real\s*estate|property\s*manager|teacher|professor|instructor|librarian|janitor|custodian|mechanic|plumber|electrician|carpenter|welder|driver|truck\s*driver|warehouse|forklift|cashier|barista|waiter|waitress|chef|cook|bartender)\b/i;
+      // Non-IT description indicators
       var nonIT = /\b(?:mental\s*health|licensed\s*(?:therapist|counselor|psychologist|social\s*worker|clinical)|clinical\s*(?:psychologist|therapist|counselor)|marriage\s*and\s*family|behavioral\s*health|psychiatric|therapy\s*session|suicide\s*prevention|substance\s*abuse|addiction\s*treatment|patient\s*care|nursing|registered\s*nurse|medical\s*doctor|physician|pharmacy|paramedic|physical\s*therapy|occupational\s*therapy|speech\s*therapy|dental\s*hygien|veterinar|social\s*work(?:er)?|case\s*manager\s*(?:social|child)|child\s*welfare)\b/i;
-      if (!nonIT.test(text)) return true; // No non-IT signals → keep
+      if (!nonITTitle.test(text) && !nonIT.test(text)) return true;
       // If has non-IT signals, check if it also has strong IT/cyber signals
       var cyberSignals = /\b(?:SIEM|SOC\s*(?:analyst|engineer|manager)|cybersecurity|cyber\s*security|information\s*security|infosec|malware|threat\s*(?:hunt|intel|detect)|vulnerability|penetration\s*test|firewall|endpoint\s*(?:detect|protect)|encryption|MITRE|NIST|splunk|sentinel|crowdstrike|EDR|XDR|phishing|ransomware|zero\s*trust|IAM|DLP)\b/i;
       return cyberSignals.test(text); // Keep only if also has cyber keywords

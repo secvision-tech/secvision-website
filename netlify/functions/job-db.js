@@ -45,7 +45,7 @@ exports.handler = async (event) => {
       var page = body.page || 1;
       var limit = body.limit || 100;
       var skip = (page - 1) * limit;
-      var sort = body.sort || { dateScanned: -1 };
+      var sort = body.sort ? (typeof body.sort === 'string' ? JSON.parse(body.sort) : body.sort) : { dateScanned: -1 };
 
       var total = await col.countDocuments(filter);
       var jobs = await col.find(filter)
