@@ -705,6 +705,17 @@ exports.handler = async (event) => {
       };
     });
 
+    // #167: Filter out non-cybersecurity jobs (e.g., mental health "Incident Responder")
+    jobs = jobs.filter(function(j) {
+      var text = (j.title + ' ' + j.description).toLowerCase();
+      // Non-IT indicators
+      var nonIT = /\b(?:mental\s*health|licensed\s*(?:therapist|counselor|psychologist|social\s*worker|clinical)|clinical\s*(?:psychologist|therapist|counselor)|marriage\s*and\s*family|behavioral\s*health|psychiatric|therapy\s*session|suicide\s*prevention|substance\s*abuse|addiction\s*treatment|patient\s*care|nursing|registered\s*nurse|medical\s*doctor|physician|pharmacy|paramedic|physical\s*therapy|occupational\s*therapy|speech\s*therapy|dental\s*hygien|veterinar|social\s*work(?:er)?|case\s*manager\s*(?:social|child)|child\s*welfare)\b/i;
+      if (!nonIT.test(text)) return true; // No non-IT signals → keep
+      // If has non-IT signals, check if it also has strong IT/cyber signals
+      var cyberSignals = /\b(?:SIEM|SOC\s*(?:analyst|engineer|manager)|cybersecurity|cyber\s*security|information\s*security|infosec|malware|threat\s*(?:hunt|intel|detect)|vulnerability|penetration\s*test|firewall|endpoint\s*(?:detect|protect)|encryption|MITRE|NIST|splunk|sentinel|crowdstrike|EDR|XDR|phishing|ransomware|zero\s*trust|IAM|DLP)\b/i;
+      return cyberSignals.test(text); // Keep only if also has cyber keywords
+    });
+
     // #82: Look up existing company classifications from DB
     // If a company was previously classified (manually or auto), reuse that classification
     var savedCount = 0;
