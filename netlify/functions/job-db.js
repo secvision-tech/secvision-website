@@ -55,6 +55,19 @@ exports.handler = async (event) => {
         .limit(limit)
         .toArray();
 
+      // Hybrid sort: jobs with datePosted first (newest), nulls at end (by dateScanned)
+      jobs.sort(function(a, b) {
+        var aDate = a.datePosted ? new Date(a.datePosted).getTime() : 0;
+        var bDate = b.datePosted ? new Date(b.datePosted).getTime() : 0;
+        if (aDate && bDate) return bDate - aDate; // both have dates: newest first
+        if (aDate && !bDate) return -1; // a has date, b doesn't: a first
+        if (!aDate && bDate) return 1;  // b has date, a doesn't: b first
+        // both null: sort by dateScanned
+        var aScan = a.dateScanned ? new Date(a.dateScanned).getTime() : 0;
+        var bScan = b.dateScanned ? new Date(b.dateScanned).getTime() : 0;
+        return bScan - aScan;
+      });
+
       // Map _id to string and add idx
       jobs = jobs.map(function(j, i) {
         j._id = j._id.toString();
