@@ -118,6 +118,20 @@ function extractSalary(job) {
   // Pattern: "$90-97hr" or "$90-$97hr" (no slash before hr)
   var m0 = d.match(/\$\s*([\d,.]+)\s*[\-\u2013to]+\s*\$?\s*([\d,.]+)\s*(hr|hour)\b/i);
   if (m0) return '$'+m0[1]+'-$'+m0[2]+'/hr';
+  // Pattern: "$180k-$230k" or "$180K - $230K" (k = thousand)
+  var mK = d.match(/\$\s*([\d,.]+)\s*k\s*[\-\u2013to]+\s*\$?\s*([\d,.]+)\s*k/i);
+  if (mK) {
+    var kLow = Math.round(parseFloat(mK[1].replace(/,/g,'')) * 1000);
+    var kHigh = Math.round(parseFloat(mK[2].replace(/,/g,'')) * 1000);
+    var kPeriod = detectPeriod(d, mK[0]) || '/yr';
+    return '$'+kLow.toLocaleString()+'-$'+kHigh.toLocaleString()+kPeriod;
+  }
+  // Single "$180k"
+  var mKs = d.match(/(?:salary|compensation|pay|base|rate)\s*:?\s*\$\s*([\d,.]+)\s*k\b/i);
+  if (mKs) {
+    var kVal = Math.round(parseFloat(mKs[1].replace(/,/g,'')) * 1000);
+    return '$'+kVal.toLocaleString()+'/yr';
+  }
   // Pattern: $XX.XX/hr - $YY.YY/hr
   var m1 = d.match(/\$\s*([\d,.]+)\s*\/\s*(hr|hour)\s*(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/?\s*(?:hr|hour)?/i);
   if (m1) return '$'+m1[1]+'/hr - $'+m1[3]+'/hr';

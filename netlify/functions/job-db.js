@@ -585,9 +585,18 @@ exports.handler = async (event) => {
 
         // Re-extract salary (always - fix wrong periods)
         var newSalary = null;
+        // $180k-$230k
+        var salK = d.match(/\$\s*([\d,.]+)\s*k\s*[\-\u2013to]+\s*\$?\s*([\d,.]+)\s*k/i);
+        if (salK) {
+          var kL = Math.round(parseFloat(salK[1].replace(/,/g,''))*1000);
+          var kH = Math.round(parseFloat(salK[2].replace(/,/g,''))*1000);
+          newSalary = '$'+kL.toLocaleString()+'-$'+kH.toLocaleString()+'/yr';
+        }
         // $90-97hr (no slash)
+        if (!newSalary) {
         var salNoSlash = d.match(/\$\s*([\d,.]+)\s*[\-\u2013to]+\s*\$?\s*([\d,.]+)\s*(hr|hour)\b/i);
         if (salNoSlash) newSalary = '$'+salNoSlash[1]+'-$'+salNoSlash[2]+'/hr';
+        }
         // £ IR35 rate (always daily in UK)
         var salIR35 = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*day\s*)?(?:inside|outside)\s*IR35/i);
         if (salIR35) newSalary = '£'+salIR35[1]+'-£'+salIR35[2]+'/day';
