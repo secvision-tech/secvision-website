@@ -551,27 +551,33 @@ exports.handler = async (event) => {
         else if (/\bhybrid\b/i.test(d)) newRemote = 'Hybrid';
         if (newRemote !== 'No' && j.remote !== newRemote) changes.remote = newRemote;
 
-        // Re-extract tools (always - merge new with existing)
+        // Re-extract tools (always - merge new with existing, apply proper casing)
+        var TOOL_CASE = {'siem':'SIEM','soar':'SOAR','edr':'EDR','xdr':'XDR','ndr':'NDR','dlp':'DLP','waf':'WAF','casb':'CASB','cspm':'CSPM','cwpp':'CWPP','cnapp':'CNAPP','iam':'IAM','pam':'PAM','mfa':'MFA','sso':'SSO','ueba':'UEBA','kql':'KQL','spl':'SPL','aws':'AWS','gcp':'GCP','ids/ips':'IDS/IPS','python':'Python','bash':'Bash','powershell':'PowerShell','kubernetes':'Kubernetes','docker':'Docker','terraform':'Terraform','ansible':'Ansible','jenkins':'Jenkins'};
+        var COMP_CASE = {'nist':'NIST','isms':'ISMS','itar':'ITAR','fair':'FAIR','hipaa':'HIPAA','gdpr':'GDPR','fisma':'FISMA','ccpa':'CCPA','sox':'SOX','cobit':'COBIT','hitrust':'HITRUST','cmmc':'CMMC','fedramp':'FedRAMP','octave':'OCTAVE','stride':'STRIDE','dread':'DREAD','glba':'GLBA','ferpa':'FERPA','dfars':'DFARS','coso':'COSO'};
+        function fixCase(val, caseMap) {
+          var k = val.toLowerCase().trim();
+          return caseMap[k] || val;
+        }
         var newToolsArr = uniqueMatch(fullText, TOOL_RE);
-        if (newToolsArr.length > 0) {
+        if (newToolsArr.length > 0 || (j.tools && j.tools !== 'See details')) {
           var existingTools = (j.tools && j.tools !== 'See details') ? j.tools.split(', ') : [];
           var merged = {}, mergedArr = [];
           existingTools.concat(newToolsArr).forEach(function(t) {
             var k = t.toLowerCase().trim();
-            if (!merged[k]) { merged[k] = true; mergedArr.push(t); }
+            if (!merged[k]) { merged[k] = true; mergedArr.push(fixCase(t, TOOL_CASE)); }
           });
           var newToolsStr = mergedArr.slice(0, 15).join(', ');
           if (newToolsStr !== j.tools) changes.tools = newToolsStr;
         }
 
-        // Re-extract compliance (always - merge new with existing)
+        // Re-extract compliance (always - merge new with existing, apply proper casing)
         var newCompArr = uniqueMatch(fullText, COMP_RE);
-        if (newCompArr.length > 0) {
+        if (newCompArr.length > 0 || (j.compliance && j.compliance !== 'See details')) {
           var existingComp = (j.compliance && j.compliance !== 'See details') ? j.compliance.split(', ') : [];
           var mergedC = {}, mergedCArr = [];
           existingComp.concat(newCompArr).forEach(function(c) {
             var k = c.toLowerCase().trim();
-            if (!mergedC[k]) { mergedC[k] = true; mergedCArr.push(c); }
+            if (!mergedC[k]) { mergedC[k] = true; mergedCArr.push(fixCase(c, COMP_CASE)); }
           });
           var newCompStr = mergedCArr.slice(0, 15).join(', ');
           if (newCompStr !== j.compliance) changes.compliance = newCompStr;
@@ -579,6 +585,9 @@ exports.handler = async (event) => {
 
         // Re-extract salary (always - fix wrong periods)
         var newSalary = null;
+        // $90-97hr (no slash)
+        var salNoSlash = d.match(/\$\s*([\d,.]+)\s*[\-\u2013to]+\s*\$?\s*([\d,.]+)\s*(hr|hour)\b/i);
+        if (salNoSlash) newSalary = '$'+salNoSlash[1]+'-$'+salNoSlash[2]+'/hr';
         // £ IR35 rate (always daily in UK)
         var salIR35 = d.match(/[£]\s*([\d,]+(?:\.\d{1,2})?)\s*[\-\u2013to]+\s*[£]?\s*([\d,]+(?:\.\d{1,2})?)\s*(?:per\s*day\s*)?(?:inside|outside)\s*IR35/i);
         if (salIR35) newSalary = '£'+salIR35[1]+'-£'+salIR35[2]+'/day';

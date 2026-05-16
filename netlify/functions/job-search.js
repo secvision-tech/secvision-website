@@ -115,6 +115,9 @@ function extractSalary(job) {
     if (/per\s*year|per\s*annum|annual|yearly|\/\s*yr|\/\s*year|p\.a\./i.test(ctx)) return '/yr';
     return null;
   }
+  // Pattern: "$90-97hr" or "$90-$97hr" (no slash before hr)
+  var m0 = d.match(/\$\s*([\d,.]+)\s*[\-\u2013to]+\s*\$?\s*([\d,.]+)\s*(hr|hour)\b/i);
+  if (m0) return '$'+m0[1]+'-$'+m0[2]+'/hr';
   // Pattern: $XX.XX/hr - $YY.YY/hr
   var m1 = d.match(/\$\s*([\d,.]+)\s*\/\s*(hr|hour)\s*(?:and|to|[\-\u2013])\s*\$?\s*([\d,.]+)\s*\/?\s*(?:hr|hour)?/i);
   if (m1) return '$'+m1[1]+'/hr - $'+m1[3]+'/hr';
