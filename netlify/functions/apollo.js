@@ -62,11 +62,14 @@ exports.handler = async function(event) {
           name: [p.first_name, p.last_name].filter(Boolean).join(' '),
           firstName: p.first_name || '',
           lastName: p.last_name || '',
-          designation: p.title || '',
+          designation: p.title || p.headline || '',
           linkedin: p.linkedin_url || '',
           company: (p.organization && p.organization.name) || company,
           city: p.city || '',
+          state: p.state || '',
           country: p.country || '',
+          seniority: p.seniority || '',
+          departments: (p.departments || []).join(', '),
           source: 'Apollo.io'
         };
       });

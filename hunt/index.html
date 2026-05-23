@@ -1365,16 +1365,27 @@ async function apolloSearch(){
     var d=await r.json();
     if(d.error){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">'+esc(d.error)+'</div>';return}
     if(!d.people||!d.people.length){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts found. Try LinkedIn search below.</div>';return}
-    var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🎯 Discovered '+d.people.length+' contacts (of '+d.total+' total). Select and save:</div>';
-    h+='<div style="display:flex;flex-direction:column;gap:.25rem">';
-    d.people.forEach(function(p,i){
-      var linkedinHtml=p.linkedin?'<a href="'+p.linkedin+'" target="_blank" style="color:var(--pri);font-size:.55rem">LinkedIn ↗</a>':'';
-      var locHtml=[p.city,p.country].filter(Boolean).join(', ');
-      h+='<div style="display:flex;align-items:center;gap:.4rem;background:#f3f4f6;padding:.35rem .5rem;border-radius:4px;font-size:.65rem">';
-      h+='<input type="checkbox" class="cfChk" data-name="'+esc(p.name)+'" data-desig="'+esc(p.designation)+'" data-linkedin="'+esc(p.linkedin||'')+'" data-firstname="'+esc(p.firstName||'')+'" data-lastname="'+esc(p.lastName||'')+'" checked style="margin:0;flex-shrink:0">';
-      h+='<div style="flex:1"><strong>'+esc(p.name)+'</strong> — '+esc(p.designation||'N/A')+'<br>'+linkedinHtml+(locHtml?' <span style="color:#9ca3af;font-size:.55rem">📍'+locHtml+'</span>':'')+'</div></div>';
+    // Sort: people with designation first, then by seniority
+    var sorted=d.people.sort(function(a,b){return (b.designation?1:0)-(a.designation?1:0)});
+    var showInitial=Math.min(5,sorted.length);
+    var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🎯 Discovered '+sorted.length+' contacts (of '+d.total+' total)</div>';
+    h+='<div id="cfPeopleList" style="display:flex;flex-direction:column;gap:.25rem">';
+    sorted.forEach(function(p,i){
+      var nameHtml=p.linkedin?'<a href="'+p.linkedin+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none" title="View LinkedIn Profile">'+esc(p.name)+' ↗</a>':'<strong>'+esc(p.name)+'</strong>';
+      var desigHtml=p.designation?'<span style="color:#374151">'+esc(p.designation)+'</span>':'<span style="color:#9ca3af">No title</span>';
+      var locHtml=[p.city,p.state,p.country].filter(Boolean).join(', ');
+      var hidden=i>=showInitial?' style="display:none" class="cfMoreRow"':'';
+      h+='<div'+hidden+'><div style="display:flex;align-items:center;gap:.4rem;background:#f3f4f6;padding:.35rem .5rem;border-radius:4px;font-size:.65rem">';
+      h+='<input type="checkbox" class="cfChk" data-name="'+esc(p.name)+'" data-desig="'+esc(p.designation||'')+'" data-linkedin="'+esc(p.linkedin||'')+'"'+(i<showInitial?' checked':'')+' style="margin:0;flex-shrink:0">';
+      h+='<div style="flex:1">'+nameHtml+' — '+desigHtml;
+      if(locHtml)h+=' <span style="color:#9ca3af;font-size:.55rem">📍'+locHtml+'</span>';
+      h+='</div></div></div>';
     });
-    h+='</div><div style="display:flex;gap:.3rem;margin-top:.4rem">';
+    h+='</div>';
+    if(sorted.length>showInitial){
+      h+='<a href="#" id="cfShowMore" onclick="event.preventDefault();document.querySelectorAll(\'.cfMoreRow\').forEach(function(r){r.style.display=\'\'});this.style.display=\'none\'" style="font-size:.6rem;color:var(--pri);margin-top:.2rem;display:inline-block">Show '+(sorted.length-showInitial)+' more contacts...</a>';
+    }
+    h+='<div style="display:flex;gap:.3rem;margin-top:.4rem">';
     h+='<button onclick="enrichAndSave()" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">📧 Enrich Emails & Save (1 credit each)</button>';
     h+='<button onclick="saveWithoutEmails()" style="padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Without Emails (free)</button>';
     h+='</div>';
@@ -1438,7 +1449,11 @@ async function apolloEnrich(){
     document.getElementById('cfCompanyInfo').innerHTML=h;
     // Save company size to DB
     if(d.size){
-      fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanySize',company:cfCompany,companySize:d.size+' employees'})});
+      try{
+        var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanySize',company:cfCompany,companySize:d.size+' employees'})});
+        var sd=await sr.json();
+        document.getElementById('cfStatus').textContent='✅ Company size saved ('+( sd.modified||0)+' jobs updated).';
+      }catch(e){document.getElementById('cfStatus').textContent='Size displayed but failed to save: '+e.message}
     }
   }catch(e){document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#DC2626">Error: '+e.message+'</span>'}
   finally{btn.textContent='🏢 Get Company Size';btn.disabled=false}
