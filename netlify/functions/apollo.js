@@ -27,14 +27,15 @@ exports.handler = async function(event) {
 
     if (!APOLLO_KEY) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'APOLLO_API_KEY environment variable not set in Netlify' }) };
 
-    // Debug: test Apollo connection
+    // Debug: test Apollo connection with real endpoint
     if (action === 'testConnection') {
       var keyPreview = APOLLO_KEY.slice(0, 6) + '...' + APOLLO_KEY.slice(-4);
       try {
-        var resp = await fetch('https://api.apollo.io/api/v1/auth/health', {
+        // Test with a minimal people search
+        var resp = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY },
-          body: JSON.stringify({ api_key: APOLLO_KEY })
+          body: JSON.stringify({ api_key: APOLLO_KEY, q_organization_name: 'Microsoft', person_titles: ['CISO'], page: 1, per_page: 1 })
         });
         var respText = await resp.text();
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ 
