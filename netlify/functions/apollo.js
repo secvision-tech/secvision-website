@@ -3,9 +3,11 @@ const APOLLO_KEY = process.env.APOLLO_API_KEY;
 const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
 
 async function apolloFetch(endpoint, body) {
+  // Pass API key both in header and body for compatibility
+  body.api_key = APOLLO_KEY;
   var resp = await fetch('https://api.apollo.io/api/v1/' + endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY, 'Cache-Control': 'no-cache' },
     body: JSON.stringify(body)
   });
   if (!resp.ok) {
@@ -22,6 +24,8 @@ exports.handler = async function(event) {
   try {
     var body = JSON.parse(event.body || '{}');
     var action = body.action;
+
+    if (!APOLLO_KEY) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'APOLLO_API_KEY environment variable not set in Netlify' }) };
 
     // ACTION: searchPeople - find contacts at a company by title
     if (action === 'searchPeople') {
