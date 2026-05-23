@@ -261,7 +261,7 @@ exports.handler = async (event) => {
         { $project: { companyNorm: { $trim: { input: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1 } },
         { $group: { _id: { company: '$companyNorm', type: '$companyType' }, count: { $sum: 1 },
           statuses: { $push: '$status' }, locations: { $addToSet: '$location' },
-          companyUrl: { $first: '$companyUrl' } } },
+          companyUrl: { $first: '$companyUrl' }, companySize: { $first: '$companySize' } } },
         { $sort: { count: -1 } },
         { $limit: 20 }
       ]).toArray();
@@ -310,7 +310,7 @@ exports.handler = async (event) => {
       var contractByCompany = await col.aggregate([
         { $match: contractFilter },
         { $project: { companyNorm: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '\u00AE', replacement: '' } }, find: '\u2122', replacement: '' } }, find: '\u00A9', replacement: '' } } }, status: 1, location: 1, companyUrl: 1, salary: 1, companyType: 1 } },
-        { $group: { _id: '$companyNorm', count: { $sum: 1 }, statuses: { $push: '$status' }, locations: { $addToSet: '$location' }, companyUrl: { $first: '$companyUrl' }, salary: { $first: '$salary' }, companyType: { $first: '$companyType' } } },
+        { $group: { _id: '$companyNorm', count: { $sum: 1 }, statuses: { $push: '$status' }, locations: { $addToSet: '$location' }, companyUrl: { $first: '$companyUrl' }, salary: { $first: '$salary' }, companyType: { $first: '$companyType' }, companySize: { $first: '$companySize' } } },
         { $sort: { count: -1 } },
         { $limit: 15 }
       ]).toArray();
@@ -505,6 +505,39 @@ exports.handler = async (event) => {
     }
 
     // ACTION: reExtract - re-process all jobs to update extracted fields from stored descriptions
+    // #176: Contact management
+    if (action === 'saveContacts') {
+      var contactsCol = db.collection('contacts');
+      var contacts = body.contacts || [];
+      var company = body.company || '';
+      if (!company || !contacts.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company and contacts required' }) };
+      var ops = contacts.map(function(c) {
+        return { updateOne: { filter: { company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }, email: c.email },
+          update: { $set: { company: company, name: c.name, designation: c.designation, email: c.email, source: c.source || 'Manual', updatedAt: new Date() },
+            $setOnInsert: { createdAt: new Date() } }, upsert: true } };
+      });
+      var result = await contactsCol.bulkWrite(ops, { ordered: false });
+      // Also update the contact field on matching jobs
+      var contactStr = contacts.map(function(c) { return c.name + ' (' + c.designation + ' - ' + c.email + ')'; }).join(', ');
+      var compPattern = company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      await col.updateMany({ company: { $regex: compPattern, $options: 'i' } }, { $set: { contact: contactStr } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: contacts.length, contactStr: contactStr }) };
+    }
+
+    if (action === 'getContacts') {
+      var contactsCol = db.collection('contacts');
+      var compPattern = (body.company || '').replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var contacts = await contactsCol.find({ company: { $regex: compPattern, $options: 'i' } }).toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: contacts }) };
+    }
+
+    if (action === 'deleteContact') {
+      var contactsCol = db.collection('contacts');
+      var { ObjectId } = require('mongodb');
+      await contactsCol.deleteOne({ _id: new ObjectId(body.contactId) });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: true }) };
+    }
+
     if (action === 'reExtract') {
       var allJobs = await col.find({}).project({ _id: 1, title: 1, titleClean: 1, description: 1, jobType: 1, jobTypeUpdatedAt: 1, remote: 1, tools: 1, compliance: 1, experience: 1, salary: 1 }).toArray();
       var TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|KQL|SPL|YARA|Sigma|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|Prisma\s*Cloud|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA/gi;

@@ -531,6 +531,17 @@ function classifyCompany(company, desc) {
   return bestScore >= 3 ? best : '';
 }
 
+// #175: Extract company size from JD
+function extractCompanySize(desc) {
+  if (!desc) return '';
+  var m = desc.match(/(\d[\d,]+)\s*\+?\s*(?:employees|team\s*members|associates|staff|people|workers)\b/i)
+    || desc.match(/(?:team|company|organization|firm)\s*(?:of|with)\s*(?:over\s*|more\s*than\s*)?(\d[\d,]+)\s*\+?\s*(?:employees|people)?/i)
+    || desc.match(/(?:Fortune|Inc\.?)\s*(\d+)\b/i)
+    || desc.match(/(\d[\d,]+)\s*\+?\s*(?:global|worldwide)\s*(?:employees|team)/i);
+  if (m) { var n = m[1].replace(/,/g,''); return /Fortune|Inc/i.test(m[0]) ? 'Fortune '+n : parseInt(n).toLocaleString()+'+'; }
+  return '';
+}
+
 // #153: Extract contract duration from JD
 function extractDuration(desc) {
   if (!desc) return '';
@@ -702,6 +713,7 @@ exports.handler = async (event) => {
         dateRaw: job.job_posted_at_datetime_utc || '',
         title: job.job_title || 'N/A', titleClean: (function(){ var tc=cleanTitle(job.job_title); var dur=extractDuration((job.job_title||'')+' '+desc); return (dur&&!/\d+\s*(?:month|week|year)/i.test(tc))?tc+' - '+dur:tc; })(), company: actualCompany,
         companyType: classifyCompany(actualCompany, desc),
+        companySize: extractCompanySize(desc),
         companyUrl: companyWebUrl,
         location: enrichLocation(job),
         detectedCountry: detectCountry(job, body.country),
@@ -777,6 +789,7 @@ exports.handler = async (event) => {
               skills: j.skills, certifications: j.certifications, compliance: j.compliance,
               tools: j.tools, eligibility: j.eligibility, salary: j.salary, contact: j.contact,
               source: j.source, jobType: j.jobType, remote: j.remote, applyLink: j.applyLink,
+              companySize: j.companySize,
               description: j.description, qualifications: j.qualifications,
               responsibilities: j.responsibilities, benefits: j.benefits
             }, $setOnInsert: { status: 'new', companyType: j.companyType || '', notes: '', searchedBy: userEmail,

@@ -1214,10 +1214,11 @@ async function searchDbByCompany(company){
 function renderPartnerTable(data){
   var el=document.getElementById('partnerTable');if(!el)return;
   if(!data||!data.length){el.innerHTML='';return}
-  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Openings</th><th>Pipeline Status</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Size</th><th>Openings</th><th>Pipeline Status</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
   data.slice(0,15).forEach(function(d,i){
     var company=d._id?.company||'Unknown';
     var type=d._id?.type||'';
+    var size=d.companySize||'-';
     var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'<span class="ctype-badge ctype-unknown">Unclassified</span>';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
@@ -1234,7 +1235,7 @@ function renderPartnerTable(data){
     }
     var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none;cursor:pointer" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchCompanyOpenings(this.dataset.company)">'+d.count+' openings</a>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("SOC Director" OR "VP Operations" OR "CISO" OR "recruiter" OR "HR")');
-    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td>'+openingsLink+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="'+searchUrl+'" target="_blank" class="act-link">Find Contacts</a></td></tr>';
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Find Contacts</a></td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -1243,10 +1244,11 @@ function renderPartnerTable(data){
 function renderContractTable(data){
   var el=document.getElementById('contractTable');if(!el)return;
   if(!data||!data.length){el.innerHTML='<div class="css-no-data">No contract jobs yet. Run searches with contract-specific roles.</div>';return}
-  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Contracts</th><th>Rate/Salary</th><th>Pipeline</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Size</th><th>Contracts</th><th>Rate/Salary</th><th>Pipeline</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
   data.forEach(function(d,i){
     var company=d._id||'Unknown';
     var type=d.companyType||'';
+    var size=d.companySize||'-';
     var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
@@ -1258,7 +1260,7 @@ function renderContractTable(data){
     var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchContractOpenings(this.dataset.company)">'+d.count+'</a>';
     var salaryHtml='<span style="font-size:.6rem;color:var(--g5)">'+(d.salary||'N/A')+'</span>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("recruiter" OR "HR" OR "hiring manager" OR "talent acquisition")');
-    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="'+searchUrl+'" target="_blank" class="act-link">Find Contacts</a></td></tr>';
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Find Contacts</a></td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -1318,6 +1320,65 @@ async function searchDbByCompanyAndType(company,jobType){
     }else{filtered=allJobs.slice();curPage=1;renderTable();document.getElementById('exportBtns').style.display='flex'}
   }catch(err){console.error(err);document.getElementById('loadState').style.display='none';
     document.getElementById('emptyState').style.display='block';document.getElementById('emptyState').innerHTML='<h3>Error</h3><p>'+err.message+'</p>'}
+}
+
+function renderSkillsInsight(certs,tools,skills,roles){
+
+// #176: Contact Finder Popup
+var contactPopupHtml='<div id="contactPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:1000;justify-content:center;align-items:center"><div style="background:var(--bg);border-radius:8px;width:95%;max-width:560px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 4px 20px rgba(0,0,0,.3)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="cfTitle">Find Contacts</h3><button onclick="closeContactPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="cfSearch" style="margin-bottom:.8rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">🔍 Search for contacts:</div><div style="display:flex;flex-wrap:wrap;gap:.3rem" id="cfLinks"></div></div><div id="cfExisting" style="margin-bottom:.8rem"></div><div style="border-top:1px solid var(--g2);padding-top:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">➕ Add Contact</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem"><input id="cfName" placeholder="Full Name" style="padding:.3rem .5rem;border:1px solid var(--g3);border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfDesignation" placeholder="Designation (e.g. CISO, HR Head)" style="padding:.3rem .5rem;border:1px solid var(--g3);border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfEmail" placeholder="Email" style="padding:.3rem .5rem;border:1px solid var(--g3);border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><select id="cfSource" style="padding:.3rem .5rem;border:1px solid var(--g3);border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><option value="LinkedIn">LinkedIn</option><option value="Company Website">Company Website</option><option value="Job Board">Job Board</option><option value="Manual">Manual</option></select></div><button onclick="addContact()" style="margin-top:.4rem;padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">Add & Save Contact</button><div id="cfStatus" style="font-size:.6rem;color:var(--pri);margin-top:.3rem"></div></div></div></div>';
+document.body.insertAdjacentHTML('beforeend',contactPopupHtml);
+
+var cfCompany='';
+async function openContactFinder(company){
+  cfCompany=company;
+  document.getElementById('cfTitle').textContent='Find Contacts — '+company;
+  var popup=document.getElementById('contactPopup');popup.style.display='flex';
+  // Search links
+  var roles=['CISO','VP Security','Hiring Manager','HR Head','Senior Recruiter','Talent Acquisition','SOC Manager','Security Director'];
+  var linksHtml=roles.map(function(r){return '<a href="https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" "'+r+'"')+'" target="_blank" style="font-size:.6rem;padding:.2rem .5rem;background:var(--pri);color:#fff;border-radius:3px;text-decoration:none">'+r+'</a>'}).join('');
+  linksHtml+=' <a href="https://www.google.com/search?q='+encodeURIComponent(company+' leadership team site:linkedin.com')+'" target="_blank" style="font-size:.6rem;padding:.2rem .5rem;background:var(--g4);color:#fff;border-radius:3px;text-decoration:none">Google Leadership</a>';
+  linksHtml+=' <a href="https://www.google.com/search?q='+encodeURIComponent(company+' about us team')+'" target="_blank" style="font-size:.6rem;padding:.2rem .5rem;background:var(--g4);color:#fff;border-radius:3px;text-decoration:none">Company Website</a>';
+  document.getElementById('cfLinks').innerHTML=linksHtml;
+  // Load existing contacts
+  document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:var(--g5)">Loading contacts...</div>';
+  document.getElementById('cfStatus').textContent='';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:company})});
+    var d=await r.json();
+    if(d.contacts&&d.contacts.length){
+      var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">📋 Saved Contacts ('+d.contacts.length+')</div><div style="display:flex;flex-direction:column;gap:.2rem">';
+      d.contacts.forEach(function(c){
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--g1);padding:.3rem .5rem;border-radius:4px;font-size:.65rem"><span><strong>'+esc(c.name)+'</strong> — '+esc(c.designation)+' — <a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a> <span style="color:var(--g4);font-size:.55rem">('+esc(c.source||'')+')</span></span><button onclick="deleteContact(\''+c._id+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.7rem" title="Remove">✕</button></div>';
+      });
+      h+='</div>';
+      document.getElementById('cfExisting').innerHTML=h;
+    }else{
+      document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:var(--g4);padding:.3rem;background:var(--g1);border-radius:4px">No contacts saved yet. Use search links above to find contacts, then add them below.</div>';
+    }
+  }catch(e){document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:#DC2626">Error loading contacts</div>'}
+}
+function closeContactPopup(){document.getElementById('contactPopup').style.display='none'}
+async function addContact(){
+  var name=document.getElementById('cfName').value.trim();
+  var desig=document.getElementById('cfDesignation').value.trim();
+  var email=document.getElementById('cfEmail').value.trim();
+  var source=document.getElementById('cfSource').value;
+  if(!name||!desig){document.getElementById('cfStatus').textContent='Name and designation are required.';return}
+  document.getElementById('cfStatus').textContent='Saving...';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:[{name:name,designation:desig,email:email||'N/A',source:source}]})});
+    var d=await r.json();
+    document.getElementById('cfStatus').textContent='Saved! Contact added to all '+cfCompany+' jobs.';
+    document.getElementById('cfName').value='';document.getElementById('cfDesignation').value='';document.getElementById('cfEmail').value='';
+    openContactFinder(cfCompany);
+  }catch(e){document.getElementById('cfStatus').textContent='Error: '+e.message}
+}
+async function deleteContact(id){
+  if(!confirm('Remove this contact?'))return;
+  try{
+    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'deleteContact',contactId:id})});
+    openContactFinder(cfCompany);
+  }catch(e){alert('Error: '+e.message)}
 }
 
 function renderSkillsInsight(certs,tools,skills,roles){
