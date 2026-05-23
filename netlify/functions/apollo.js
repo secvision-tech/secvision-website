@@ -27,6 +27,27 @@ exports.handler = async function(event) {
 
     if (!APOLLO_KEY) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'APOLLO_API_KEY environment variable not set in Netlify' }) };
 
+    // Debug: test Apollo connection
+    if (action === 'testConnection') {
+      var keyPreview = APOLLO_KEY.slice(0, 6) + '...' + APOLLO_KEY.slice(-4);
+      try {
+        var resp = await fetch('https://api.apollo.io/api/v1/auth/health', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY },
+          body: JSON.stringify({ api_key: APOLLO_KEY })
+        });
+        var respText = await resp.text();
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ 
+          status: resp.status, 
+          keyPreview: keyPreview,
+          keyLength: APOLLO_KEY.length,
+          response: respText.slice(0, 500)
+        })};
+      } catch(e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ keyPreview: keyPreview, error: e.message }) };
+      }
+    }
+
     // ACTION: searchPeople - find contacts at a company by title
     if (action === 'searchPeople') {
       var company = body.company || '';
