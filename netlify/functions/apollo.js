@@ -27,26 +27,29 @@ exports.handler = async function(event) {
 
     if (!APOLLO_KEY) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'APOLLO_API_KEY environment variable not set in Netlify' }) };
 
-    // Debug: test Apollo connection with real endpoint
+    // Debug: test which Apollo endpoints are accessible
     if (action === 'testConnection') {
       var keyPreview = APOLLO_KEY.slice(0, 6) + '...' + APOLLO_KEY.slice(-4);
-      try {
-        // Test with a minimal people search
-        var resp = await fetch('https://api.apollo.io/api/v1/mixed_people/search', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY },
-          body: JSON.stringify({ api_key: APOLLO_KEY, q_organization_name: 'Microsoft', person_titles: ['CISO'], page: 1, per_page: 1 })
-        });
-        var respText = await resp.text();
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ 
-          status: resp.status, 
-          keyPreview: keyPreview,
-          keyLength: APOLLO_KEY.length,
-          response: respText.slice(0, 500)
-        })};
-      } catch(e) {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ keyPreview: keyPreview, error: e.message }) };
+      var endpoints = [
+        { name: 'people/search', body: { api_key: APOLLO_KEY, q_organization_name: 'Microsoft', person_titles: ['CISO'], page: 1, per_page: 1 } },
+        { name: 'mixed_people/search', body: { api_key: APOLLO_KEY, q_organization_name: 'Microsoft', person_titles: ['CISO'], page: 1, per_page: 1 } },
+        { name: 'organizations/enrich', body: { api_key: APOLLO_KEY, domain: 'microsoft.com' } },
+        { name: 'mixed_companies/search', body: { api_key: APOLLO_KEY, q_organization_name: 'Microsoft', page: 1, per_page: 1 } },
+        { name: 'people/match', body: { api_key: APOLLO_KEY, organization_name: 'Microsoft', name: 'Satya Nadella' } },
+      ];
+      var results = [];
+      for (var ep of endpoints) {
+        try {
+          var resp = await fetch('https://api.apollo.io/api/v1/' + ep.name, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY },
+            body: JSON.stringify(ep.body)
+          });
+          var txt = await resp.text();
+          results.push(ep.name + ': ' + resp.status + (resp.status === 200 ? ' ✅' : ' ❌ ' + txt.slice(0, 80)));
+        } catch(e) { results.push(ep.name + ': ERROR ' + e.message); }
       }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ keyPreview: keyPreview, results: results }) };
     }
 
     // ACTION: searchPeople - find contacts at a company by title

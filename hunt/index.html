@@ -1428,11 +1428,13 @@ async function saveSelected(){
 }
 function closeContactPopup(){document.getElementById('contactPopup').style.display='none'}
 async function testApollo(){
-  document.getElementById('cfStatus').textContent='Testing Apollo.io connection...';
+  document.getElementById('cfStatus').textContent='Testing 5 Apollo.io endpoints...';
   try{
     var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'testConnection'})});
     var d=await r.json();
-    document.getElementById('cfStatus').innerHTML='<strong>Apollo Debug:</strong> Key: '+d.keyPreview+' (length: '+d.keyLength+') | Status: '+d.status+' | Response: <code style="font-size:.55rem">'+esc((d.response||d.error||'').slice(0,300))+'</code>';
+    var html='<strong>Apollo Key:</strong> '+d.keyPreview+'<br>';
+    (d.results||[]).forEach(function(r){html+='<div style="font-size:.55rem;padding:.1rem 0;font-family:monospace">'+esc(r)+'</div>'});
+    document.getElementById('cfStatus').innerHTML=html;
   }catch(e){document.getElementById('cfStatus').textContent='Test failed: '+e.message}
 }
 async function addContact(){
