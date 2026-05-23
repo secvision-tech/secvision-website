@@ -1363,7 +1363,13 @@ async function apolloSearch(){
   try{
     var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'searchPeople',company:cfCompany})});
     var d=await r.json();
-    if(d.error){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">Error: '+d.error+'</div>';return}
+    if(d.error){
+      var isFreePlan=d.error.indexOf('free plan')>-1||d.error.indexOf('API_INACCESSIBLE')>-1;
+      if(isFreePlan){
+        document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#854F0B;padding:.4rem;background:#fef3c7;border-radius:4px;border-left:3px solid #d97706"><strong>Apollo.io Free Plan:</strong> People Search requires Basic plan ($49/mo). Use the manual LinkedIn search links below to find contacts, then add them using the form.</div>';
+      }else{
+        document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">Error: '+d.error+'</div>';
+      }return}
     if(!d.people||!d.people.length){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts found via Apollo.io. Try manual LinkedIn search below.</div>';return}
     var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🎯 Discovered Contacts ('+d.people.length+' of '+d.total+')</div>';
     h+='<div style="display:flex;flex-direction:column;gap:.25rem">';
@@ -1386,7 +1392,9 @@ async function apolloEnrich(){
   try{
     var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:cfCompany})});
     var d=await r.json();
-    if(d.error||d.notFound){document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#9ca3af">Company info not found in Apollo.</span>';return}
+    if(d.error||d.notFound){
+      var isFreePlan=(d.error||'').indexOf('free plan')>-1||(d.error||'').indexOf('API_INACCESSIBLE')>-1;
+      document.getElementById('cfCompanyInfo').innerHTML=isFreePlan?'<span style="color:#854F0B;font-size:.6rem">Company enrichment requires Apollo.io Basic plan ($49/mo).</span>':'<span style="color:#9ca3af;font-size:.6rem">Company info not found.</span>';return}
     var h='<div style="background:#f0fdf4;padding:.4rem .6rem;border-radius:4px;font-size:.65rem;border-left:3px solid #16a34a">';
     h+='<strong>'+esc(d.company)+'</strong>';
     if(d.size)h+=' — <strong>'+d.size+' employees</strong>';
