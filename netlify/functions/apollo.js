@@ -6,7 +6,7 @@ async function apolloFetch(endpoint, body) {
   body.api_key = APOLLO_KEY;
   var resp = await fetch('https://api.apollo.io/api/v1/' + endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY, 'Cache-Control': 'no-cache' },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY },
     body: JSON.stringify(body)
   });
   if (!resp.ok) {
@@ -25,28 +25,37 @@ exports.handler = async function(event) {
     var action = body.action;
     if (!APOLLO_KEY) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'APOLLO_API_KEY not set' }) };
 
-    // ACTION: searchPeople - FREE, no credits (uses api_search endpoint)
-    // Returns names/titles/LinkedIn but NOT emails. Use matchPerson to enrich for emails.
+    // ACTION: searchPeople - find contacts at a company
+    // Step 1: Find company domain via mixed_companies/search
+    // Step 2: Search people via mixed_people/api_search with domain
     if (action === 'searchPeople') {
       var company = body.company || '';
+      var domain = body.domain || '';
       var titles = body.titles || ['CISO', 'VP Security', 'Hiring Manager', 'HR Head', 'Recruiter', 'Talent Acquisition', 'SOC Manager', 'Security Director'];
-      if (!company) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company required' }) };
+      if (!company && !domain) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company required' }) };
 
-      var searchBody = {
-        person_titles: titles,
-        page: 1,
-        per_page: 15
-      };
+      // Step 1: Get company domain if not provided
+      if (!domain) {
+        try {
+          var companyResult = await apolloFetch('mixed_companies/search', {
+            q_organization_name: company, page: 1, per_page: 1
+          });
+          if (companyResult.organizations && companyResult.organizations.length) {
+            domain = companyResult.organizations[0].primary_domain || '';
+          }
+        } catch(e) { /* proceed without domain */ }
+      }
 
-      // Try with organization domain first, fall back to keyword search
-      if (body.domain) {
-        searchBody.q_organization_domains_list = [body.domain];
+      // Step 2: Search people
+      var searchBody = { person_titles: titles, page: 1, per_page: 15 };
+      if (domain) {
+        searchBody.q_organization_domains_list = [domain];
       } else {
+        // Fallback: use keyword search
         searchBody.q_keywords = company;
       }
 
       var data = await apolloFetch('mixed_people/api_search', searchBody);
-
       var people = (data.people || []).map(function(p) {
         return {
           id: p.id || '',
@@ -56,18 +65,16 @@ exports.handler = async function(event) {
           designation: p.title || '',
           linkedin: p.linkedin_url || '',
           company: (p.organization && p.organization.name) || company,
-          companyDomain: (p.organization && p.organization.primary_domain) || '',
           city: p.city || '',
           country: p.country || '',
-          photo: p.photo_url || '',
-          emailStatus: p.email_status || '',
           source: 'Apollo.io'
         };
       });
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         people: people,
-        total: data.pagination ? data.pagination.total_entries : people.length
+        total: data.pagination ? data.pagination.total_entries : people.length,
+        domain: domain
       })};
     }
 
@@ -76,7 +83,6 @@ exports.handler = async function(event) {
       var name = body.name || '';
       var company = body.company || '';
       if (!name) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Name required' }) };
-
       var parts = name.trim().split(/\s+/);
       var matchBody = { organization_name: company };
       if (parts[0]) matchBody.first_name = parts[0];
@@ -99,7 +105,7 @@ exports.handler = async function(event) {
       })};
     }
 
-    // ACTION: enrichCompany - get company details (Basic plan)
+    // ACTION: enrichCompany - get company details
     if (action === 'enrichCompany') {
       var company = body.company || '';
       var domain = body.domain || '';
@@ -107,13 +113,15 @@ exports.handler = async function(event) {
 
       var org = null;
 
+      // Try domain first
       if (domain) {
         try {
           var data = await apolloFetch('organizations/enrich', { domain: domain });
           org = data.organization || null;
-        } catch(e) { /* fall through */ }
+        } catch(e) {}
       }
 
+      // Search by name, then enrich by domain
       if (!org) {
         try {
           var sr = await apolloFetch('mixed_companies/search', { q_organization_name: company, page: 1, per_page: 1 });
@@ -144,12 +152,11 @@ exports.handler = async function(event) {
         country: org.country || '',
         city: org.city || '',
         logo: org.logo_url || '',
-        technologies: (org.current_technologies || []).slice(0, 10).map(function(t) { return t.name || t; }),
         description: (org.short_description || '').slice(0, 200)
       })};
     }
 
-    return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action' }) };
+    return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action. Use searchPeople, matchPerson, or enrichCompany' }) };
   } catch(e) {
     console.error('Apollo error:', e);
     return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: e.message }) };
