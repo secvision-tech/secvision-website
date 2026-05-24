@@ -1359,67 +1359,68 @@ async function openContactFinder(company){
 async function apolloSearch(){
   var btn=document.getElementById('cfAutoBtn');
   btn.textContent='⏳ Searching...';btn.disabled=true;
-  document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Searching Apollo.io for contacts at '+cfCompany+'...</div>';
+  document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Step 1: Searching Apollo.io for contacts at '+cfCompany+'...</div>';
   try{
     var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'searchPeople',company:cfCompany})});
     var d=await r.json();
     if(d.error){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">'+esc(d.error)+'</div>';return}
     if(!d.people||!d.people.length){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts found. Try LinkedIn search below.</div>';return}
-    // Sort: people with designation first, then by seniority
-    var sorted=d.people.sort(function(a,b){return (b.designation?1:0)-(a.designation?1:0)});
-    var showInitial=Math.min(5,sorted.length);
-    var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🎯 Discovered '+sorted.length+' contacts (of '+d.total+' total)</div>';
+
+    // Step 2: Auto-enrich top contacts for emails + LinkedIn (1 credit each)
+    var enrichCount=Math.min(5,d.people.length);
+    document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Step 2: Enriching '+enrichCount+' contacts for emails & LinkedIn ('+enrichCount+' credits)...</div>';
+    var enriched=[];
+    for(var i=0;i<d.people.length;i++){
+      var p=d.people[i];
+      if(i<enrichCount && p.name){
+        document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Enriching '+(i+1)+'/'+enrichCount+': '+p.name+'...</div>';
+        try{
+          var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:p.name,company:cfCompany})});
+          var ed=await er.json();
+          if(ed.found){
+            enriched.push({name:ed.name||p.name,designation:ed.designation||p.designation,email:ed.email||'',linkedin:ed.linkedin||'',city:ed.city||p.city,country:ed.country||p.country,phone:ed.phone||'',enriched:true});
+          }else{
+            enriched.push({name:p.name,designation:p.designation,email:'',linkedin:'',city:p.city,country:p.country,enriched:false});
+          }
+        }catch(e){enriched.push({name:p.name,designation:p.designation,email:'',linkedin:'',city:p.city,country:p.country,enriched:false})}
+      }else{
+        enriched.push({name:p.name,designation:p.designation,email:'',linkedin:'',city:p.city,country:p.country,enriched:false});
+      }
+    }
+
+    // Display results
+    var showInitial=Math.min(5,enriched.length);
+    var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🎯 '+enriched.length+' contacts found ('+enrichCount+' enriched with emails)</div>';
     h+='<div id="cfPeopleList" style="display:flex;flex-direction:column;gap:.25rem">';
-    sorted.forEach(function(p,i){
-      var nameHtml=p.linkedin?'<a href="'+p.linkedin+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none" title="View LinkedIn Profile">'+esc(p.name)+' ↗</a>':'<strong>'+esc(p.name)+'</strong>';
+    enriched.forEach(function(p,i){
+      var nameHtml=p.linkedin?'<a href="'+p.linkedin+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none">'+esc(p.name)+' ↗</a>':'<strong>'+esc(p.name)+'</strong>';
       var desigHtml=p.designation?'<span style="color:#374151">'+esc(p.designation)+'</span>':'<span style="color:#9ca3af">No title</span>';
-      var locHtml=[p.city,p.state,p.country].filter(Boolean).join(', ');
+      var emailHtml=p.email?'<a href="mailto:'+esc(p.email)+'" style="color:var(--ac);font-size:.6rem">'+esc(p.email)+'</a>':'<span style="color:#d1d5db;font-size:.55rem">'+(p.enriched?'No email found':'Not enriched')+'</span>';
+      var locHtml=[p.city,p.country].filter(Boolean).join(', ');
       var hidden=i>=showInitial?' style="display:none" class="cfMoreRow"':'';
-      h+='<div'+hidden+'><div style="display:flex;align-items:center;gap:.4rem;background:#f3f4f6;padding:.35rem .5rem;border-radius:4px;font-size:.65rem">';
-      h+='<input type="checkbox" class="cfChk" data-name="'+esc(p.name)+'" data-desig="'+esc(p.designation||'')+'" data-linkedin="'+esc(p.linkedin||'')+'"'+(i<showInitial?' checked':'')+' style="margin:0;flex-shrink:0">';
-      h+='<div style="flex:1">'+nameHtml+' — '+desigHtml;
+      h+='<div'+hidden+'><div style="display:flex;align-items:center;gap:.4rem;background:'+(p.enriched?'#f0fdf4':'#f3f4f6')+';padding:.35rem .5rem;border-radius:4px;font-size:.65rem;border-left:3px solid '+(p.enriched?'#16a34a':'#d1d5db')+'">';
+      h+='<input type="checkbox" class="cfChk" data-name="'+esc(p.name)+'" data-desig="'+esc(p.designation||'')+'" data-email="'+esc(p.email||'')+'" data-linkedin="'+esc(p.linkedin||'')+'"'+(p.email||p.linkedin?' checked':'')+' style="margin:0;flex-shrink:0">';
+      h+='<div style="flex:1">'+nameHtml+' — '+desigHtml+'<br>'+emailHtml;
+      if(p.phone)h+=' <span style="font-size:.55rem;color:#6b7280">📞'+esc(p.phone)+'</span>';
       if(locHtml)h+=' <span style="color:#9ca3af;font-size:.55rem">📍'+locHtml+'</span>';
       h+='</div></div></div>';
     });
     h+='</div>';
-    if(sorted.length>showInitial){
-      h+='<a href="#" id="cfShowMore" onclick="event.preventDefault();document.querySelectorAll(\'.cfMoreRow\').forEach(function(r){r.style.display=\'\'});this.style.display=\'none\'" style="font-size:.6rem;color:var(--pri);margin-top:.2rem;display:inline-block">Show '+(sorted.length-showInitial)+' more contacts...</a>';
+    if(enriched.length>showInitial){
+      h+='<a href="#" onclick="event.preventDefault();document.querySelectorAll(\'.cfMoreRow\').forEach(function(r){r.style.display=\'\'});this.style.display=\'none\'" style="font-size:.6rem;color:var(--pri);margin-top:.2rem;display:inline-block">Show '+(enriched.length-showInitial)+' more...</a>';
     }
-    h+='<div style="display:flex;gap:.3rem;margin-top:.4rem">';
-    h+='<button onclick="enrichAndSave()" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">📧 Enrich Emails & Save (1 credit each)</button>';
-    h+='<button onclick="saveWithoutEmails()" style="padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Without Emails (free)</button>';
+    h+='<div style="display:flex;gap:.3rem;margin-top:.5rem">';
+    h+='<button onclick="saveDiscovered()" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Selected Contacts</button>';
     h+='</div>';
     document.getElementById('cfDiscovered').innerHTML=h;
   }catch(e){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">Error: '+esc(e.message)+'</div>'}
   finally{btn.textContent='🔍 Auto-Discover Contacts';btn.disabled=false}
 }
-async function enrichAndSave(){
-  var checks=document.querySelectorAll('.cfChk:checked');
-  if(!checks.length){document.getElementById('cfStatus').textContent='Select at least one contact.';return}
-  document.getElementById('cfStatus').textContent='Enriching '+checks.length+' contacts for emails...';
-  var contacts=[];
-  for(var i=0;i<checks.length;i++){
-    var c=checks[i];
-    var name=c.dataset.name;
-    document.getElementById('cfStatus').textContent='Enriching '+(i+1)+'/'+checks.length+': '+name+'...';
-    try{
-      var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:name,company:cfCompany})});
-      var d=await r.json();
-      contacts.push({name:d.found?d.name:name,designation:d.found?d.designation:c.dataset.desig,email:d.found&&d.email?d.email:'N/A',linkedin:d.found&&d.linkedin?d.linkedin:c.dataset.linkedin,source:'Apollo.io'});
-    }catch(e){contacts.push({name:name,designation:c.dataset.desig,email:'N/A',linkedin:c.dataset.linkedin,source:'Apollo.io'})}
-  }
-  document.getElementById('cfStatus').textContent='Saving '+contacts.length+' contacts...';
-  try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:contacts})});
-    document.getElementById('cfStatus').textContent='✅ Saved '+contacts.length+' contacts with emails to all '+cfCompany+' jobs!';
-    openContactFinder(cfCompany);
-  }catch(e){document.getElementById('cfStatus').textContent='Error saving: '+e.message}
-}
-async function saveWithoutEmails(){
+async function saveDiscovered(){
   var checks=document.querySelectorAll('.cfChk:checked');
   if(!checks.length){document.getElementById('cfStatus').textContent='Select at least one contact.';return}
   var contacts=[];
-  checks.forEach(function(c){contacts.push({name:c.dataset.name,designation:c.dataset.desig,email:'N/A',linkedin:c.dataset.linkedin||'',source:'Apollo.io'})});
+  checks.forEach(function(c){contacts.push({name:c.dataset.name,designation:c.dataset.desig||'N/A',email:c.dataset.email||'N/A',linkedin:c.dataset.linkedin||'',source:'Apollo.io'})});
   document.getElementById('cfStatus').textContent='Saving '+contacts.length+' contacts...';
   try{
     await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:contacts})});
