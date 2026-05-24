@@ -1368,13 +1368,14 @@ async function apolloSearch(){
 
     // Step 2: Auto-enrich top 5 for emails + LinkedIn + phone
     var enrichCount=Math.min(5,d.people.length);
+    var companyDomain=d.domain||'';
     var enriched=[];
     for(var i=0;i<d.people.length;i++){
       var p=d.people[i];
       if(i<enrichCount && p.name){
         document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Step 2: Enriching '+(i+1)+'/'+enrichCount+': '+p.name+'... (1 credit)</div>';
         try{
-          var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:p.name,company:cfCompany})});
+          var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:p.name,company:cfCompany,personId:p.id||'',domain:companyDomain})});
           var ed=await er.json();
           if(ed.found){
             enriched.push({name:ed.name||p.name,designation:ed.designation||p.designation,email:ed.email||'',linkedin:ed.linkedin||'',city:ed.city||p.city,country:ed.country||p.country,phone:ed.phone||'',enriched:true});

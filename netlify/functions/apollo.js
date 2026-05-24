@@ -85,11 +85,20 @@ exports.handler = async function(event) {
     if (action === 'matchPerson') {
       var name = body.name || '';
       var company = body.company || '';
-      if (!name) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Name required' }) };
+      var personId = body.personId || '';
+      var domain = body.domain || '';
+      if (!name && !personId) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Name or person ID required' }) };
+
+      var matchBody = {};
+      // Best match: use Apollo person ID
+      if (personId) matchBody.id = personId;
+      // Add name
       var parts = name.trim().split(/\s+/);
-      var matchBody = { organization_name: company };
       if (parts[0]) matchBody.first_name = parts[0];
       if (parts.length > 1) matchBody.last_name = parts.slice(1).join(' ');
+      // Add company info
+      if (company) matchBody.organization_name = company;
+      if (domain) matchBody.domain = domain;
 
       var data = await apolloFetch('people/match?reveal_personal_emails=true', matchBody);
       var p = data.person || {};
