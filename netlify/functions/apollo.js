@@ -91,7 +91,7 @@ exports.handler = async function(event) {
       if (parts[0]) matchBody.first_name = parts[0];
       if (parts.length > 1) matchBody.last_name = parts.slice(1).join(' ');
 
-      var data = await apolloFetch('people/match', matchBody);
+      var data = await apolloFetch('people/match?reveal_personal_emails=true&reveal_phone_number=true', matchBody);
       var p = data.person || {};
       if (!p.id) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ found: false }) };
 
