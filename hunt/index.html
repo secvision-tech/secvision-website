@@ -1347,7 +1347,9 @@ async function openContactFinder(company){
     if(d.contacts&&d.contacts.length){
       var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">📋 Saved Contacts ('+d.contacts.length+')</div><div style="display:flex;flex-direction:column;gap:.2rem">';
       d.contacts.forEach(function(c){
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;background:#f3f4f6;padding:.3rem .5rem;border-radius:4px;font-size:.65rem"><span><strong>'+esc(c.name)+'</strong> — '+esc(c.designation)+' — <a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a> <span style="color:#9ca3af;font-size:.55rem">('+esc(c.source||'')+')</span></span><button onclick="deleteContact(\''+c._id+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.7rem" title="Remove">✕</button></div>';
+        var linkedinHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-size:.55rem">LinkedIn ↗</a>':'';
+        var emailHtml=(c.email&&c.email!=='N/A')?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;background:#f3f4f6;padding:.3rem .5rem;border-radius:4px;font-size:.65rem"><span><strong>'+esc(c.name)+'</strong> — '+esc(c.designation)+(emailHtml?' — '+emailHtml:'')+(linkedinHtml?' '+linkedinHtml:'')+' <span style="color:#9ca3af;font-size:.55rem">('+esc(c.source||'')+')</span></span><button onclick="deleteContact(\''+c._id+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.7rem" title="Remove">✕</button></div>';
       });
       h+='</div>';
       document.getElementById('cfExisting').innerHTML=h;

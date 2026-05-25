@@ -258,7 +258,7 @@ exports.handler = async (event) => {
 
       // Partnership targets: companies with most openings, grouped by type
       var partnerTargets = await col.aggregate([
-        { $project: { companyNorm: { $trim: { input: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1 } },
+        { $project: { companyNorm: { $trim: { input: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1, companySize: 1 } },
         { $group: { _id: { company: '$companyNorm', type: '$companyType' }, count: { $sum: 1 },
           statuses: { $push: '$status' }, locations: { $addToSet: '$location' },
           companyUrl: { $first: '$companyUrl' }, companySize: { $first: '$companySize' } } },
@@ -309,7 +309,7 @@ exports.handler = async (event) => {
       ]).toArray();
       var contractByCompany = await col.aggregate([
         { $match: contractFilter },
-        { $project: { companyNorm: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '\u00AE', replacement: '' } }, find: '\u2122', replacement: '' } }, find: '\u00A9', replacement: '' } } }, status: 1, location: 1, companyUrl: 1, salary: 1, companyType: 1 } },
+        { $project: { companyNorm: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '\u00AE', replacement: '' } }, find: '\u2122', replacement: '' } }, find: '\u00A9', replacement: '' } } }, status: 1, location: 1, companyUrl: 1, salary: 1, companyType: 1, companySize: 1 } },
         { $group: { _id: '$companyNorm', count: { $sum: 1 }, statuses: { $push: '$status' }, locations: { $addToSet: '$location' }, companyUrl: { $first: '$companyUrl' }, salary: { $first: '$salary' }, companyType: { $first: '$companyType' }, companySize: { $first: '$companySize' } } },
         { $sort: { count: -1 } },
         { $limit: 15 }
@@ -513,12 +513,12 @@ exports.handler = async (event) => {
       if (!company || !contacts.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company and contacts required' }) };
       var ops = contacts.map(function(c) {
         return { updateOne: { filter: { company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }, email: c.email },
-          update: { $set: { company: company, name: c.name, designation: c.designation, email: c.email, source: c.source || 'Manual', updatedAt: new Date() },
+          update: { $set: { company: company, name: c.name, designation: c.designation, email: c.email, linkedin: c.linkedin || '', source: c.source || 'Manual', updatedAt: new Date() },
             $setOnInsert: { createdAt: new Date() } }, upsert: true } };
       });
       var result = await contactsCol.bulkWrite(ops, { ordered: false });
       // Also update the contact field on matching jobs
-      var contactStr = contacts.map(function(c) { return c.name + ' (' + c.designation + ' - ' + c.email + ')'; }).join(', ');
+      var contactStr = contacts.map(function(c) { return c.name + ' (' + c.designation + (c.email && c.email !== 'N/A' ? ' - ' + c.email : '') + ')'; }).join(', ');
       var compPattern = company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       await col.updateMany({ company: { $regex: compPattern, $options: 'i' } }, { $set: { contact: contactStr } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: contacts.length, contactStr: contactStr }) };

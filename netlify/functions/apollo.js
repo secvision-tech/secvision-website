@@ -46,16 +46,29 @@ exports.handler = async function(event) {
         } catch(e) { /* proceed without domain */ }
       }
 
-      // Step 2: Search people
-      var searchBody = { person_titles: titles, page: 1, per_page: 15 };
-      if (domain) {
-        searchBody.q_organization_domains_list = [domain];
-      } else {
-        // Fallback: use keyword search
-        searchBody.q_keywords = company;
-      }
+      // Step 2: Search people - try multiple strategies
+      var data = null;
+      var strategies = [];
 
-      var data = await apolloFetch('mixed_people/api_search', searchBody);
+      // Strategy 1: Search by domain + titles
+      if (domain) {
+        strategies.push({ q_organization_domains_list: [domain], person_titles: titles, page: 1, per_page: 15 });
+      }
+      // Strategy 2: Search by company keyword + titles
+      strategies.push({ q_keywords: company, person_titles: titles, page: 1, per_page: 15 });
+      // Strategy 3: Search by domain without title filter (broader)
+      if (domain) {
+        strategies.push({ q_organization_domains_list: [domain], page: 1, per_page: 15 });
+      }
+      // Strategy 4: Search by company keyword without title filter (broadest)
+      strategies.push({ q_keywords: company, page: 1, per_page: 15 });
+
+      for (var s = 0; s < strategies.length; s++) {
+        try {
+          data = await apolloFetch('mixed_people/api_search', strategies[s]);
+          if (data.people && data.people.length > 0) break;
+        } catch(e) { data = null; }
+      }
       var people = (data.people || []).map(function(p) {
         return {
           id: p.id || '',
