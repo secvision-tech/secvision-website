@@ -1225,7 +1225,16 @@ async function enrichAllCompanies(){
           await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:c.company,companySize:ed.size||'',companyLinkedin:ed.linkedin||'',companyWebsite:ed.website||''})});
           enriched++;
         }else{failed++}
-      }catch(e){failed++}
+        if(ed.error&&ed.error.indexOf('insufficient credits')>-1){
+          st.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies. Upgrade plan or wait for credit reset.';
+          btn.disabled=false;return;
+        }
+      }catch(e){
+        if(String(e.message).indexOf('insufficient credits')>-1){
+          st.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies.';
+          btn.disabled=false;return;
+        }
+        failed++}
       // Small delay to avoid rate limiting
       await new Promise(function(resolve){setTimeout(resolve,300)});
     }
@@ -1536,7 +1545,8 @@ async function apolloEnrich(){
     if(d.error||d.notFound){
       var msg='Company not found in Apollo database.';
       if(d.mismatch)msg='Name mismatch — Apollo found: "'+esc(d.foundCompany||'')+'" instead of "'+esc(cfCompany)+'". Enter size manually below.';
-      if(d.error)msg='Error: '+esc(d.error);
+      if(d.error&&d.error.indexOf('insufficient credits')>-1)msg='⚠️ Apollo credits exhausted. Enter size manually using ✎ buttons in View, or upgrade your Apollo plan.';
+      else if(d.error)msg='Error: '+esc(d.error);
       document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#9ca3af;font-size:.6rem">'+msg+'</span>';return}
     var h='<div style="background:#f0fdf4;padding:.4rem .6rem;border-radius:4px;font-size:.65rem;border-left:3px solid #16a34a">';
     h+='<strong>'+esc(d.company)+'</strong>';
