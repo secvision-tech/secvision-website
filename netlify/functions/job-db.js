@@ -524,6 +524,16 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: contacts.length, contactStr: contactStr }) };
     }
 
+    // Get unique companies (for bulk enrichment)
+    if (action === 'getUniqueCompanies') {
+      var companies = await col.aggregate([
+        { $match: { company: { $ne: null } } },
+        { $group: { _id: { $toLower: '$company' }, company: { $first: '$company' }, companySize: { $first: '$companySize' }, companyLinkedin: { $first: '$companyLinkedin' }, companyUrl: { $first: '$companyUrl' } } },
+        { $sort: { _id: 1 } }
+      ]).toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies }) };
+    }
+
     if (action === 'getContacts') {
       var contactsCol = db.collection('contacts');
       var compPattern = (body.company || '').replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

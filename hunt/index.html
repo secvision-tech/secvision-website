@@ -310,9 +310,11 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
               <button onclick="fixCountries()" style="padding:.2rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⚡ Fix Countries</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
+              <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
               <span id="fixCountryStatus" style="font-size:.6rem;color:var(--ac);align-self:center"></span>
               <span id="fixDescStatus" style="font-size:.6rem;color:var(--pri);align-self:center"></span>
               <span id="reExtractStatus" style="font-size:.6rem;color:#3B6D11;align-self:center"></span>
+              <span id="enrichAllStatus" style="font-size:.6rem;color:#6C3FBF;align-self:center"></span>
             </div>
           </div>
         </div>
@@ -1158,6 +1160,41 @@ async function fixDescriptions(){
     var d=await r.json();
     st.textContent='Found '+d.total+' dirty descriptions. Cleaned '+d.fixed+'.'+(d.urlsFixed?' Fixed '+d.urlsFixed+' URLs.':'')+(d.locsFixed?' Fixed '+d.locsFixed+' Remote locations.':'');
   }catch(e){st.textContent='Error: '+e.message}
+}
+
+async function enrichAllCompanies(){
+  var st=document.getElementById('enrichAllStatus');
+  var btn=document.getElementById('enrichAllBtn');
+  btn.disabled=true;
+  st.textContent='Loading unique companies...';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getUniqueCompanies'})});
+    var d=await r.json();
+    var companies=(d.companies||[]).filter(function(c){return !c.companySize && c.company});
+    if(!companies.length){
+      st.textContent='All companies already enriched! ('+d.companies.length+' total)';
+      btn.disabled=false;return;
+    }
+    st.textContent='Enriching '+companies.length+' companies (of '+d.companies.length+' total)... ~'+companies.length+' Apollo credits';
+    var enriched=0,failed=0;
+    for(var i=0;i<companies.length;i++){
+      var c=companies[i];
+      st.textContent='Enriching '+(i+1)+'/'+companies.length+': '+c.company+'...';
+      try{
+        var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:c.company,domain:''})});
+        var ed=await er.json();
+        if(ed.size||ed.linkedin){
+          await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:c.company,companySize:ed.size||'',companyLinkedin:ed.linkedin||'',companyWebsite:ed.website||''})});
+          enriched++;
+        }else{failed++}
+      }catch(e){failed++}
+      // Small delay to avoid rate limiting
+      await new Promise(function(resolve){setTimeout(resolve,300)});
+    }
+    st.textContent='✅ Done! Enriched '+enriched+' companies. '+failed+' not found. Refresh dashboard to see sizes.';
+    if(enriched>0)loadDashboard();
+  }catch(e){st.textContent='Error: '+e.message}
+  finally{btn.disabled=false}
 }
 
 async function reExtractFields(){
