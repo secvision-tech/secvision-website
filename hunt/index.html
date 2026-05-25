@@ -821,7 +821,12 @@ async function viewDet(i){
   var jobTypeHtml=(j.jobType||'Not specified')+' <span onclick="editField('+i+',\'jobType\',\'Job Type\',\'Full-time,Contract,Part-time,Internship,Not specified\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit job type">✎</span>';
   var salaryHtml=(j.salary||'Not disclosed')+' <span onclick="editFieldFree('+i+',\'salary\',\'Salary/Rate\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit salary">✎</span>';
   var experienceHtml=(j.experience||'Not specified')+' <span onclick="editFieldFree('+i+',\'experience\',\'Experience\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit experience">✎</span>';
-  var companySizeHtml=j.companySize?(j.companySize.toLocaleString?j.companySize.toLocaleString():j.companySize)+' employees':'N/A';
+  var companySizeVal=j.companySize;
+  var companySizeHtml='N/A';
+  if(companySizeVal){
+    var sizeNum=typeof companySizeVal==='number'?companySizeVal:parseInt(String(companySizeVal).replace(/[^0-9]/g,''));
+    companySizeHtml=sizeNum&&!isNaN(sizeNum)?sizeNum.toLocaleString()+' employees':String(companySizeVal).replace(/\s*employees\s*/gi,'').trim()+' employees';
+  }
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
   var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
@@ -1270,7 +1275,7 @@ function renderPartnerTable(data){
   data.slice(0,15).forEach(function(d,i){
     var company=d._id?.company||'Unknown';
     var type=d._id?.type||'';
-    var size=d.companySize?d.companySize.toLocaleString():'-';
+    var size=d.companySize?(typeof d.companySize==='number'?d.companySize.toLocaleString():String(d.companySize).replace(/[^0-9]/g,'').replace(/B(?=(d{3})+(?!d))/g,',')):'-';
     var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'<span class="ctype-badge ctype-unknown">Unclassified</span>';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
@@ -1300,7 +1305,7 @@ function renderContractTable(data){
   data.forEach(function(d,i){
     var company=d._id||'Unknown';
     var type=d.companyType||'';
-    var size=d.companySize?d.companySize.toLocaleString():'-';
+    var size=d.companySize?(typeof d.companySize==='number'?d.companySize.toLocaleString():String(d.companySize).replace(/[^0-9]/g,'').replace(/B(?=(d{3})+(?!d))/g,',')):'-';
     var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
@@ -1496,8 +1501,9 @@ async function apolloEnrich(){
     var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:cfCompany})});
     var d=await r.json();
     if(d.error||d.notFound){
-      var isFreePlan=(d.error||'').indexOf('free plan')>-1||(d.error||'').indexOf('API_INACCESSIBLE')>-1;
-      document.getElementById('cfCompanyInfo').innerHTML=isFreePlan?'<span style="color:#854F0B;font-size:.6rem">Company enrichment requires Apollo.io Basic plan ($49/mo).</span>':'<span style="color:#9ca3af;font-size:.6rem">Company info not found.</span>';return}
+      var msg='Company info not found.';
+      if(d.mismatch)msg='Apollo found "'+esc(d.foundCompany||'')+'" instead of "'+esc(cfCompany)+'". Skipped to avoid wrong data.';
+      document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#9ca3af;font-size:.6rem">'+msg+'</span>';return}
     var h='<div style="background:#f0fdf4;padding:.4rem .6rem;border-radius:4px;font-size:.65rem;border-left:3px solid #16a34a">';
     h+='<strong>'+esc(d.company)+'</strong>';
     if(d.size)h+=' — <strong>'+d.size+' employees</strong>';

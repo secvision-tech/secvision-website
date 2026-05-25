@@ -553,7 +553,8 @@ exports.handler = async (event) => {
       var compPattern = (body.company || '').replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       var setFields = {};
       if (body.companySize) {
-        var sizeNum = parseInt(String(body.companySize).replace(/[,\s+employees]/g, ''));
+        var sizeStr = String(body.companySize).replace(/[^0-9]/g, '');
+        var sizeNum = parseInt(sizeStr);
         setFields.companySize = isNaN(sizeNum) ? 0 : sizeNum;
       }
       if (body.companyLinkedin) setFields.companyLinkedin = body.companyLinkedin;

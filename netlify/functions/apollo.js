@@ -166,6 +166,20 @@ exports.handler = async function(event) {
 
       if (!org) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ company: company, size: '', notFound: true }) };
 
+      // Validate the returned company is actually the one we searched for
+      var orgName = (org.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+      var searchName = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+      var isMatch = orgName.indexOf(searchName) > -1 || searchName.indexOf(orgName) > -1 || orgName === searchName;
+      if (!isMatch && searchName.length > 3) {
+        // Check if at least the first word matches
+        var searchFirst = searchName.split(/[^a-z0-9]/)[0];
+        var orgFirst = orgName.split(/[^a-z0-9]/)[0];
+        isMatch = searchFirst.length > 3 && (orgFirst.indexOf(searchFirst) > -1 || searchFirst.indexOf(orgFirst) > -1);
+      }
+      if (!isMatch) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ company: company, size: '', notFound: true, mismatch: true, foundCompany: org.name }) };
+      }
+
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         company: org.name || company,
         domain: org.primary_domain || '',
