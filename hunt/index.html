@@ -827,7 +827,9 @@ async function viewDet(i){
     var sizeNum=typeof companySizeVal==='number'?companySizeVal:parseInt(String(companySizeVal).replace(/[^0-9]/g,''));
     companySizeHtml=sizeNum&&!isNaN(sizeNum)?sizeNum.toLocaleString()+' employees':String(companySizeVal).replace(/\s*employees\s*/gi,'').trim()+' employees';
   }
+  companySizeHtml+=' <span onclick="editCompanySize('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company size">✎</span>';
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
+  companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
   var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
   h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div></div>';
@@ -865,6 +867,37 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()})
 function findContacts(idx){
   var j=allJobs[idx];if(!j)return;
   openContactFinder(j.company);
+}
+
+async function editCompanySize(idx){
+  var j=allJobs[idx];if(!j)return;
+  var current=j.companySize||'';
+  var input=prompt('Company Size (employee count) for '+j.company+':\n\nCurrent: '+(current?current+' employees':'Not set')+'\n\nEnter number:',current||'');
+  if(!input||input===String(current))return;
+  var sizeNum=parseInt(String(input).replace(/[^0-9]/g,''));
+  if(isNaN(sizeNum)||sizeNum<1){alert('Please enter a valid number.');return}
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companySize:String(sizeNum)})});
+    var d=await r.json();
+    j.companySize=sizeNum;
+    allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum});
+    viewDet(idx);
+  }catch(e){alert('Error: '+e.message)}
+}
+
+async function editCompanyLinkedin(idx){
+  var j=allJobs[idx];if(!j)return;
+  var current=j.companyLinkedin||'';
+  var input=prompt('Company LinkedIn URL for '+j.company+':\n\nCurrent: '+(current||'Not set')+'\n\nPaste LinkedIn URL:',current||'https://www.linkedin.com/company/');
+  if(!input||input===current)return;
+  if(input.indexOf('linkedin.com')===-1){alert('Please enter a valid LinkedIn URL.');return}
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companyLinkedin:input})});
+    var d=await r.json();
+    j.companyLinkedin=input;
+    allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyLinkedin=input});
+    viewDet(idx);
+  }catch(e){alert('Error: '+e.message)}
 }
 
 async function editField(idx,field,label,optionsStr){
@@ -1501,8 +1534,9 @@ async function apolloEnrich(){
     var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:cfCompany})});
     var d=await r.json();
     if(d.error||d.notFound){
-      var msg='Company info not found.';
-      if(d.mismatch)msg='Apollo found "'+esc(d.foundCompany||'')+'" instead of "'+esc(cfCompany)+'". Skipped to avoid wrong data.';
+      var msg='Company not found in Apollo database.';
+      if(d.mismatch)msg='Name mismatch — Apollo found: "'+esc(d.foundCompany||'')+'" instead of "'+esc(cfCompany)+'". Enter size manually below.';
+      if(d.error)msg='Error: '+esc(d.error);
       document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#9ca3af;font-size:.6rem">'+msg+'</span>';return}
     var h='<div style="background:#f0fdf4;padding:.4rem .6rem;border-radius:4px;font-size:.65rem;border-left:3px solid #16a34a">';
     h+='<strong>'+esc(d.company)+'</strong>';

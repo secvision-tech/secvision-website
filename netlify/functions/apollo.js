@@ -138,7 +138,7 @@ exports.handler = async function(event) {
 
       var org = null;
 
-      // Try domain first
+      // If explicit domain provided, enrich directly
       if (domain) {
         try {
           var data = await apolloFetch('organizations/enrich', { domain: domain });
@@ -146,17 +146,37 @@ exports.handler = async function(event) {
         } catch(e) {}
       }
 
-      // Search by name, then enrich by domain
-      if (!org) {
+      // Search by company name (don't guess domains)
+      if (!org && company) {
         try {
-          var sr = await apolloFetch('mixed_companies/search', { q_organization_name: company, page: 1, per_page: 1 });
+          var sr = await apolloFetch('mixed_companies/search', { q_organization_name: company, page: 1, per_page: 3 });
           if (sr.organizations && sr.organizations.length) {
-            org = sr.organizations[0];
-            if (org.primary_domain) {
-              try {
-                var enriched = await apolloFetch('organizations/enrich', { domain: org.primary_domain });
-                if (enriched.organization) org = enriched.organization;
-              } catch(e) {}
+            // Find best matching org from results
+            var stopWords = ['the','and','for','of','in','a','an','to','at','by','on','inc','llc','ltd','corp','co','group','company','technologies','solutions','services','consulting','international','global'];
+            function getWords(name) {
+              return (name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(function(w) { return w.length > 2 && stopWords.indexOf(w) === -1; });
+            }
+            var searchWords = getWords(company);
+            var bestOrg = null, bestScore = 0;
+            sr.organizations.forEach(function(o) {
+              var orgWords = getWords(o.name || '');
+              var matches = 0;
+              searchWords.forEach(function(w) { if (orgWords.indexOf(w) > -1) matches++; });
+              var score = searchWords.length > 0 ? matches / searchWords.length : 0;
+              if (score > bestScore) { bestScore = score; bestOrg = o; }
+            });
+            if (bestScore >= 0.4 && bestOrg) {
+              org = bestOrg;
+              // Enrich by domain for full details
+              if (org.primary_domain) {
+                try {
+                  var enriched = await apolloFetch('organizations/enrich', { domain: org.primary_domain });
+                  if (enriched.organization) org = enriched.organization;
+                } catch(e) {}
+              }
+            } else {
+              var foundNames = sr.organizations.map(function(o) { return o.name; }).join(', ');
+              return { statusCode: 200, headers: hdrs, body: JSON.stringify({ company: company, size: '', notFound: true, mismatch: true, foundCompany: foundNames }) };
             }
           }
         } catch(e) {
@@ -165,23 +185,6 @@ exports.handler = async function(event) {
       }
 
       if (!org) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ company: company, size: '', notFound: true }) };
-
-      // Validate the returned company is actually the one we searched for
-      var stopWords = ['the','and','for','of','in','a','an','to','at','by','on','inc','llc','ltd','corp','co','group','company','technologies','solutions','services','consulting','international','global'];
-      function getSignificantWords(name) {
-        return (name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(function(w) { return w.length > 2 && stopWords.indexOf(w) === -1; });
-      }
-      var searchWords = getSignificantWords(company);
-      var orgWords = getSignificantWords(org.name || '');
-      var matchCount = 0;
-      searchWords.forEach(function(w) { if (orgWords.indexOf(w) > -1) matchCount++; });
-      var matchRatio = searchWords.length > 0 ? matchCount / searchWords.length : 0;
-      // Require at least 50% of significant words to match, or exact first word match for short names
-      var isMatch = matchRatio >= 0.5;
-      if (!isMatch && searchWords.length <= 2 && orgWords.length > 0 && searchWords[0] === orgWords[0]) isMatch = true;
-      if (!isMatch) {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ company: company, size: '', notFound: true, mismatch: true, foundCompany: org.name }) };
-      }
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         company: org.name || company,
