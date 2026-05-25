@@ -312,7 +312,7 @@ exports.handler = async (event) => {
         { $project: { companyNorm: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '\u00AE', replacement: '' } }, find: '\u2122', replacement: '' } }, find: '\u00A9', replacement: '' } } }, status: 1, location: 1, companyUrl: 1, salary: 1, companyType: 1, companySize: 1 } },
         { $group: { _id: '$companyNorm', count: { $sum: 1 }, statuses: { $push: '$status' }, locations: { $addToSet: '$location' }, companyUrl: { $first: '$companyUrl' }, salary: { $first: '$salary' }, companyType: { $first: '$companyType' }, companySize: { $first: '$companySize' } } },
         { $sort: { count: -1 } },
-        { $limit: 15 }
+        { $limit: 25 }
       ]).toArray();
       contractByCompany.forEach(function(c) {
         if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
@@ -324,7 +324,7 @@ exports.handler = async (event) => {
         { $match: { items: { $ne: '' } } },
         { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
-        { $limit: 10 }
+        { $limit: 20 }
       ]).toArray();
       // Average hourly rate for contracts (convert all to hourly USD)
       var contractSalaries = await col.find({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } }).project({ salary: 1 }).limit(200).toArray();

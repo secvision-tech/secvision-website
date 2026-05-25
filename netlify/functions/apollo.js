@@ -167,15 +167,18 @@ exports.handler = async function(event) {
       if (!org) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ company: company, size: '', notFound: true }) };
 
       // Validate the returned company is actually the one we searched for
-      var orgName = (org.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      var searchName = company.toLowerCase().replace(/[^a-z0-9]/g, '');
-      var isMatch = orgName.indexOf(searchName) > -1 || searchName.indexOf(orgName) > -1 || orgName === searchName;
-      if (!isMatch && searchName.length > 3) {
-        // Check if at least the first word matches
-        var searchFirst = searchName.split(/[^a-z0-9]/)[0];
-        var orgFirst = orgName.split(/[^a-z0-9]/)[0];
-        isMatch = searchFirst.length > 3 && (orgFirst.indexOf(searchFirst) > -1 || searchFirst.indexOf(orgFirst) > -1);
+      var stopWords = ['the','and','for','of','in','a','an','to','at','by','on','inc','llc','ltd','corp','co','group','company','technologies','solutions','services','consulting','international','global'];
+      function getSignificantWords(name) {
+        return (name || '').toLowerCase().replace(/[^a-z0-9\s]/g, '').split(/\s+/).filter(function(w) { return w.length > 2 && stopWords.indexOf(w) === -1; });
       }
+      var searchWords = getSignificantWords(company);
+      var orgWords = getSignificantWords(org.name || '');
+      var matchCount = 0;
+      searchWords.forEach(function(w) { if (orgWords.indexOf(w) > -1) matchCount++; });
+      var matchRatio = searchWords.length > 0 ? matchCount / searchWords.length : 0;
+      // Require at least 50% of significant words to match, or exact first word match for short names
+      var isMatch = matchRatio >= 0.5;
+      if (!isMatch && searchWords.length <= 2 && orgWords.length > 0 && searchWords[0] === orgWords[0]) isMatch = true;
       if (!isMatch) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ company: company, size: '', notFound: true, mismatch: true, foundCompany: org.name }) };
       }
