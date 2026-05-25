@@ -539,11 +539,19 @@ exports.handler = async (event) => {
     }
 
     // Update company size for all jobs of a company
-    if (action === 'updateCompanySize') {
+    if (action === 'updateCompanySize' || action === 'updateCompanyInfo') {
       var compPattern = (body.company || '').replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var setFields = {};
+      if (body.companySize) {
+        var sizeNum = parseInt(String(body.companySize).replace(/[,\s+employees]/g, ''));
+        setFields.companySize = isNaN(sizeNum) ? 0 : sizeNum;
+      }
+      if (body.companyLinkedin) setFields.companyLinkedin = body.companyLinkedin;
+      if (body.companyWebsite) setFields.companyUrl = body.companyWebsite;
+      if (Object.keys(setFields).length === 0) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'No fields to update' }) };
       var result = await col.updateMany(
         { company: { $regex: compPattern, $options: 'i' } },
-        { $set: { companySize: body.companySize } }
+        { $set: setFields }
       );
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
     }

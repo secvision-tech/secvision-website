@@ -533,13 +533,12 @@ function classifyCompany(company, desc) {
 
 // #175: Extract company size from JD
 function extractCompanySize(desc) {
-  if (!desc) return '';
+  if (!desc) return 0;
   var m = desc.match(/(\d[\d,]+)\s*\+?\s*(?:employees|team\s*members|associates|staff|people|workers)\b/i)
     || desc.match(/(?:team|company|organization|firm)\s*(?:of|with)\s*(?:over\s*|more\s*than\s*)?(\d[\d,]+)\s*\+?\s*(?:employees|people)?/i)
-    || desc.match(/(?:Fortune|Inc\.?)\s*(\d+)\b/i)
     || desc.match(/(\d[\d,]+)\s*\+?\s*(?:global|worldwide)\s*(?:employees|team)/i);
-  if (m) { var n = m[1].replace(/,/g,''); return /Fortune|Inc/i.test(m[0]) ? 'Fortune '+n : parseInt(n).toLocaleString()+'+'; }
-  return '';
+  if (m) { return parseInt(m[1].replace(/,/g,'')) || 0; }
+  return 0;
 }
 
 // #153: Extract contract duration from JD

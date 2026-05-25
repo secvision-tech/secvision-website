@@ -819,7 +819,30 @@ async function viewDet(i){
   var jobTypeHtml=(j.jobType||'Not specified')+' <span onclick="editField('+i+',\'jobType\',\'Job Type\',\'Full-time,Contract,Part-time,Internship,Not specified\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit job type">✎</span>';
   var salaryHtml=(j.salary||'Not disclosed')+' <span onclick="editFieldFree('+i+',\'salary\',\'Salary/Rate\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit salary">✎</span>';
   var experienceHtml=(j.experience||'Not specified')+' <span onclick="editFieldFree('+i+',\'experience\',\'Experience\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit experience">✎</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)],['Contact',j.contact]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var companySizeHtml=j.companySize?(j.companySize.toLocaleString?j.companySize.toLocaleString():j.companySize)+' employees':'N/A';
+  var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  // Fetch contacts from DB with LinkedIn links
+  h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div></div>';
+  // Load contacts async after rendering
+  setTimeout(async function(){
+    try{
+      var cr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:j.company})});
+      var cd=await cr.json();
+      var cel=document.getElementById('viewContacts');
+      if(cd.contacts&&cd.contacts.length){
+        var ch='';
+        cd.contacts.forEach(function(c){
+          var nameHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-weight:600">'+esc(c.name)+' ↗</a>':'<strong>'+esc(c.name)+'</strong>';
+          var emailHtml=(c.email&&c.email!=='N/A')?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'';
+          ch+='<div style="padding:.2rem 0;border-bottom:1px solid var(--g1)">'+nameHtml+' — '+esc(c.designation)+(emailHtml?' — '+emailHtml:'')+' <span style="color:var(--g4);font-size:.6rem">('+esc(c.source||'')+')</span></div>';
+        });
+        cel.innerHTML=ch;
+      }else{
+        cel.innerHTML='<span style="color:var(--g4)">No contacts saved. Use "Contacts" button to find contacts.</span>';
+      }
+    }catch(e){document.getElementById('viewContacts').innerHTML=j.contact||'N/A'}
+  },100);
   if(quals.length)h+='<div class="dm-sec"><h4>Qualifications</h4><ul>'+quals.map(function(q){return'<li>'+q+'</li>'}).join('')+'</ul></div>';
   if(resps.length)h+='<div class="dm-sec"><h4>Responsibilities</h4><ul>'+resps.map(function(r){return'<li>'+r+'</li>'}).join('')+'</ul></div>';
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
@@ -834,15 +857,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()})
 
 function findContacts(idx){
   var j=allJobs[idx];if(!j)return;
-  var company=encodeURIComponent('"'+j.company+'" AND ("recruiter" OR "HR" OR "SOC Director" OR "VP Operations" OR "CISO")');
-  var linkedinUrl='https://www.linkedin.com/search/results/people/?keywords='+company+'&origin=GLOBAL_SEARCH_HEADER';
-  window.open(linkedinUrl,'_blank');
-  if(j.status==='new'&&j._id){
-    j.status='reviewed';
-    fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'updateStatus',id:j._id,status:'reviewed'})}).catch(function(e){console.error(e)});
-    renderTable();
-  }
+  openContactFinder(j.company);
 }
 
 async function editField(idx,field,label,optionsStr){
@@ -1218,7 +1233,7 @@ function renderPartnerTable(data){
   data.slice(0,15).forEach(function(d,i){
     var company=d._id?.company||'Unknown';
     var type=d._id?.type||'';
-    var size=d.companySize||'-';
+    var size=d.companySize?d.companySize.toLocaleString():'-';
     var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'<span class="ctype-badge ctype-unknown">Unclassified</span>';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
@@ -1248,7 +1263,7 @@ function renderContractTable(data){
   data.forEach(function(d,i){
     var company=d._id||'Unknown';
     var type=d.companyType||'';
-    var size=d.companySize||'-';
+    var size=d.companySize?d.companySize.toLocaleString():'-';
     var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
@@ -1460,10 +1475,10 @@ async function apolloEnrich(){
     // Save company size to DB
     if(d.size){
       try{
-        var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanySize',company:cfCompany,companySize:d.size+' employees'})});
+        var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:cfCompany,companySize:d.size,companyLinkedin:d.linkedin||'',companyWebsite:d.website||''})});
         var sd=await sr.json();
-        document.getElementById('cfStatus').textContent='✅ Company size saved ('+( sd.modified||0)+' jobs updated).';
-      }catch(e){document.getElementById('cfStatus').textContent='Size displayed but failed to save: '+e.message}
+        document.getElementById('cfStatus').textContent='✅ Company info saved ('+(sd.modified||0)+' jobs updated).';
+      }catch(e){document.getElementById('cfStatus').textContent='Info displayed but failed to save: '+e.message}
     }
   }catch(e){document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#DC2626">Error: '+e.message+'</span>'}
   finally{btn.textContent='🏢 Get Company Size';btn.disabled=false}
