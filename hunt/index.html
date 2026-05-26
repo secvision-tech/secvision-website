@@ -228,6 +228,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <div class="sg"><label>Region</label><select id="sRegion" onchange="updateCountries()"><option value="Any">Any (All Regions)</option><option value="NA" selected>North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select></div>
         <div class="sg"><label>Country</label><select id="sCountry"><option value="us" selected>United States</option><option value="ca">Canada</option></select></div>
         <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button>
+        <div id="apifyStatus" style="display:none;font-size:.65rem;color:#6C3FBF;background:#f3f0ff;padding:.3rem .6rem;border-radius:4px;align-self:center">🔄 LinkedIn enrichment running...</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:.6rem;margin-top:.5rem;align-items:end">
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="15days">Last 15 Days</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
@@ -701,9 +702,113 @@ async function searchJobs(){
       document.getElementById('emptyState').innerHTML='<h3>No results</h3><p>Try different roles, sources, or time period.</p>';
       document.getElementById('rCount').textContent='No results found.';
     }else{filtered=allJobs.slice();curPage=1;renderTable();document.getElementById('exportBtns').style.display='flex'}
+    // Start Apify LinkedIn search in background
+    var apifyCountry=CCODE_TO_NAME[selCountry]||'United States';
+    apifySearchBackground(searchRoles,apifyCountry,datePosted);
   }catch(err){console.error(err);document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';
     document.getElementById('emptyState').innerHTML='<h3>Search Error</h3><p>Unable to connect. Please try again.</p>'}
   btn.textContent='Search';btn.disabled=false;
+}
+
+// Apify LinkedIn search - runs in background, merges results when done
+async function apifySearchBackground(roles,country,datePosted){
+  var apSt=document.getElementById('apifyStatus');
+  apSt.style.display='inline-block';
+  apSt.textContent='🔄 Starting LinkedIn search via Apify...';
+  try{
+    // Search top 3 roles to keep Apify usage reasonable
+    var topRoles=roles.slice(0,3);
+    var allApifyJobs=[];
+    for(var ri=0;ri<topRoles.length;ri++){
+      apSt.textContent='🔄 LinkedIn: Searching "'+topRoles[ri]+'" ('+(ri+1)+'/'+topRoles.length+')...';
+      // Start the Apify run
+      var sr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'startSearch',title:topRoles[ri],location:country,rows:25,
+          datePosted:datePosted==='week'?'week':datePosted==='month'?'month':'week'})});
+      var sd=await sr.json();
+      if(sd.error){apSt.textContent='⚠️ LinkedIn: '+sd.error;setTimeout(function(){apSt.style.display='none'},8000);return}
+
+      // Poll for completion (max 3 minutes per role)
+      var runId=sd.runId,datasetId=sd.datasetId;
+      var maxPolls=36,pollCount=0;// 36 * 5s = 3 min
+      var status='RUNNING';
+      while(status==='RUNNING'||status==='READY'){
+        await new Promise(function(r){setTimeout(r,5000)});
+        pollCount++;
+        apSt.textContent='🔄 LinkedIn: "'+topRoles[ri]+'" running... ('+Math.round(pollCount*5)+'s)';
+        var cr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'checkRun',runId:runId})});
+        var cd=await cr.json();
+        status=cd.status;
+        datasetId=cd.datasetId||datasetId;
+        if(pollCount>=maxPolls)break;
+      }
+
+      if(status!=='SUCCEEDED'){
+        apSt.textContent='⚠️ LinkedIn: "'+topRoles[ri]+'" timed out. Continuing...';
+        continue;
+      }
+
+      // Fetch results
+      apSt.textContent='🔄 LinkedIn: Fetching "'+topRoles[ri]+'" results...';
+      var rr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'getResults',datasetId:datasetId})});
+      var rd=await rr.json();
+      if(rd.jobs)allApifyJobs=allApifyJobs.concat(rd.jobs);
+    }
+
+    if(!allApifyJobs.length){
+      apSt.textContent='ℹ️ LinkedIn: No additional jobs found.';
+      setTimeout(function(){apSt.style.display='none'},5000);
+      return;
+    }
+
+    // Deduplicate Apify results by linkedinJobId
+    var seenIds={};
+    allApifyJobs=allApifyJobs.filter(function(j){
+      if(seenIds[j.linkedinJobId])return false;
+      seenIds[j.linkedinJobId]=true;return true;
+    });
+
+    // Process and save to MongoDB
+    apSt.textContent='🔄 LinkedIn: Processing and saving '+allApifyJobs.length+' jobs...';
+    var pr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'processAndSave',jobs:allApifyJobs})});
+    var pd=await pr.json();
+
+    // Merge into current view — add new jobs that aren't already displayed
+    var existingTitles={};
+    allJobs.forEach(function(j){existingTitles[(j.title+'|'+j.company).toLowerCase()]=true});
+    var newCount=0;
+    allApifyJobs.forEach(function(aj){
+      var key=(aj.title+'|'+aj.company).toLowerCase();
+      if(!existingTitles[key]){
+        var merged={idx:allJobs.length+newCount+1,title:aj.title,titleClean:aj.title,company:aj.company,
+          companyUrl:aj.companyUrl,location:aj.location,salary:aj.salary||'Not disclosed',
+          date:aj.datePosted||'',dateRaw:aj.datePosted,source:'LinkedIn',sourceApi:'apify-bebity',
+          applyLink:aj.applyLink,jobUrl:aj.jobUrl,status:'new',companyType:'',
+          experience:aj.experienceLevel||'',skills:'See details',certifications:'See details',
+          compliance:'See details',tools:'See details',contact:aj.posterFullName||'',
+          eligibility:'Open',jobType:aj.contractType||'Full-time',remote:'',
+          detectedCountry:aj.location||'',description:aj.description};
+        allJobs.push(merged);
+        newCount++;
+        existingTitles[key]=true;
+      }
+    });
+
+    // Update display
+    var apiTextEl=document.getElementById('apiText');
+    var currentText=apiTextEl.textContent;
+    apiTextEl.textContent=currentText+' + '+allApifyJobs.length+' LinkedIn ('+newCount+' new)';
+    if(newCount>0){filtered=allJobs.slice();renderTable()}
+    apSt.textContent='✅ LinkedIn: '+allApifyJobs.length+' jobs found, '+pd.saved+' saved. '+newCount+' new in view.';
+    setTimeout(function(){apSt.style.display='none'},10000);
+  }catch(e){
+    console.error('Apify error:',e);
+    apSt.textContent='⚠️ LinkedIn search failed: '+e.message;
+    setTimeout(function(){apSt.style.display='none'},8000);
+  }
 }
 
 function renderTable(){
