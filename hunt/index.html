@@ -368,6 +368,7 @@ var COLS=[
   {key:'title',label:'Role / Title',w:140},
   {key:'company',label:'Company',w:95},
   {key:'companyType',label:'Company Type',w:85},
+  {key:'companySize',label:'Size',w:55,num:true},
   {key:'location',label:'Location',w:85},
   {key:'experience',label:'Experience',w:110},
   {key:'skills',label:'Key Skills',w:120},
@@ -718,7 +719,7 @@ function renderTable(){
     var companyCell='<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
     var ji=allJobs.indexOf(j);
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">View</button> <button class="fc-btn" onclick="findContacts('+ji+')">Contacts</button></td>';
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">View</button> <button class="fc-btn" onclick="findContacts('+ji+')">Contacts</button></td>';
     tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.classList.contains('status-badge')||e.target.classList.contains('ctype-badge'))return;this.classList.toggle('row-hl')};
     // Bind status badge click
     var sBadge=tr.querySelector('.status-badge');
@@ -830,7 +831,7 @@ async function viewDet(i){
   companySizeHtml+=' <span onclick="editCompanySize('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company size">✎</span>';
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
   companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',j.status||'new'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
   h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div></div>';
   // Load contacts async after rendering
@@ -1716,7 +1717,7 @@ async function toggleTranslate(idx){
 // Export functions
 function getExportData(){
   var data=filtered.map(function(j){return{
-    '#':j.idx,Date:j.date,Title:j.titleClean||j.title,'Full Title':j.title,Company:j.company,'Company Type':j.companyType||'',Location:j.location,Country:j.detectedCountry||'Unknown',Experience:j.experience,
+    '#':j.idx,Date:j.date,Title:j.titleClean||j.title,'Full Title':j.title,Company:j.company,'Company Type':j.companyType||'','Company Size':j.companySize||'',Location:j.location,Country:j.detectedCountry||'Unknown',Experience:j.experience,
     'Key Skills':j.skills,Certifications:j.certifications,'Compliance/Framework':j.compliance,'Technology/Tools':j.tools,
     Contact:j.contact,Eligibility:j.eligibility,Type:j.jobType,Salary:j.salary,Source:j.source,Status:j.status||'new',
     'Apply Link':j.applyLink
