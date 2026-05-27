@@ -312,10 +312,12 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
+              <button onclick="cleanNonCyberJobs()" id="cleanCyberBtn" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🧹 Clean Non-Cyber LinkedIn Jobs</button>
               <span id="fixCountryStatus" style="font-size:.6rem;color:var(--ac);align-self:center"></span>
               <span id="fixDescStatus" style="font-size:.6rem;color:var(--pri);align-self:center"></span>
               <span id="reExtractStatus" style="font-size:.6rem;color:#3B6D11;align-self:center"></span>
               <span id="enrichAllStatus" style="font-size:.6rem;color:#6C3FBF;align-self:center"></span>
+              <span id="cleanCyberStatus" style="font-size:.6rem;color:#DC2626;align-self:center"></span>
             </div>
           </div>
         </div>
@@ -1304,6 +1306,21 @@ async function fixDescriptions(){
     var d=await r.json();
     st.textContent='Found '+d.total+' dirty descriptions. Cleaned '+d.fixed+'.'+(d.urlsFixed?' Fixed '+d.urlsFixed+' URLs.':'')+(d.locsFixed?' Fixed '+d.locsFixed+' Remote locations.':'');
   }catch(e){st.textContent='Error: '+e.message}
+}
+
+async function cleanNonCyberJobs(){
+  var st=document.getElementById('cleanCyberStatus');
+  var btn=document.getElementById('cleanCyberBtn');
+  if(!confirm('This will permanently delete non-cybersecurity LinkedIn jobs from the database. Continue?'))return;
+  btn.disabled=true;
+  st.textContent='Cleaning non-cyber LinkedIn jobs...';
+  try{
+    var r=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cleanupNonCyber'})});
+    var d=await r.json();
+    st.textContent='✅ Checked '+d.checked+' LinkedIn jobs: '+d.deleted+' non-cyber removed, '+d.kept+' kept.';
+    if(d.deleted>0)loadDashboard();
+  }catch(e){st.textContent='Error: '+e.message}
+  finally{btn.disabled=false}
 }
 
 async function enrichAllCompanies(){

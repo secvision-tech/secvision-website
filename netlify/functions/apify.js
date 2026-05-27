@@ -67,8 +67,10 @@ exports.handler = async function(event) {
 
       var rawJobs = await resp.json();
 
-      // Map Bebity fields to our schema
-      var jobs = rawJobs.map(function(j) {
+      // Map Bebity fields to our schema and filter for cybersecurity relevance
+      var jobs = rawJobs.filter(function(j) {
+        return isCyberRelevant(j.title, j.description);
+      }).map(function(j) {
         var desc = (j.description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         var descHtml = j.descriptionHtml || j.description || '';
 
@@ -99,13 +101,15 @@ exports.handler = async function(event) {
         };
       });
 
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, total: jobs.length }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, total: jobs.length, rawTotal: rawJobs.length, filtered: rawJobs.length - jobs.length }) };
     }
 
     // ACTION: processAndSave - process Apify results through extraction pipeline and save to MongoDB
     if (action === 'processAndSave') {
       var jobs = body.jobs || [];
-      if (!jobs.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: 0 }) };
+      // Filter for cybersecurity relevance
+      jobs = jobs.filter(function(j) { return isCyberRelevant(j.title, j.description); });
+      if (!jobs.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: 0, filtered: true }) };
 
       var { getDb } = require('./db');
       var db = await getDb();
@@ -255,6 +259,24 @@ exports.handler = async function(event) {
       })};
     }
 
+    // ACTION: cleanupNonCyber - remove non-cybersecurity jobs previously saved by Apify
+    if (action === 'cleanupNonCyber') {
+      var { getDb } = require('./db');
+      var db = await getDb();
+      var col = db.collection('jobs');
+      var apifyJobs = await col.find({ sourceApi: 'apify-bebity' }).project({ _id: 1, title: 1, description: 1 }).toArray();
+      var toDelete = [];
+      apifyJobs.forEach(function(j) {
+        if (!isCyberRelevant(j.title, j.description)) toDelete.push(j._id);
+      });
+      var deleted = 0;
+      if (toDelete.length > 0) {
+        var result = await col.deleteMany({ _id: { $in: toDelete } });
+        deleted = result.deletedCount || 0;
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ checked: apifyJobs.length, deleted: deleted, kept: apifyJobs.length - deleted }) };
+    }
+
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action' }) };
   } catch(e) {
     console.error('Apify error:', e);
@@ -262,7 +284,32 @@ exports.handler = async function(event) {
   }
 };
 
-// Simple country detection from location string
+// Cybersecurity relevance filter — reject non-IT jobs
+function isCyberRelevant(title, desc) {
+  var t = (title || '').toLowerCase();
+  var d = (desc || '').toLowerCase();
+
+  // Reject known non-IT titles
+  var NON_IT = /\b(humint|sigint|geoint|masint|maintenance\s*(?:tech|engineer|worker|manager)|customer\s*success|optimizer|program\s*analyst|budget\s*analyst|financial\s*analyst|hr\s*analyst|compensation\s*analyst|operations\s*analyst(?!\s*-?\s*(?:soc|cyber|security))|business\s*analyst|supply\s*chain|logistics|nurse|clinical|pharmacist|medical\s*coder|social\s*worker|case\s*manager|paralegal|loan\s*officer|mortgage|real\s*estate|truck\s*driver|warehouse|forklift|cashier|retail\s*associate|food\s*service|janitor|custodian|landscap|plumber|electrician(?!\s*(?:cyber|security)))\b/i;
+  if (NON_IT.test(t)) return false;
+
+  // Title contains cybersecurity keywords → pass immediately
+  var CYBER_TITLE = /\b(soc\b|security|cyber|infosec|siem|threat|incident|malware|forensic|pentest|penetration|vulnerability|devsecops|secops|ciso|cloud\s*security|network\s*security|information\s*security|detection|response\s*analyst|blue\s*team|red\s*team|purple\s*team|ir\s*analyst|cert\s*analyst|csirt|dfir)\b/i;
+  if (CYBER_TITLE.test(t)) return true;
+
+  // Title is generic (e.g. "Analyst", "Engineer") — check description for cyber signals
+  var cyberSignals = 0;
+  var SIGNALS = [/\bsiem\b/i, /\bedr\b/i, /\bsoc\b/i, /\bsecurity\s*operations/i, /\bincident\s*response/i,
+    /\bthreat\s*(?:hunt|detect|intel)/i, /\bfirewall/i, /\bids[\s\/]*ips\b/i, /\bmitre\s*att/i,
+    /\bcrowdstrike|sentinel(?:one)?|splunk|qradar\b/i, /\bmalware\b/i, /\bphishing\b/i,
+    /\bcybersecurity\b/i, /\bvulnerability/i, /\bpenetration\s*test/i, /\bnist\b/i,
+    /\bcompti?a\s*security/i, /\bcissp\b/i, /\boscp\b/i, /\bgcih\b/i];
+  SIGNALS.forEach(function(re) { if (re.test(d)) cyberSignals++; });
+
+  // Need at least 3 cybersecurity signals in description for generic titles
+  return cyberSignals >= 3;
+}
+
 function detectCountryFromLocation(loc) {
   if (!loc) return 'Unknown';
   var l = loc.toLowerCase();
