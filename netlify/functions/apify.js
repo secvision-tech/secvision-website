@@ -18,8 +18,8 @@ exports.handler = async function(event) {
       var location = body.location || 'United States';
       var rows = body.rows || 25;
 
-      // Build LinkedIn search URL
-      var searchUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + encodeURIComponent(title) + '&location=' + encodeURIComponent(location);
+      // Build LinkedIn search URL with exact phrase matching
+      var searchUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + encodeURIComponent('"' + title + '"') + '&location=' + encodeURIComponent(location);
       if (body.contractType) searchUrl += '&f_JT=' + (body.contractType === 'Contract' ? 'C' : body.contractType === 'Full-time' ? 'F' : '');
       if (body.datePosted === 'week') searchUrl += '&f_TPR=r604800';
       else if (body.datePosted === 'month') searchUrl += '&f_TPR=r2592000';
