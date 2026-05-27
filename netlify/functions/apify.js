@@ -292,13 +292,29 @@ function isCyberRelevant(title, desc) {
   // Strip "with Security Clearance" — it's not a cyber keyword
   t = t.replace(/\bwith\s+security\s+clearance\b/gi, '').replace(/\bsecurity\s+clearance\b/gi, '').trim();
 
-  // Reject known non-IT titles
-  var NON_IT = /\b(humint|sigint|geoint|masint|osint\s*analyst|maintenance\s*(?:tech|engineer|worker|manager)|customer\s*success|optimizer|program\s*analyst|budget\s*analyst|financial\s*analyst|hr\s*analyst|compensation\s*analyst|operations?\s*(?:concept\s*)?analyst(?!\s*-?\s*(?:soc|cyber|security))|business\s*analyst|supply\s*chain|logistics|nurse|clinical|pharmacist|medical\s*coder|social\s*worker|case\s*manager|paralegal|loan\s*officer|mortgage|real\s*estate|truck\s*driver|warehouse|forklift|cashier|retail\s*associate|food\s*service|janitor|custodian|landscap|plumber|electrician(?!\s*(?:cyber|security))|intelligence\s*analyst(?!\s*(?:cyber|threat))|concept\s*analyst|policy\s*analyst|research\s*analyst(?!\s*(?:cyber|security|threat)))\b/i;
+  // Reject known non-IT titles immediately
+  var NON_IT = /\b(humint|sigint|geoint|masint|imint|osint\s*analyst|maintenance|customer\s*success|optimizer|program\s*analyst|budget\s*analyst|financial\s*analyst|hr\s*analyst|compensation\s*analyst|operations?\s*(?:concept\s*)?analyst|concept\s*analyst|business\s*analyst|supply\s*chain|logistics|nurse|clinical|pharmacist|medical|social\s*worker|case\s*manager|paralegal|loan\s*officer|mortgage|real\s*estate|truck\s*driver|warehouse|forklift|cashier|retail|food\s*service|janitor|custodian|landscap|plumber|intelligence\s*analyst(?!\s*(?:cyber|threat\s*intel))|policy\s*analyst|research\s*analyst(?!\s*(?:cyber|security|threat))|space\s*(?:threat|analyst|operations)|operational\s*concept|weapons?\s*analyst|mission\s*analyst|battle|combat|acquisition\s*analyst|contracts?\s*(?:specialist|analyst|manager)|procurement|j-?\s*\d+\b)\b/i;
   if (NON_IT.test(t)) return false;
 
-  // Title contains specific cybersecurity keywords → pass immediately
+  // Defense/military context — even if cyber keywords present, verify with description
+  var DEFENSE_CONTEXT = /\b(clearance|dod|military|defense|army|navy|air\s*force|marines|pentagon|joint\s*staff|combatant|classified|top\s*secret|ts[\s\/]*sci|space\s*command|norad|stratcom|centcom|socom)\b/i;
+  var hasDefenseContext = DEFENSE_CONTEXT.test(title || '');
+
+  // Title contains specific cybersecurity keywords
   var CYBER_TITLE = /\b(soc\s*analyst|soc\s*engineer|soc\s*manager|soc\s*lead|security\s*(?:analyst|engineer|architect|consultant|operations|specialist|administrator|manager|director|researcher)|cyber(?:security)?|infosec|siem|threat\s*(?:analyst|hunter|intelligence|researcher)|incident\s*(?:response|handler|analyst)|malware\s*analyst|forensic|pentest|penetration\s*test|vulnerability\s*(?:analyst|engineer|manager)|devsecops|secops|ciso|csirt|dfir|blue\s*team|red\s*team|purple\s*team|cloud\s*security|network\s*security|information\s*security|it\s*security|application\s*security|security\s*monitoring|detection\s*(?:engineer|analyst)|endpoint\s*security)\b/i;
-  if (CYBER_TITLE.test(t)) return true;
+
+  if (CYBER_TITLE.test(t)) {
+    // If defense context, also require 2+ cyber signals in description
+    if (hasDefenseContext) {
+      var cyberCount = 0;
+      [/\bsiem\b/i, /\bedr\b/i, /\bsecurity\s*operations\s*center\b/i, /\bfirewall/i,
+       /\bsplunk|crowdstrike|sentinel/i, /\bmalware\b/i, /\bphishing\b/i,
+       /\bcybersecurity\b/i, /\bincident\s*response/i, /\bids[\s\/]*ips\b/i
+      ].forEach(function(re) { if (re.test(d)) cyberCount++; });
+      return cyberCount >= 2;
+    }
+    return true;
+  }
 
   // Title is generic — check description for 3+ cyber signals
   var cyberSignals = 0;
