@@ -259,14 +259,22 @@ exports.handler = async function(event) {
       })};
     }
 
-    // ACTION: cleanupNonCyber - remove non-cybersecurity jobs previously saved by Apify
+    // ACTION: cleanupNonCyber - remove non-cybersecurity jobs from DB
     if (action === 'cleanupNonCyber') {
       var { getDb } = require('./db');
       var db = await getDb();
       var col = db.collection('jobs');
-      var apifyJobs = await col.find({ sourceApi: 'apify-bebity' }).project({ _id: 1, title: 1, description: 1 }).toArray();
+      // Check ALL jobs from LinkedIn sources (apify-bebity, linkedin.com, etc.)
+      var linkedinJobs = await col.find({
+        $or: [
+          { sourceApi: 'apify-bebity' },
+          { source: { $regex: 'linkedin', $options: 'i' } },
+          { applyLink: { $regex: 'linkedin\\.com', $options: 'i' } },
+          { jobUrl: { $regex: 'linkedin\\.com', $options: 'i' } }
+        ]
+      }).project({ _id: 1, title: 1, description: 1 }).toArray();
       var toDelete = [];
-      apifyJobs.forEach(function(j) {
+      linkedinJobs.forEach(function(j) {
         if (!isCyberRelevant(j.title, j.description)) toDelete.push(j._id);
       });
       var deleted = 0;
@@ -274,7 +282,7 @@ exports.handler = async function(event) {
         var result = await col.deleteMany({ _id: { $in: toDelete } });
         deleted = result.deletedCount || 0;
       }
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ checked: apifyJobs.length, deleted: deleted, kept: apifyJobs.length - deleted }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ checked: linkedinJobs.length, deleted: deleted, kept: linkedinJobs.length - deleted }) };
     }
 
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action' }) };
