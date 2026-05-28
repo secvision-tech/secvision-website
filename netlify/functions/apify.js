@@ -117,13 +117,16 @@ exports.handler = async function(event) {
 
       // Extraction patterns (same as job-search.js)
       var TOOL_RE = /Microsoft\s*Defender|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM)|Chronicle|Tenable|Qualys|Nessus|Rapid7|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|Phantom|Swimlane|KQL|SPL|YARA|Sigma|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|AWS|GCP|Google\s*Cloud|Prisma\s*Cloud|Wiz|Terraform|Ansible|Kubernetes|Docker|Jenkins|Python|Bash|PowerShell|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|IAM|PAM|MFA|SSO|UEBA|Aqua|Twistlock|Trivy|Falco|Sysdig|Anchore|Checkov/gi;
-      var CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|CCSP|CCNA|CCNP|CRISC|SSCP|SANS|GIAC|ITIL|CKA|CKAD|CKS|PCNSE|SABSA/gi;
+      var CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|CCSP|CCNA|CCNP|CRISC|SSCP|SANS|GIAC|ITIL|PCNSE|SABSA/gi;
       var COMP_RE = /SOC\s*2|ISO\s*27001|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|MITRE\s*ATT&CK|Zero\s*Trust|NERC\s*CIP|OWASP\s*Top\s*10|NIST\s*RMF|STIX[\s\/]*TAXII|\bNIST\b/gi;
 
       function uniqueMatch(text, re) {
         if (!text) return [];
+        var NORM = {'siem':'SIEM','soar':'SOAR','edr':'EDR','xdr':'XDR','ndr':'NDR','ids/ips':'IDS/IPS','dlp':'DLP','waf':'WAF','casb':'CASB','cspm':'CSPM','cwpp':'CWPP','cnapp':'CNAPP','iam':'IAM','pam':'PAM','mfa':'MFA','sso':'SSO','ueba':'UEBA','spl':'SPL','kql':'KQL','yara':'YARA','aws':'AWS','gcp':'GCP','azure':'Azure','python':'Python','bash':'Bash','powershell':'PowerShell','golang':'Golang','splunk':'Splunk','crowdstrike':'CrowdStrike','sentinelone':'SentinelOne','microsoft sentinel':'Microsoft Sentinel','microsoft defender':'Microsoft Defender'};
         var m = text.match(re) || [], seen = {};
-        return m.filter(function(v) { var k = v.toLowerCase().trim(); if (seen[k]) return false; seen[k] = true; return true; }).slice(0, 12);
+        return m.filter(function(v) { var k = v.toLowerCase().trim(); if (seen[k]) return false; seen[k] = true; return true; }).map(function(v) {
+          var k = v.toLowerCase().trim(); return NORM[k] || v;
+        }).slice(0, 12);
       }
 
       function detectJobType(contractType, desc) {
