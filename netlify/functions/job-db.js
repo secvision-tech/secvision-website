@@ -549,7 +549,7 @@ exports.handler = async (event) => {
     if (action === 'getUniqueCompanies') {
       var companies = await col.aggregate([
         { $match: { company: { $ne: null } } },
-        { $group: { _id: { $toLower: '$company' }, company: { $first: '$company' }, companySize: { $first: '$companySize' }, companyLinkedin: { $first: '$companyLinkedin' }, companyUrl: { $first: '$companyUrl' } } },
+        { $group: { _id: { $toLower: '$company' }, company: { $first: '$company' }, companySize: { $first: '$companySize' }, companyLinkedin: { $first: '$companyLinkedin' }, companyUrl: { $first: '$companyUrl' }, companyType: { $first: '$companyType' } } },
         { $sort: { _id: 1 } }
       ]).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies }) };

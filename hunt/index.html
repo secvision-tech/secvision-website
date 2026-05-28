@@ -75,6 +75,7 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .ctype-badge{display:inline-block;padding:.1rem .35rem;border-radius:4px;font-size:.55rem;font-weight:600;cursor:pointer}
 .ctype-mssp{background:#D1F0E5;color:#0F6E56}.ctype-enterprise{background:#DBE9F7;color:#185FA5}
 .ctype-govt{background:#FDF0D3;color:#854F0B}.ctype-startup{background:#E5E3F9;color:#534AB7}
+.ctype-jobboard{background:#FEE2E2;color:#991B1B}.ctype-staffing{background:#FFF3CD;color:#7C4B00}
 .ctype-unknown{background:var(--off);color:var(--g5);border:1px solid var(--g100)}
 .ctype-dd{position:absolute;background:#fff;border:1px solid var(--g100);border-radius:6px;box-shadow:0 6px 20px rgba(15,35,65,.12);z-index:60;min-width:130px;padding:.2rem 0;display:none}
 .ctype-dd.open{display:block}
@@ -242,7 +243,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <div class="sf" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr auto">
           <div class="sg"><label>Search Text</label><input type="text" id="dbQuery" placeholder="Role, company, skill, tool..."></div>
           <div class="sg"><label>Status</label><select id="dbStatus"><option value="all">All Statuses</option><option value="new">New</option><option value="reviewed">Reviewed</option><option value="contacted">Contacted</option><option value="archived">Archived</option></select></div>
-          <div class="sg"><label>Company Type</label><select id="dbCompanyType"><option value="all">All Types</option><option value="MSSP/MDR">MSSP/MDR</option><option value="Enterprise">Enterprise</option><option value="Government">Government</option><option value="Startup">Startup</option><option value="IT Consulting">IT Consulting</option><option value="">Unclassified</option></select></div>
+          <div class="sg"><label>Company Type</label><select id="dbCompanyType"><option value="all">All Types</option><option value="MSSP/MDR">MSSP/MDR</option><option value="Enterprise">Enterprise</option><option value="Government">Government</option><option value="Startup">Startup</option><option value="IT Consulting">IT Consulting</option><option value="Job Board">Job Board</option><option value="Staffing/Recruiting">Staffing/Recruiting</option><option value="">Unclassified</option></select></div>
           <div class="sg"><label>Job Type</label><select id="dbJobType"><option value="all">All Types</option><option value="Full-time">Full-time</option><option value="Contract">Contract</option><option value="Part-time">Part-time</option><option value="Internship">Internship</option></select></div>
           <div class="sg"><label>Time Period</label><select id="dbPeriod" onchange="document.getElementById('dbCustomDates').style.display=this.value==='custom'?'flex':'none'"><option value="all">All Time</option><option value="1">Last 1 Day</option><option value="3">Last 3 Days</option><option value="7">Last 1 Week</option><option value="15">Last 15 Days</option><option value="30" selected>Last 1 Month</option><option value="custom">Custom Range</option></select></div>
           <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option></select></div>
@@ -577,7 +578,7 @@ function statusBadge(status){
 
 function companyTypeBadge(type){
   if(!type)return '<span class="ctype-badge ctype-unknown" title="Click to classify company type">Classify</span>';
-  var cls={'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise'};
+  var cls={'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'};
   return '<span class="ctype-badge '+(cls[type]||'ctype-unknown')+'" title="Click to change: '+type+'">'+type+'</span>';
 }
 
@@ -611,7 +612,7 @@ function showCompanyTypeDD(jobIdx,el){
   var j=allJobs[jobIdx];if(!j)return;
   var dd=document.createElement('div');
   dd.className='ctype-dd open';
-  var types=[{val:'MSSP/MDR',label:'MSSP / MDR Provider'},{val:'Enterprise',label:'Enterprise'},{val:'Government',label:'Government / Defense'},{val:'Startup',label:'Cybersecurity Startup'},{val:'IT Consulting',label:'IT Consulting / Services'},{val:'',label:'Clear Classification'}];
+  var types=[{val:'MSSP/MDR',label:'MSSP / MDR Provider'},{val:'Enterprise',label:'Enterprise'},{val:'Government',label:'Government / Defense'},{val:'Startup',label:'Cybersecurity Startup'},{val:'IT Consulting',label:'IT Consulting / Services'},{val:'Job Board',label:'Job Board / Platform'},{val:'Staffing/Recruiting',label:'Staffing / Recruiting Agency'},{val:'',label:'Clear Classification'}];
   types.forEach(function(t){
     var item=document.createElement('div');
     item.className='ctype-dd-item'+(j.companyType===t.val?' active':'');
@@ -822,10 +823,10 @@ async function apifySearchBackground(roles,country,datePosted){
 var enrichedCompaniesCache={};
 async function autoEnrichCompanies(){
   var enSt=document.getElementById('enrichStatus');
-  // Collect unique companies from current results
+  // Collect unique companies from current results (skip Job Boards only)
   var uniqueCompanies={};
   allJobs.forEach(function(j){
-    if(j.company&&!enrichedCompaniesCache[j.company.toLowerCase()])uniqueCompanies[j.company.toLowerCase()]=j.company;
+    if(j.company&&!enrichedCompaniesCache[j.company.toLowerCase()]&&j.companyType!=='Job Board')uniqueCompanies[j.company.toLowerCase()]=j.company;
   });
   var companyList=Object.values(uniqueCompanies);
   if(!companyList.length)return;
@@ -1440,7 +1441,13 @@ async function enrichAllCompanies(){
   try{
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getUniqueCompanies'})});
     var d=await r.json();
-    var companies=(d.companies||[]).filter(function(c){return !c.companySize && c.company});
+    var companies=(d.companies||[]).filter(function(c){
+      if(!c.company)return false;
+      if(c.companySize && c.companyLinkedin)return false;
+      // Skip Job Board companies only (Staffing/Recruiting are BD targets)
+      if((c.companyType||'').toLowerCase()==='job board')return false;
+      return true;
+    });
     if(!companies.length){
       st.textContent='All companies already enriched! ('+d.companies.length+' total)';
       btn.disabled=false;return;
@@ -1550,7 +1557,7 @@ function renderPartnerTable(data){
     var company=d._id?.company||'Unknown';
     var type=d._id?.type||'';
     var size=d.companySize?(typeof d.companySize==='number'?d.companySize.toLocaleString():String(d.companySize).replace(/[^0-9]/g,'').replace(/B(?=(d{3})+(?!d))/g,',')):'-';
-    var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'<span class="ctype-badge ctype-unknown">Unclassified</span>';
+    var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown')+'">'+type+'</span>':'<span class="ctype-badge ctype-unknown">Unclassified</span>';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
     var statusHtml=Object.keys(sc).map(function(k){return '<span class="status-badge status-'+k+'">'+k+':'+sc[k]+'</span>'}).join(' ');
@@ -1580,7 +1587,7 @@ function renderContractTable(data){
     var company=d._id||'Unknown';
     var type=d.companyType||'';
     var size=d.companySize?(typeof d.companySize==='number'?d.companySize.toLocaleString():String(d.companySize).replace(/[^0-9]/g,'').replace(/B(?=(d{3})+(?!d))/g,',')):'-';
-    var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
+    var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
     var hot=d.count>=3?'hot':d.count>=2?'warm':'';
     var sc={};(d.statuses||[]).forEach(function(s){sc[s]=(sc[s]||0)+1});
     var statusHtml=Object.keys(sc).map(function(k){return '<span class="status-badge status-'+k+'">'+k+':'+sc[k]+'</span>'}).join(' ');
