@@ -484,9 +484,28 @@ function detectCountry(job, searchCountry) {
 }
 
 // Auto-classify company type from job description and company name
+// Known Job Board platforms (not actual employers)
+var JOB_BOARDS = /^(?:indeed|glassdoor|ziprecruiter|dice|monster|careerbuilder|simplyhired|talent\.com|bebee|jobrapido|jobilize|jobleads|usajobs|clearancejobs|virtualvocations|teal|adzuna|jobzmall|jora|workday|lever|greenhouse|icims|smartrecruiters|jazz\s*hr|bullhorn|taleo|brassring|linkedin|snagajob|handshake|wayup|hired|ladders|flexjobs|remote\.co|weworkremotely|angel\.co|wellfound|builtinnyc|builtin|ventureloop|startupers|remotive|nodesk|pangian|talent\s*center)$/i;
+
+// Known Staffing/Recruiting agencies
+var STAFFING_AGENCIES = /^(?:robert\s*half|hays|hays\s*technology|randstad|tek\s*systems|teksystems|adecco|modis|insight\s*global|kforce|cybercoders|aerotek|manpower(?:group)?|kelly\s*services|softworld.*kelly|beacon\s*hill|apex\s*systems|allegis|staffing\s*technologies|harvey\s*nash|michael\s*page|page\s*group|spencer\s*stuart|egon\s*zehnder|man\s*tech|disys|corestaff|matlen\s*silver|experis|vaco|addison\s*group|solis|motion\s*recruitment|talent\s*(?:solutions|bridge|partners)|brainworks|dunhill|recruiting\s*(?:from\s*scratch|innovation)|private\s*label\s*staff|11th\s*hour\s*service|river\s*hawk|nanosoft\s*consulting)$/i;
+
 function classifyCompany(company, desc) {
+  var compName = (company || '').trim();
   var text = (company + ' ' + desc).toLowerCase();
-  var score = { mssp: 0, enterprise: 0, govt: 0, startup: 0, consulting: 0 };
+
+  // Priority 1: Known Job Board — immediate classification
+  if (JOB_BOARDS.test(compName)) return 'Job Board';
+
+  // Priority 2: Known Staffing/Recruiting agency
+  if (STAFFING_AGENCIES.test(compName)) return 'Staffing/Recruiting';
+
+  // Priority 3: Detect staffing from description patterns
+  var staffingSignals = 0;
+  if (/\b(?:our\s*client\s*(?:is|,)|on\s*behalf\s*of|recruiting\s*for|working\s*with\s*(?:a|an|our)\s*(?:leading|top|major)|we\s*(?:are\s*)?(?:placing|staffing|recruiting))\b/i.test(desc)) staffingSignals += 3;
+  if (/\b(?:staffing\s*(?:agency|firm|company)|recruitment\s*(?:agency|firm)|talent\s*(?:acquisition|agency)|placing\s*candidates|contractor\s*role|contract\s*(?:to\s*hire|position)\s*(?:at|with|for))\b/i.test(desc)) staffingSignals += 3;
+
+  var score = { mssp: 0, enterprise: 0, govt: 0, startup: 0, consulting: 0, staffing: staffingSignals };
 
   // MSSP/MDR signals
   if (/\bmssp\b/.test(text)) score.mssp += 5;
@@ -518,13 +537,14 @@ function classifyCompany(company, desc) {
   if (/\b(?:startup|start[\s-]*up|seed\s*funding|series\s*[a-c]|venture|early[\s-]*stage|founding\s*(?:team|member))\b/.test(text)) score.startup += 5;
   if (/\b(?:fast[\s-]*paced|rapidly\s*growing|disrupt|innovative\s*(?:company|startup))\b/.test(text)) score.startup += 2;
 
-  // Consulting signals
-  if (/\b(?:consulting|consultancy|advisory|professional\s*services|staffing\s*(?:agency|firm|company))\b/.test(text)) score.consulting += 4;
-  if (/\b(?:on\s*behalf\s*of|our\s*client|client\s*site)\b/.test(text)) score.consulting += 3;
+  // Consulting/Staffing signals
+  if (/\b(?:consulting|consultancy|advisory|professional\s*services)\b/.test(text)) score.consulting += 4;
+  if (/\b(?:staffing\s*(?:agency|firm|company)|recruitment\s*agency)\b/.test(text)) score.staffing += 4;
+  if (/\b(?:on\s*behalf\s*of|our\s*client|client\s*site)\b/.test(text)) score.staffing += 3;
 
   // Find highest score
   var best = '', bestScore = 0;
-  var map = { mssp: 'MSSP/MDR', enterprise: 'Enterprise', govt: 'Government', startup: 'Startup', consulting: 'IT Consulting' };
+  var map = { mssp: 'MSSP/MDR', enterprise: 'Enterprise', govt: 'Government', startup: 'Startup', consulting: 'IT Consulting', staffing: 'Staffing/Recruiting' };
   for (var k in score) {
     if (score[k] > bestScore) { bestScore = score[k]; best = map[k]; }
   }
