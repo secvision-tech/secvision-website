@@ -77,7 +77,7 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .ctype-govt{background:#FDF0D3;color:#854F0B}.ctype-startup{background:#E5E3F9;color:#534AB7}
 .ctype-jobboard{background:#FEE2E2;color:#991B1B}.ctype-staffing{background:#FFF3CD;color:#7C4B00}
 .ctype-unknown{background:var(--off);color:var(--g5);border:1px solid var(--g100)}
-.ctype-dd{position:absolute;background:#fff;border:1px solid var(--g100);border-radius:6px;box-shadow:0 6px 20px rgba(15,35,65,.12);z-index:60;min-width:130px;padding:.2rem 0;display:none}
+.ctype-dd{position:absolute;background:#fff;border:1px solid var(--g100);border-radius:6px;box-shadow:0 6px 20px rgba(15,35,65,.12);z-index:60;min-width:130px;padding:.2rem 0;display:none;max-height:250px;overflow-y:auto}
 .ctype-dd.open{display:block}
 .ctype-dd-item{padding:.3rem .6rem;font-size:.62rem;cursor:pointer;color:var(--tx);transition:background .1s}
 .ctype-dd-item:hover{background:var(--off)}
@@ -1048,7 +1048,8 @@ async function viewDet(i){
   companySizeHtml+=' <span onclick="editCompanySize('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company size">✎</span>';
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
   companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',j.companyType||'Not classified'],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var companyTypeHtml=(j.companyType||'Not classified')+' <span onclick="editCompanyTypeInView('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Change company type">✎</span>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
   h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div></div>';
   // Load contacts async after rendering
@@ -1099,6 +1100,28 @@ async function editCompanySize(idx){
     var d=await r.json();
     j.companySize=sizeNum;
     allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum});
+    viewDet(idx);
+  }catch(e){alert('Error: '+e.message)}
+}
+
+async function editCompanyTypeInView(idx){
+  var j=allJobs[idx];if(!j)return;
+  var types=['MSSP/MDR','Enterprise','Government','Startup','IT Consulting','Job Board','Staffing/Recruiting'];
+  var labels={'MSSP/MDR':'MSSP / MDR Provider','Enterprise':'Enterprise','Government':'Government / Defense','Startup':'Cybersecurity Startup','IT Consulting':'IT Consulting / Services','Job Board':'Job Board / Platform','Staffing/Recruiting':'Staffing / Recruiting Agency'};
+  var current=j.companyType||'';
+  var options=types.map(function(t,i){return (i+1)+'. '+labels[t]+(t===current?' ✓':'')}).join('\n');
+  var input=prompt('Select Company Type for '+j.company+':\n\nCurrent: '+(current||'Not classified')+'\n\n'+options+'\n\nEnter number (1-'+types.length+') or type name:');
+  if(!input)return;
+  var selected='';
+  var num=parseInt(input);
+  if(num>=1&&num<=types.length){selected=types[num-1]}
+  else{types.forEach(function(t){if(t.toLowerCase()===input.toLowerCase())selected=t})}
+  if(!selected){alert('Invalid selection. Please enter a number 1-'+types.length);return}
+  try{
+    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'bulkUpdateCompanyType',company:j.company,companyType:selected})});
+    j.companyType=selected;
+    allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=selected});
     viewDet(idx);
   }catch(e){alert('Error: '+e.message)}
 }
