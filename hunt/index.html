@@ -620,9 +620,20 @@ function showCompanyTypeDD(jobIdx,el){
     item.onclick=function(e){e.stopPropagation();applyCompanyType(jobIdx,t.val);dd.remove()};
     dd.appendChild(item);
   });
-  // Position relative to badge
+  // Position relative to badge — open upward if near bottom of viewport
   var rect=el.getBoundingClientRect();
-  dd.style.position='fixed';dd.style.top=(rect.bottom+4)+'px';dd.style.left=rect.left+'px';
+  var spaceBelow=window.innerHeight-rect.bottom-8;
+  var spaceAbove=rect.top-8;
+  dd.style.position='fixed';
+  dd.style.left=Math.min(rect.left,window.innerWidth-180)+'px';
+  if(spaceBelow>=200){
+    dd.style.top=(rect.bottom+4)+'px';
+    dd.style.maxHeight=Math.min(250,spaceBelow)+'px';
+  }else{
+    dd.style.bottom=(window.innerHeight-rect.top+4)+'px';
+    dd.style.maxHeight=Math.min(250,spaceAbove)+'px';
+  }
+  dd.style.overflowY='auto';
   document.body.appendChild(dd);
   // Close on outside click
   setTimeout(function(){document.addEventListener('click',function closeDD(){dd.remove();document.removeEventListener('click',closeDD)})},10);
