@@ -525,6 +525,27 @@ exports.handler = async (event) => {
     }
 
     // Get unique companies (for bulk enrichment)
+    // Check which companies need enrichment (size or contacts)
+    if (action === 'getEnrichmentStatus') {
+      var companies = body.companies || [];
+      if (!companies.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ needsEnrichment: [] }) };
+      var contactsCol = db.collection('contacts');
+      var results = [];
+      for (var ci = 0; ci < companies.length; ci++) {
+        var comp = companies[ci];
+        var compPattern = comp.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Check if company has size
+        var jobWithSize = await col.findOne({ company: { $regex: compPattern, $options: 'i' }, companySize: { $gt: 0 } });
+        // Check if company has contacts
+        var contactCount = await contactsCol.countDocuments({ company: { $regex: compPattern, $options: 'i' } });
+        if (!jobWithSize || contactCount === 0) {
+          results.push({ company: comp, hasSize: !!jobWithSize, hasContacts: contactCount > 0 });
+        }
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ needsEnrichment: results }) };
+    }
+
+    // Get unique companies (for bulk enrichment)
     if (action === 'getUniqueCompanies') {
       var companies = await col.aggregate([
         { $match: { company: { $ne: null } } },

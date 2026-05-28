@@ -229,6 +229,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <div class="sg"><label>Country</label><select id="sCountry"><option value="us" selected>United States</option><option value="ca">Canada</option></select></div>
         <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button>
         <div id="apifyStatus" style="display:none;font-size:.65rem;color:#6C3FBF;background:#f3f0ff;padding:.3rem .6rem;border-radius:4px;align-self:center">🔄 LinkedIn enrichment running...</div>
+        <div id="enrichStatus" style="display:none;font-size:.65rem;color:#047857;background:#ecfdf5;padding:.3rem .6rem;border-radius:4px;align-self:center">🏢 Auto-enriching companies...</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:.6rem;margin-top:.5rem;align-items:end">
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="15days">Last 15 Days</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
@@ -707,6 +708,8 @@ async function searchJobs(){
     // Start Apify LinkedIn search in background
     var apifyCountry=CCODE_TO_NAME[selCountry]||'United States';
     apifySearchBackground(searchRoles,apifyCountry,datePosted);
+    // Start auto-enrichment of companies (size + contacts) in background
+    autoEnrichCompanies();
   }catch(err){console.error(err);document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';
     document.getElementById('emptyState').innerHTML='<h3>Search Error</h3><p>Unable to connect. Please try again.</p>'}
   btn.textContent='Search';btn.disabled=false;
@@ -806,10 +809,116 @@ async function apifySearchBackground(roles,country,datePosted){
     if(newCount>0){filtered=allJobs.slice();renderTable()}
     apSt.textContent='✅ LinkedIn: '+allApifyJobs.length+' jobs found, '+pd.saved+' saved. '+newCount+' new in view.';
     setTimeout(function(){apSt.style.display='none'},10000);
+    // Auto-enrich any new companies from Apify results
+    if(newCount>0)autoEnrichCompanies();
   }catch(e){
     console.error('Apify error:',e);
     apSt.textContent='⚠️ LinkedIn search failed: '+e.message;
     setTimeout(function(){apSt.style.display='none'},8000);
+  }
+}
+
+// Auto-enrich companies: get size + contacts for new companies (runs in background)
+var enrichedCompaniesCache={};
+async function autoEnrichCompanies(){
+  var enSt=document.getElementById('enrichStatus');
+  // Collect unique companies from current results
+  var uniqueCompanies={};
+  allJobs.forEach(function(j){
+    if(j.company&&!enrichedCompaniesCache[j.company.toLowerCase()])uniqueCompanies[j.company.toLowerCase()]=j.company;
+  });
+  var companyList=Object.values(uniqueCompanies);
+  if(!companyList.length)return;
+
+  enSt.style.display='inline-block';
+  enSt.textContent='🏢 Checking '+companyList.length+' companies for enrichment...';
+  try{
+    // Check which companies need enrichment
+    var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'getEnrichmentStatus',companies:companyList})});
+    var sd=await sr.json();
+    var toEnrich=sd.needsEnrichment||[];
+    if(!toEnrich.length){
+      enSt.textContent='✅ All companies already enriched.';
+      companyList.forEach(function(c){enrichedCompaniesCache[c.toLowerCase()]=true});
+      setTimeout(function(){enSt.style.display='none'},5000);
+      return;
+    }
+
+    enSt.textContent='🏢 Enriching '+toEnrich.length+' new companies (size + contacts)...';
+    var enriched=0,contactsFound=0,failed=0;
+
+    for(var i=0;i<toEnrich.length;i++){
+      var comp=toEnrich[i];
+      enSt.textContent='🏢 '+(i+1)+'/'+toEnrich.length+': '+comp.company+'...';
+
+      // Step 1: Get company size if missing
+      if(!comp.hasSize){
+        try{
+          var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'enrichCompany',company:comp.company,domain:''})});
+          var ed=await er.json();
+          if(ed.error&&ed.error.indexOf('insufficient credits')>-1){
+            enSt.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies.';
+            setTimeout(function(){enSt.style.display='none'},8000);return;
+          }
+          if(ed.size||ed.linkedin){
+            await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({action:'updateCompanyInfo',company:comp.company,companySize:ed.size||'',companyLinkedin:ed.linkedin||'',companyWebsite:ed.website||''})});
+            enriched++;
+          }
+        }catch(e){failed++}
+      }
+
+      // Step 2: Discover contacts if missing
+      if(!comp.hasContacts){
+        try{
+          var cr=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'searchPeople',company:comp.company})});
+          var cd=await cr.json();
+          if(cd.error&&cd.error.indexOf('insufficient credits')>-1){
+            enSt.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies.';
+            setTimeout(function(){enSt.style.display='none'},8000);return;
+          }
+          if(cd.people&&cd.people.length){
+            // Enrich top 3 contacts
+            var enrichCount=Math.min(3,cd.people.length);
+            var contacts=[];
+            for(var ci=0;ci<enrichCount;ci++){
+              var p=cd.people[ci];
+              try{
+                var pr=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({action:'matchPerson',name:p.name,company:comp.company,personId:p.id||'',domain:cd.domain||''})});
+                var pd=await pr.json();
+                if(pd.error&&pd.error.indexOf('insufficient credits')>-1){
+                  enSt.textContent='⚠️ Apollo credits exhausted.';
+                  setTimeout(function(){enSt.style.display='none'},8000);return;
+                }
+                if(pd.found){
+                  contacts.push({name:pd.name||p.name,designation:pd.designation||p.designation||'N/A',
+                    email:pd.email||'N/A',linkedin:pd.linkedin||'',source:'Apollo.io (Auto)'});
+                }
+              }catch(e){}
+            }
+            if(contacts.length){
+              await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({action:'saveContacts',company:comp.company,contacts:contacts})});
+              contactsFound+=contacts.length;
+            }
+          }
+        }catch(e){failed++}
+      }
+
+      enrichedCompaniesCache[comp.company.toLowerCase()]=true;
+      // Small delay to avoid rate limiting
+      await new Promise(function(r){setTimeout(r,300)});
+    }
+
+    enSt.textContent='✅ Enriched '+enriched+' companies, '+contactsFound+' contacts found. '+(failed?' '+failed+' failed.':'');
+    setTimeout(function(){enSt.style.display='none'},10000);
+  }catch(e){
+    enSt.textContent='⚠️ Auto-enrich error: '+e.message;
+    setTimeout(function(){enSt.style.display='none'},8000);
   }
 }
 
