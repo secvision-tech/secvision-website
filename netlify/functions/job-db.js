@@ -525,6 +525,17 @@ exports.handler = async (event) => {
     }
 
     // Get unique companies (for bulk enrichment)
+    // Get single job by ID (for View from dashboard)
+    if (action === 'getJob') {
+      var { ObjectId } = require('mongodb');
+      try {
+        var job = await col.findOne({ _id: new ObjectId(body.id) });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ job: job }) };
+      } catch(e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ job: null, error: e.message }) };
+      }
+    }
+
     // Get latest 100 contract jobs
     if (action === 'getRecentContracts') {
       var contracts = await col.find({ jobType: 'Contract' })

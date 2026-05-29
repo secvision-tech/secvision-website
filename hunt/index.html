@@ -1078,6 +1078,15 @@ async function viewDet(i){
       var cd=await cr.json();
       var cel=document.getElementById('viewContacts');
       if(cd.contacts&&cd.contacts.length){
+        // Sort by seniority: CISO/VP/Director → Head/Sr Manager → Manager → Lead/Senior → Specialist → Recruiter
+        var seniorityOrder=[/\b(?:ciso|cto|coo|ceo|chief)\b/i,/\b(?:vp|vice\s*president)\b/i,/\b(?:director)\b/i,/\b(?:head)\b/i,/\b(?:senior\s*manager|sr\.?\s*manager)\b/i,/\b(?:manager)\b/i,/\b(?:lead|principal|senior|sr\.?)\b/i,/\b(?:specialist|analyst|engineer|architect|consultant)\b/i,/\b(?:recruiter|talent\s*acquisition|hiring)\b/i];
+        cd.contacts.sort(function(a,b){
+          var da=(a.designation||'').toLowerCase(),db=(b.designation||'').toLowerCase();
+          var sa=seniorityOrder.length,sb=seniorityOrder.length;
+          for(var si=0;si<seniorityOrder.length;si++){if(seniorityOrder[si].test(da)){sa=si;break}}
+          for(var si=0;si<seniorityOrder.length;si++){if(seniorityOrder[si].test(db)){sb=si;break}}
+          return sa-sb;
+        });
         var ch='';
         cd.contacts.forEach(function(c){
           var nameHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-weight:600">'+esc(c.name)+' ↗</a>':'<strong>'+esc(c.name)+'</strong>';
@@ -1682,20 +1691,55 @@ async function fetchRecentContracts(){
     var d=await r.json();
     var jobs=d.contracts||[];
     if(!jobs.length){el.innerHTML='<div class="css-no-data">No contract jobs found.</div>';return}
-    var html='<table class="dash-table"><thead><tr><th>#</th><th>Date</th><th>Title</th><th>Company</th><th>Type</th><th>Job Location</th><th>Country</th><th>Salary/Rate</th><th>Tools</th><th>Status</th><th>Source</th></tr></thead><tbody>';
+    var html='<div style="overflow-x:auto"><table class="dash-table" style="font-size:.62rem"><thead><tr>';
+    var cols=['#','Date','Title','Company','Type','Job Location','Country','Salary/Rate','Certs','Tools','Status','Source','Action'];
+    cols.forEach(function(c){html+='<th style="white-space:nowrap;padding:.3rem .4rem">'+c+'</th>'});
+    html+='</tr></thead><tbody>';
     jobs.forEach(function(j,i){
       var dt=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
       var type=j.companyType||'';
-      var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
-      var statusCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
+      var typeCls=({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown';
+      var typeBadge=type?'<span class="ctype-badge '+typeCls+'">'+type+'</span>':'';
       var st=j.status||'new';
-      var statusHtml='<span class="status-badge '+(statusCls[st]||'')+'">'+st.charAt(0).toUpperCase()+st.slice(1)+'</span>';
-      var titleHtml=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" style="color:var(--pri);text-decoration:none">'+j.title+'</a>':j.title;
-      html+='<tr><td>'+(i+1)+'</td><td>'+dt+'</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+((j.title||'').replace(/"/g,'&quot;'))+'">'+titleHtml+'</td><td>'+j.company+'</td><td>'+typeBadge+'</td><td style="font-size:.6rem">'+((j.location||'').slice(0,25))+'</td><td style="font-size:.6rem">'+(j.detectedCountry||'')+'</td><td style="font-size:.6rem">'+(j.salary||'N/A')+'</td><td style="font-size:.55rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+((j.tools||'').replace(/"/g,'&quot;'))+'">'+(j.tools||'')+'</td><td>'+statusHtml+'</td><td style="font-size:.55rem">'+(j.source||'')+'</td></tr>';
+      var stCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
+      var statusHtml='<span class="status-badge '+(stCls[st]||'')+'">'+st.charAt(0).toUpperCase()+st.slice(1)+'</span>';
+      var titleHtml=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" style="color:var(--pri);text-decoration:none" title="'+(j.title||'').replace(/"/g,'&quot;')+'">'+(j.title||'').slice(0,40)+(j.title&&j.title.length>40?'...':'')+'</a>':(j.title||'');
+      var jobId=j._id;
+      html+='<tr>';
+      html+='<td>'+(i+1)+'</td>';
+      html+='<td style="white-space:nowrap">'+dt+'</td>';
+      html+='<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+titleHtml+'</td>';
+      html+='<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.company||'')+'">'+j.company+'</td>';
+      html+='<td>'+typeBadge+'</td>';
+      html+='<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.location||'')+'">'+(j.location||'').slice(0,25)+'</td>';
+      html+='<td>'+(j.detectedCountry||'')+'</td>';
+      html+='<td style="white-space:nowrap">'+(j.salary||'N/A')+'</td>';
+      html+='<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.certifications||'').replace(/"/g,'&quot;')+'">'+(j.certifications||'')+'</td>';
+      html+='<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.tools||'').replace(/"/g,'&quot;')+'">'+(j.tools||'')+'</td>';
+      html+='<td>'+statusHtml+'</td>';
+      html+='<td style="font-size:.55rem">'+(j.source||'')+'</td>';
+      html+='<td><button class="vb" onclick="viewContractJob(\''+jobId+'\')">View</button></td>';
+      html+='</tr>';
     });
-    html+='</tbody></table>';
+    html+='</tbody></table></div>';
     el.innerHTML=html;
   }catch(e){el.innerHTML='<div style="color:#DC2626;padding:.3rem">Error: '+e.message+'</div>'}
+}
+
+async function viewContractJob(jobId){
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getJob',id:jobId})});
+    var d=await r.json();
+    if(d.job){
+      var j=d.job;
+      j.idx=0;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
+      j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||'';
+      // Temporarily add to allJobs for viewDet
+      var tempIdx=allJobs.length;
+      allJobs.push(j);
+      viewDet(tempIdx);
+    }
+  }catch(e){alert('Error loading job: '+e.message)}
 }
 
 function searchContractByCountry(country){
@@ -1777,6 +1821,14 @@ async function openContactFinder(company){
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:company})});
     var d=await r.json();
     if(d.contacts&&d.contacts.length){
+      // Sort by seniority
+      var senOrder=[/\b(?:ciso|cto|coo|ceo|chief)\b/i,/\b(?:vp|vice\s*president)\b/i,/\b(?:director)\b/i,/\b(?:head)\b/i,/\b(?:senior\s*manager|sr\.?\s*manager)\b/i,/\b(?:manager)\b/i,/\b(?:lead|principal|senior|sr\.?)\b/i,/\b(?:specialist|analyst|engineer)\b/i,/\b(?:recruiter|talent\s*acquisition)\b/i];
+      d.contacts.sort(function(a,b){
+        var da=(a.designation||''),db=(b.designation||''),sa=senOrder.length,sb=senOrder.length;
+        for(var si=0;si<senOrder.length;si++){if(senOrder[si].test(da)){sa=si;break}}
+        for(var si=0;si<senOrder.length;si++){if(senOrder[si].test(db)){sb=si;break}}
+        return sa-sb;
+      });
       var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">📋 Saved Contacts ('+d.contacts.length+')</div><div style="display:flex;flex-direction:column;gap:.2rem">';
       d.contacts.forEach(function(c){
         var linkedinHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-size:.55rem">LinkedIn ↗</a>':'';
