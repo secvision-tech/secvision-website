@@ -1027,7 +1027,9 @@ function addPB(c,n){var b=document.createElement('button');b.className='pb'+(n==
 function goPage(p){if(p<1)return;curPage=p;renderTable();document.getElementById('tableWrap').scrollTop=0}
 function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(v>=1){goPage(v);document.getElementById('pjInput').value=''}}
 
+var currentViewIdx=-1;
 async function viewDet(i){
+  currentViewIdx=i;
   var j=allJobs[i];if(!j)return;
   // If description missing (DB search excludes it), fetch full record
   if(!j.description&&j._id){
@@ -2036,7 +2038,13 @@ async function apolloEnrich(){
   }catch(e){document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#DC2626">Error: '+e.message+'</span>'}
   finally{btn.textContent='🏢 Get Company Size';btn.disabled=false}
 }
-function closeContactPopup(){document.getElementById('contactPopup').style.display='none'}
+function closeContactPopup(){
+  document.getElementById('contactPopup').style.display='none';
+  // Refresh View if open
+  if(currentViewIdx>=0&&document.getElementById('detOverlay')&&document.getElementById('detOverlay').style.display==='flex'){
+    viewDet(currentViewIdx);
+  }
+}
 async function enrichPerson(){
   var name=document.getElementById('cfName').value.trim();
   if(!name){document.getElementById('cfStatus').textContent='Enter a name first.';return}
