@@ -82,6 +82,8 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .ctype-dd-item{padding:.3rem .6rem;font-size:.62rem;cursor:pointer;color:var(--tx);transition:background .1s}
 .ctype-dd-item:hover{background:var(--off)}
 .ctype-dd-item.active{font-weight:700;color:var(--ac)}
+.dash-table th[style*="resize"]{overflow:hidden;cursor:pointer}
+.dash-table th[style*="resize"]:hover{background:var(--g1)}
 .db-info{font-size:.62rem;color:var(--g3);margin-top:.3rem}
 .fc-btn{padding:.18rem .35rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.55rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;white-space:nowrap}
 .fc-btn:hover{background:var(--ac)}
@@ -1683,47 +1685,85 @@ function renderContractTable(data){
   el.innerHTML=html;
 }
 
+var cjData=[],cjSortCol='',cjSortDir=1;
+var CJ_COLS=[
+  {key:'idx',label:'#',w:30},{key:'date',label:'Date',w:70},{key:'title',label:'Title',w:200},
+  {key:'company',label:'Company',w:130},{key:'companyType',label:'Type',w:80},
+  {key:'location',label:'Job Location',w:110},{key:'detectedCountry',label:'Country',w:80},
+  {key:'salary',label:'Salary/Rate',w:90},{key:'certifications',label:'Certs',w:100},
+  {key:'tools',label:'Tools',w:120},{key:'status',label:'Status',w:70},
+  {key:'source',label:'Source',w:70},{key:'action',label:'Action',w:50}
+];
+
 async function fetchRecentContracts(){
   var el=document.getElementById('contractJobsList');if(!el)return;
   el.innerHTML='<div style="color:var(--g4);padding:.3rem">Loading latest contract jobs...</div>';
   try{
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getRecentContracts'})});
     var d=await r.json();
-    var jobs=d.contracts||[];
-    if(!jobs.length){el.innerHTML='<div class="css-no-data">No contract jobs found.</div>';return}
-    var html='<div style="overflow-x:auto"><table class="dash-table" style="font-size:.62rem"><thead><tr>';
-    var cols=['#','Date','Title','Company','Type','Job Location','Country','Salary/Rate','Certs','Tools','Status','Source','Action'];
-    cols.forEach(function(c){html+='<th style="white-space:nowrap;padding:.3rem .4rem">'+c+'</th>'});
-    html+='</tr></thead><tbody>';
-    jobs.forEach(function(j,i){
-      var dt=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
-      var type=j.companyType||'';
-      var typeCls=({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown';
-      var typeBadge=type?'<span class="ctype-badge '+typeCls+'">'+type+'</span>':'';
-      var st=j.status||'new';
-      var stCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
-      var statusHtml='<span class="status-badge '+(stCls[st]||'')+'">'+st.charAt(0).toUpperCase()+st.slice(1)+'</span>';
-      var titleHtml=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" style="color:var(--pri);text-decoration:none" title="'+(j.title||'').replace(/"/g,'&quot;')+'">'+(j.title||'').slice(0,40)+(j.title&&j.title.length>40?'...':'')+'</a>':(j.title||'');
-      var jobId=j._id;
-      html+='<tr>';
-      html+='<td>'+(i+1)+'</td>';
-      html+='<td style="white-space:nowrap">'+dt+'</td>';
-      html+='<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+titleHtml+'</td>';
-      html+='<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.company||'')+'">'+j.company+'</td>';
-      html+='<td>'+typeBadge+'</td>';
-      html+='<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.location||'')+'">'+(j.location||'').slice(0,25)+'</td>';
-      html+='<td>'+(j.detectedCountry||'')+'</td>';
-      html+='<td style="white-space:nowrap">'+(j.salary||'N/A')+'</td>';
-      html+='<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.certifications||'').replace(/"/g,'&quot;')+'">'+(j.certifications||'')+'</td>';
-      html+='<td style="max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.tools||'').replace(/"/g,'&quot;')+'">'+(j.tools||'')+'</td>';
-      html+='<td>'+statusHtml+'</td>';
-      html+='<td style="font-size:.55rem">'+(j.source||'')+'</td>';
-      html+='<td><button class="vb" onclick="viewContractJob(\''+jobId+'\')">View</button></td>';
-      html+='</tr>';
+    cjData=(d.contracts||[]).map(function(j,i){
+      j.idx=i+1;
+      j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
+      j.status=j.status||'new';
+      j.companyType=j.companyType||'';
+      return j;
     });
-    html+='</tbody></table></div>';
-    el.innerHTML=html;
+    if(!cjData.length){el.innerHTML='<div class="css-no-data">No contract jobs found.</div>';return}
+    cjSortCol='';cjSortDir=1;
+    renderContractJobs();
   }catch(e){el.innerHTML='<div style="color:#DC2626;padding:.3rem">Error: '+e.message+'</div>'}
+}
+
+function sortContractJobs(colKey){
+  if(cjSortCol===colKey){cjSortDir*=-1}else{cjSortCol=colKey;cjSortDir=1}
+  renderContractJobs();
+}
+
+function renderContractJobs(){
+  var el=document.getElementById('contractJobsList');if(!el||!cjData.length)return;
+  var sorted=cjData.slice();
+  if(cjSortCol){
+    sorted.sort(function(a,b){
+      var va=(a[cjSortCol]||''),vb=(b[cjSortCol]||'');
+      if(cjSortCol==='date'){va=a.datePosted?new Date(a.datePosted).getTime():0;vb=b.datePosted?new Date(b.datePosted).getTime():0}
+      if(typeof va==='number'&&typeof vb==='number')return (va-vb)*cjSortDir;
+      return String(va).localeCompare(String(vb))*cjSortDir;
+    });
+  }
+  var html='<div style="overflow-x:auto"><table class="dash-table" style="font-size:.62rem;table-layout:fixed"><thead><tr>';
+  CJ_COLS.forEach(function(c){
+    var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
+    var clickable=c.key!=='action'?' onclick="sortContractJobs(\''+c.key+'\')" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;width:'+c.w+'px;min-width:'+c.w+'px;overflow:hidden;resize:horizontal"':'style="white-space:nowrap;padding:.3rem .4rem;width:'+c.w+'px"';
+    html+='<th'+clickable+'>'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
+  });
+  html+='</tr></thead><tbody>';
+  sorted.forEach(function(j,i){
+    var type=j.companyType||'';
+    var typeCls=({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown';
+    var typeBadge=type?'<span class="ctype-badge '+typeCls+'">'+type+'</span>':'';
+    var st=j.status||'new';
+    var stCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
+    var statusHtml='<span class="status-badge '+(stCls[st]||'')+'">'+st.charAt(0).toUpperCase()+st.slice(1)+'</span>';
+    var titleText=(j.title||'');
+    var titleHtml=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" style="color:var(--pri);text-decoration:none" title="'+titleText.replace(/"/g,'&quot;')+'">'+titleText+'</a>':titleText;
+    html+='<tr>';
+    html+='<td>'+(i+1)+'</td>';
+    html+='<td style="white-space:nowrap">'+j.date+'</td>';
+    html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+titleText.replace(/"/g,'&quot;')+'">'+titleHtml+'</td>';
+    html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.company||'')+'">'+j.company+'</td>';
+    html+='<td>'+typeBadge+'</td>';
+    html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.location||'')+'">'+(j.location||'')+'</td>';
+    html+='<td>'+(j.detectedCountry||'')+'</td>';
+    html+='<td style="white-space:nowrap">'+(j.salary||'N/A')+'</td>';
+    html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.certifications||'').replace(/"/g,'&quot;')+'">'+(j.certifications||'')+'</td>';
+    html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.tools||'').replace(/"/g,'&quot;')+'">'+(j.tools||'')+'</td>';
+    html+='<td>'+statusHtml+'</td>';
+    html+='<td style="font-size:.55rem">'+(j.source||'')+'</td>';
+    html+='<td><button class="vb" onclick="viewContractJob(\''+j._id+'\')">View</button></td>';
+    html+='</tr>';
+  });
+  html+='</tbody></table></div>';
+  el.innerHTML=html;
 }
 
 async function viewContractJob(jobId){
