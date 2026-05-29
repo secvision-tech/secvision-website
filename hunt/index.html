@@ -342,6 +342,10 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
             <div class="dash-chart-box"><div class="dash-chart-title">Top Contract Skills in Demand</div><div id="chartContractSkills" class="css-chart"></div></div>
           </div>
           <div id="contractTable" class="dash-table-wrap"></div>
+          <div style="margin-top:1rem">
+            <div class="dash-chart-title">📋 Latest 100 Contract Jobs</div>
+            <div id="contractJobsList" class="dash-table-wrap" style="font-size:.65rem"></div>
+          </div>
         </div>
       </div>
     </div>
@@ -374,7 +378,7 @@ var COLS=[
   {key:'company',label:'Company',w:95},
   {key:'companyType',label:'Company Type',w:85},
   {key:'companySize',label:'Size',w:55,num:true},
-  {key:'location',label:'Location',w:85},
+  {key:'location',label:'Job Location',w:85},
   {key:'experience',label:'Experience',w:110},
   {key:'skills',label:'Key Skills',w:120},
   {key:'certifications',label:'Certifications',w:100},
@@ -1060,9 +1064,13 @@ async function viewDet(i){
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
   companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
   var companyTypeHtml=(j.companyType||'Not classified')+' <span onclick="editCompanyTypeInView('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Change company type">✎</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
-  h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div></div>';
+  h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
+  h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
+  h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Find Contacts</button>';
+  h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
+  h+='</div></div>';
   // Load contacts async after rendering
   setTimeout(async function(){
     try{
@@ -1113,6 +1121,32 @@ async function editCompanySize(idx){
     allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum});
     viewDet(idx);
   }catch(e){alert('Error: '+e.message)}
+}
+
+async function getCompanySizeFromView(idx){
+  var j=allJobs[idx];if(!j)return;
+  if(j.companySize&&j.companySize>0){
+    if(!confirm(j.company+' already has size: '+j.companySize.toLocaleString()+' employees.\nRe-fetch from Apollo?'))return;
+  }
+  var el=document.getElementById('viewContacts');
+  var origHtml=el?el.innerHTML:'';
+  if(el)el.innerHTML='<div style="color:#047857;font-size:.65rem">🏢 Fetching company size for '+j.company+'...</div>';
+  try{
+    var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'enrichCompany',company:j.company,domain:''})});
+    var d=await r.json();
+    if(d.size||d.linkedin){
+      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companySize:d.size||'',companyLinkedin:d.linkedin||'',companyWebsite:d.website||''})});
+      var sizeNum=parseInt(String(d.size).replace(/[^0-9]/g,''));
+      if(!isNaN(sizeNum)){j.companySize=sizeNum;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum})}
+      if(d.linkedin){j.companyLinkedin=d.linkedin;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyLinkedin=d.linkedin})}
+      viewDet(idx);
+    }else{
+      var msg=d.mismatch?'Name mismatch — Apollo found: "'+d.foundCompany+'"':'Company not found in Apollo.';
+      if(el)el.innerHTML='<div style="color:#DC2626;font-size:.65rem">'+msg+' Use ✎ buttons to enter manually.</div>';
+    }
+  }catch(e){if(el)el.innerHTML=origHtml;alert('Error: '+e.message)}
 }
 
 async function editCompanyTypeInView(idx){
@@ -1545,6 +1579,8 @@ async function loadContractPipeline(){
     renderCSSPie('chartContractCountry',d.contractByCountry||[],function(country){return "searchContractByCountry('"+country.replace(/'/g,"\\'")+"')"});
     renderCSSPie('chartContractSkills',d.contractSkills||[]);
     renderContractTable(d.contractByCompany||[]);
+    // Fetch latest 100 contract jobs
+    fetchRecentContracts();
   }catch(e){
     console.error('Contract pipeline error:',e);
     document.getElementById('contractLoading').textContent='Failed to load: '+e.message;
@@ -1636,6 +1672,30 @@ function renderContractTable(data){
   });
   html+='</tbody></table>';
   el.innerHTML=html;
+}
+
+async function fetchRecentContracts(){
+  var el=document.getElementById('contractJobsList');if(!el)return;
+  el.innerHTML='<div style="color:var(--g4);padding:.3rem">Loading latest contract jobs...</div>';
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getRecentContracts'})});
+    var d=await r.json();
+    var jobs=d.contracts||[];
+    if(!jobs.length){el.innerHTML='<div class="css-no-data">No contract jobs found.</div>';return}
+    var html='<table class="dash-table"><thead><tr><th>#</th><th>Date</th><th>Title</th><th>Company</th><th>Type</th><th>Job Location</th><th>Country</th><th>Salary/Rate</th><th>Tools</th><th>Status</th><th>Source</th></tr></thead><tbody>';
+    jobs.forEach(function(j,i){
+      var dt=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
+      var type=j.companyType||'';
+      var typeBadge=type?'<span class="ctype-badge '+(({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown')+'">'+type+'</span>':'';
+      var statusCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
+      var st=j.status||'new';
+      var statusHtml='<span class="status-badge '+(statusCls[st]||'')+'">'+st.charAt(0).toUpperCase()+st.slice(1)+'</span>';
+      var titleHtml=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" style="color:var(--pri);text-decoration:none">'+j.title+'</a>':j.title;
+      html+='<tr><td>'+(i+1)+'</td><td>'+dt+'</td><td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+((j.title||'').replace(/"/g,'&quot;'))+'">'+titleHtml+'</td><td>'+j.company+'</td><td>'+typeBadge+'</td><td style="font-size:.6rem">'+((j.location||'').slice(0,25))+'</td><td style="font-size:.6rem">'+(j.detectedCountry||'')+'</td><td style="font-size:.6rem">'+(j.salary||'N/A')+'</td><td style="font-size:.55rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+((j.tools||'').replace(/"/g,'&quot;'))+'">'+(j.tools||'')+'</td><td>'+statusHtml+'</td><td style="font-size:.55rem">'+(j.source||'')+'</td></tr>';
+    });
+    html+='</tbody></table>';
+    el.innerHTML=html;
+  }catch(e){el.innerHTML='<div style="color:#DC2626;padding:.3rem">Error: '+e.message+'</div>'}
 }
 
 function searchContractByCountry(country){

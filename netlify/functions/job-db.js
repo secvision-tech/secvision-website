@@ -525,6 +525,16 @@ exports.handler = async (event) => {
     }
 
     // Get unique companies (for bulk enrichment)
+    // Get latest 100 contract jobs
+    if (action === 'getRecentContracts') {
+      var contracts = await col.find({ jobType: 'Contract' })
+        .sort({ datePosted: -1, dateScanned: -1 })
+        .limit(100)
+        .project({ title: 1, company: 1, companyType: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1 })
+        .toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contracts: contracts }) };
+    }
+
     // Check which companies need enrichment (size or contacts)
     if (action === 'getEnrichmentStatus') {
       var companies = body.companies || [];
