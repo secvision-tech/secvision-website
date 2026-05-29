@@ -84,6 +84,8 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .ctype-dd-item.active{font-weight:700;color:var(--ac)}
 .dash-table th[style*="resize"]{overflow:hidden;cursor:pointer}
 .dash-table th[style*="resize"]:hover{background:var(--g1)}
+.cj-highlight{background:#EBF5FF !important}
+.cj-highlight td{background:#EBF5FF !important}
 .db-info{font-size:.62rem;color:var(--g3);margin-top:.3rem}
 .fc-btn{padding:.18rem .35rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.55rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;white-space:nowrap}
 .fc-btn:hover{background:var(--ac)}
@@ -1066,7 +1068,7 @@ async function viewDet(i){
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
   companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
   var companyTypeHtml=(j.companyType||'Not classified')+' <span onclick="editCompanyTypeInView('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Change company type">✎</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status','<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)+'</span>'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
   h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
   h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
@@ -1132,6 +1134,21 @@ async function editCompanySize(idx){
     allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum});
     viewDet(idx);
   }catch(e){alert('Error: '+e.message)}
+}
+
+async function cycleStatusInView(idx){
+  var j=allJobs[idx];if(!j)return;
+  var order=['new','reviewed','contacted','archived'];
+  var cur=j.status||'new';
+  var next=order[(order.indexOf(cur)+1)%order.length];
+  j.status=next;
+  if(j._id){
+    try{
+      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'updateStatus',id:j._id,status:next})});
+    }catch(e){}
+  }
+  viewDet(idx);
 }
 
 async function getCompanySizeFromView(idx){
@@ -1685,14 +1702,14 @@ function renderContractTable(data){
   el.innerHTML=html;
 }
 
-var cjData=[],cjSortCol='',cjSortDir=1;
+var cjData=[],cjSortCol='',cjSortDir=1,cjPage=1,cjPerPage=25,cjMouseX=0;
 var CJ_COLS=[
   {key:'idx',label:'#',w:30},{key:'date',label:'Date',w:70},{key:'title',label:'Title',w:200},
   {key:'company',label:'Company',w:130},{key:'companyType',label:'Type',w:80},
   {key:'location',label:'Job Location',w:110},{key:'detectedCountry',label:'Country',w:80},
   {key:'salary',label:'Salary/Rate',w:90},{key:'certifications',label:'Certs',w:100},
   {key:'tools',label:'Tools',w:120},{key:'status',label:'Status',w:70},
-  {key:'source',label:'Source',w:70},{key:'action',label:'Action',w:50}
+  {key:'source',label:'Source',w:70},{key:'action',label:'Action',w:55}
 ];
 
 async function fetchRecentContracts(){
@@ -1702,21 +1719,21 @@ async function fetchRecentContracts(){
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getRecentContracts'})});
     var d=await r.json();
     cjData=(d.contracts||[]).map(function(j,i){
-      j.idx=i+1;
-      j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
-      j.status=j.status||'new';
-      j.companyType=j.companyType||'';
-      return j;
+      j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
+      j.status=j.status||'new';j.companyType=j.companyType||'';return j;
     });
     if(!cjData.length){el.innerHTML='<div class="css-no-data">No contract jobs found.</div>';return}
-    cjSortCol='';cjSortDir=1;
+    cjSortCol='';cjSortDir=1;cjPage=1;
     renderContractJobs();
   }catch(e){el.innerHTML='<div style="color:#DC2626;padding:.3rem">Error: '+e.message+'</div>'}
 }
 
-function sortContractJobs(colKey){
+function cjHeaderMouseDown(e){cjMouseX=e.clientX}
+function cjHeaderClick(colKey,e){
+  // #215: Only sort if mouse didn't move (not a resize drag)
+  if(Math.abs(e.clientX-cjMouseX)>5)return;
   if(cjSortCol===colKey){cjSortDir*=-1}else{cjSortCol=colKey;cjSortDir=1}
-  renderContractJobs();
+  cjPage=1;renderContractJobs();
 }
 
 function renderContractJobs(){
@@ -1730,14 +1747,23 @@ function renderContractJobs(){
       return String(va).localeCompare(String(vb))*cjSortDir;
     });
   }
-  var html='<div style="overflow-x:auto"><table class="dash-table" style="font-size:.62rem;table-layout:fixed"><thead><tr>';
+  // #216: Pagination
+  var total=sorted.length,totalPages=Math.ceil(total/cjPerPage);
+  if(cjPage>totalPages)cjPage=totalPages||1;
+  var start=(cjPage-1)*cjPerPage,pageData=sorted.slice(start,start+cjPerPage);
+
+  var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:fixed"><thead><tr>';
   CJ_COLS.forEach(function(c){
     var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
-    var clickable=c.key!=='action'?' onclick="sortContractJobs(\''+c.key+'\')" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;width:'+c.w+'px;min-width:'+c.w+'px;overflow:hidden;resize:horizontal"':'style="white-space:nowrap;padding:.3rem .4rem;width:'+c.w+'px"';
-    html+='<th'+clickable+'>'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
+    if(c.key!=='action'){
+      html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;width:'+c.w+'px;min-width:40px;overflow:hidden;resize:horizontal">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
+    }else{
+      html+='<th style="white-space:nowrap;padding:.3rem .4rem;width:'+c.w+'px">'+c.label+'</th>';
+    }
   });
   html+='</tr></thead><tbody>';
-  sorted.forEach(function(j,i){
+  pageData.forEach(function(j,i){
+    var globalIdx=start+i+1;
     var type=j.companyType||'';
     var typeCls=({'MSSP/MDR':'ctype-mssp','Enterprise':'ctype-enterprise','Government':'ctype-govt','Startup':'ctype-startup','IT Consulting':'ctype-enterprise','Job Board':'ctype-jobboard','Staffing/Recruiting':'ctype-staffing'})[type]||'ctype-unknown';
     var typeBadge=type?'<span class="ctype-badge '+typeCls+'">'+type+'</span>':'';
@@ -1746,8 +1772,9 @@ function renderContractJobs(){
     var statusHtml='<span class="status-badge '+(stCls[st]||'')+'">'+st.charAt(0).toUpperCase()+st.slice(1)+'</span>';
     var titleText=(j.title||'');
     var titleHtml=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" style="color:var(--pri);text-decoration:none" title="'+titleText.replace(/"/g,'&quot;')+'">'+titleText+'</a>':titleText;
-    html+='<tr>';
-    html+='<td>'+(i+1)+'</td>';
+    // #218: Click to highlight row
+    html+='<tr onclick="this.classList.toggle(\'cj-highlight\')" style="cursor:pointer">';
+    html+='<td>'+globalIdx+'</td>';
     html+='<td style="white-space:nowrap">'+j.date+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+titleText.replace(/"/g,'&quot;')+'">'+titleHtml+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.company||'')+'">'+j.company+'</td>';
@@ -1759,10 +1786,24 @@ function renderContractJobs(){
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.tools||'').replace(/"/g,'&quot;')+'">'+(j.tools||'')+'</td>';
     html+='<td>'+statusHtml+'</td>';
     html+='<td style="font-size:.55rem">'+(j.source||'')+'</td>';
-    html+='<td><button class="vb" onclick="viewContractJob(\''+j._id+'\')">View</button></td>';
+    html+='<td><button class="vb" onclick="event.stopPropagation();viewContractJob(\''+j._id+'\')">View</button></td>';
     html+='</tr>';
   });
   html+='</tbody></table></div>';
+  // #216: Pagination controls
+  if(totalPages>1){
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;padding:.4rem 0;font-size:.65rem">';
+    html+='<span style="color:var(--g5)">Showing '+(start+1)+'-'+Math.min(start+cjPerPage,total)+' of '+total+' contract jobs</span>';
+    html+='<div style="display:flex;gap:.3rem">';
+    html+='<button onclick="cjPage=1;renderContractJobs()" style="padding:.2rem .4rem;border:1px solid var(--g2);background:'+(cjPage===1?'var(--g1)':'#fff')+';border-radius:3px;font-size:.6rem;cursor:pointer" '+(cjPage===1?'disabled':'')+'>«</button>';
+    html+='<button onclick="cjPage=Math.max(1,cjPage-1);renderContractJobs()" style="padding:.2rem .4rem;border:1px solid var(--g2);background:#fff;border-radius:3px;font-size:.6rem;cursor:pointer" '+(cjPage===1?'disabled':'')+'>‹</button>';
+    for(var p=Math.max(1,cjPage-2);p<=Math.min(totalPages,cjPage+2);p++){
+      html+='<button onclick="cjPage='+p+';renderContractJobs()" style="padding:.2rem .5rem;border:1px solid '+(p===cjPage?'var(--ac)':'var(--g2)')+';background:'+(p===cjPage?'var(--ac)':'#fff')+';color:'+(p===cjPage?'#fff':'var(--tx)')+';border-radius:3px;font-size:.6rem;cursor:pointer;font-weight:'+(p===cjPage?'700':'400')+'">'+p+'</button>';
+    }
+    html+='<button onclick="cjPage=Math.min('+totalPages+',cjPage+1);renderContractJobs()" style="padding:.2rem .4rem;border:1px solid var(--g2);background:#fff;border-radius:3px;font-size:.6rem;cursor:pointer" '+(cjPage===totalPages?'disabled':'')+'>›</button>';
+    html+='<button onclick="cjPage='+totalPages+';renderContractJobs()" style="padding:.2rem .4rem;border:1px solid var(--g2);background:'+(cjPage===totalPages?'var(--g1)':'#fff')+';border-radius:3px;font-size:.6rem;cursor:pointer" '+(cjPage===totalPages?'disabled':'')+'>»</button>';
+    html+='</div></div>';
+  }
   el.innerHTML=html;
 }
 
