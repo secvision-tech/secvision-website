@@ -26,11 +26,15 @@ function extractExp(job) {
     if (c.length < 3) continue; var k = m[1] + c.toLowerCase();
     if (!seen[k]) { seen[k] = true; parts.push(m[1] + '+ yr ' + c); }
   }
-  // P2: "X-Y years [of experience]" - validate range 1-30
-  var p2 = /(\d+)\s*[\-\u2013]+\s*(\d+)\s*(?:years?\s*)?(?:of\s*)?(?:[\w\s]*)?(?:experience|expertise)?/gi;
+  // P2: "X-Y years [of experience]" - validate range 1-30, require 'years' or 'experience' context
+  var p2 = /(\d+)\s*[\-\u2013]+\s*(\d+)\s*(?:years?\s*)(?:of\s*)?(?:[\w\s]*)?(?:experience|expertise)?/gi;
   while ((m = p2.exec(d)) !== null && parts.length < 5) {
     var y1 = parseInt(m[1]), y2 = parseInt(m[2]);
     if (y1 < 1 || y1 > 30 || y2 < 1 || y2 > 30 || y2 <= y1) continue;
+    // Skip rating scales: "rate...1-10", "scale of 1-10", "(1-10)"
+    var ctx = d.substring(Math.max(0, m.index - 60), m.index).toLowerCase();
+    if (/\b(?:rate|rating|scale|score|rank|level|grade)\b/.test(ctx)) continue;
+    if (d.charAt(m.index - 1) === '(') continue;
     var k2 = m[1]+'-'+m[2]; if (!seen[k2]) { seen[k2] = true; parts.unshift(m[1]+'-'+m[2]+' years'); }
   }
   // P3: "minimum/at least/requires X years"
@@ -721,8 +725,26 @@ exports.handler = async (event) => {
           }
         }
       }
-      // #63: Build company URL - use employer_website if available, else Google I'm Feeling Lucky
+      // #63: Build company URL - use employer_website if available
       var companyWebUrl = job.employer_website || '';
+      // #221: If no website or it's clearly wrong, try to extract domain from emails in description
+      if (!companyWebUrl || companyWebUrl.indexOf('google.com/search') > -1) {
+        var emailMatch = desc.match(/[\w.+-]+@([\w-]+\.[\w.]+)/gi);
+        if (emailMatch) {
+          var companyNameLower = actualCompany.toLowerCase().replace(/[^a-z0-9]/g, '');
+          for (var ei = 0; ei < emailMatch.length; ei++) {
+            var emailDomain = emailMatch[ei].split('@')[1].toLowerCase();
+            // Skip generic email providers
+            if (/^(?:gmail|yahoo|hotmail|outlook|aol|icloud|protonmail|mail|live|msn)\./.test(emailDomain)) continue;
+            // Check if domain looks related to company name (at least 3 chars match)
+            var domainBase = emailDomain.split('.')[0].replace(/[^a-z0-9]/g, '');
+            if (companyNameLower.indexOf(domainBase) > -1 || domainBase.indexOf(companyNameLower.slice(0, Math.max(4, companyNameLower.length * 0.4))) > -1) {
+              companyWebUrl = 'https://' + emailDomain;
+              break;
+            }
+          }
+        }
+      }
       if (!companyWebUrl) {
         companyWebUrl = 'https://www.google.com/search?q=' + encodeURIComponent(actualCompany + ' official website');
       }

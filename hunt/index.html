@@ -2051,7 +2051,7 @@ async function apolloEnrich(){
 function closeContactPopup(){
   document.getElementById('contactPopup').style.display='none';
   // Refresh View if open
-  if(currentViewIdx>=0&&document.getElementById('detOverlay')&&document.getElementById('detOverlay').style.display==='flex'){
+  if(currentViewIdx>=0&&document.getElementById('detailOverlay')&&document.getElementById('detailOverlay').classList.contains('open')){
     viewDet(currentViewIdx);
   }
 }
