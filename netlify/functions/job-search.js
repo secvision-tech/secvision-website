@@ -244,6 +244,31 @@ function extractContact(job) {
 }
 
 // #45, #49, #50: Smart job type detection from description
+// #231: Extract contract duration from description
+function extractContractDuration(desc) {
+  var d = (desc || '');
+  var patterns = [
+    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*(?:months?|mos?)(?:\s*(?:initial|rolling|extendable|minimum|\+\s*extension))?/i,
+    /\b(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|assignment|initial|rolling|duration)/i,
+    /\b(?:initial\s*)?(?:contract|engagement)\s*(?:[\-–:]\s*)?(\d+)\s*(?:months?|mos?)/i,
+    /\b(\d+)\s*(?:months?|mos?)\s*(?:\+\s*(?:\d+\s*)?(?:months?|extension))/i,
+    /\b(\d+)\s*(?:[-–])\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement)?/i,
+    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*(?:weeks?)/i,
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = d.match(patterns[i]);
+    if (m) {
+      if (m[2] && i === 4) return m[1] + '-' + m[2] + ' months';
+      var num = parseInt(m[1]);
+      if (num >= 1 && num <= 36) {
+        if (/weeks/.test(patterns[i].toString())) return num + ' weeks';
+        return num + ' months';
+      }
+    }
+  }
+  return '';
+}
+
 function detectJobType(job) {
   var apiType = job.job_employment_type || '';
   var d = job.job_description || '';
@@ -795,6 +820,7 @@ exports.handler = async (event) => {
         contact: extractContact(job),
         source: job.job_publisher || 'Unknown',
         jobType: detectJobType(job),
+        contractDuration: extractContractDuration(desc),
         remote: detectRemote(job),
         applyLink: job.job_apply_link || '', description: desc,
         qualifications: job.job_highlights?.Qualifications || [],

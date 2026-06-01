@@ -1032,6 +1032,15 @@ function goPage(p){if(p<1)return;curPage=p;renderTable();document.getElementById
 function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(v>=1){goPage(v);document.getElementById('pjInput').value=''}}
 
 var currentViewIdx=-1;
+// Safe JSON fetch - handles HTML error pages from Netlify
+async function safeApiFetch(url,opts){
+  var r=await fetch(url,opts);
+  var txt=await r.text();
+  try{return JSON.parse(txt)}catch(e){
+    if(txt.charAt(0)==='<')throw new Error('Server returned an error page ('+r.status+'). Check function logs.');
+    throw new Error('Invalid response: '+txt.slice(0,100));
+  }
+}
 async function viewDet(i){
   currentViewIdx=i;
   var j=allJobs[i];if(!j)return;
@@ -1074,7 +1083,7 @@ async function viewDet(i){
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
   companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
   var companyTypeHtml=(j.companyType||'Not classified')+' <span onclick="editCompanyTypeInView('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Change company type">✎</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status','<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)+'</span>'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status','<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)+'</span>'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
   h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
   h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
@@ -1175,9 +1184,8 @@ async function getCompanySizeFromView(idx){
   var origHtml=el?el.innerHTML:'';
   if(el)el.innerHTML='<div style="color:#047857;font-size:.65rem">🏢 Fetching company size for '+j.company+(domain?' ('+domain+')':'')+'...</div>';
   try{
-    var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+    var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'enrichCompany',company:j.company,domain:domain})});
-    var d=await r.json();
     if(d.size||d.linkedin){
       await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companySize:d.size||'',companyLinkedin:d.linkedin||'',companyWebsite:d.website||''})});
@@ -1945,8 +1953,7 @@ async function apolloSearch(){
   btn.textContent='⏳ Searching...';btn.disabled=true;
   document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Step 1: Searching for contacts at '+cfCompany+'...</div>';
   try{
-    var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'searchPeople',company:cfCompany,domain:cfDomain})});
-    var d=await r.json();
+    var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'searchPeople',company:cfCompany,domain:cfDomain})});
     if(d.error){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">'+esc(d.error)+'</div>';return}
     if(!d.people||!d.people.length){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts found. Try LinkedIn search below.</div>';return}
 
@@ -1959,8 +1966,7 @@ async function apolloSearch(){
       if(i<enrichCount && p.name){
         document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Step 2: Enriching '+(i+1)+'/'+enrichCount+': '+p.name+'... (1 credit)</div>';
         try{
-          var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:p.name,company:cfCompany,personId:p.id||'',domain:companyDomain})});
-          var ed=await er.json();
+          var ed=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:p.name,company:cfCompany,personId:p.id||'',domain:companyDomain})});
           if(ed.found){
             enriched.push({name:ed.name||p.name,designation:ed.designation||p.designation,email:ed.email||'',linkedin:ed.linkedin||'',city:ed.city||p.city,country:ed.country||p.country,phone:ed.phone||'',enriched:true});
           }else{
@@ -2023,8 +2029,7 @@ async function apolloEnrich(){
   var btn=document.getElementById('cfEnrichBtn');
   btn.textContent='⏳ Enriching...';btn.disabled=true;
   try{
-    var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:cfCompany,domain:cfDomain})});
-    var d=await r.json();
+    var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:cfCompany,domain:cfDomain})});
     if(d.error||d.notFound){
       var msg='Company not found in Apollo database.';
       if(d.mismatch)msg='Name mismatch — Apollo found: "'+esc(d.foundCompany||'')+'" instead of "'+esc(cfCompany)+'". Enter size manually below.';
@@ -2067,8 +2072,7 @@ async function enrichPerson(){
   btn.textContent='⏳...';btn.disabled=true;
   document.getElementById('cfStatus').textContent='Looking up '+name+' at '+cfCompany+' via Apollo...';
   try{
-    var r=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:name,company:cfCompany,domain:cfDomain})});
-    var d=await r.json();
+    var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'matchPerson',name:name,company:cfCompany,domain:cfDomain})});
     if(d.found){
       document.getElementById('cfName').value=d.name||name;
       document.getElementById('cfDesignation').value=d.designation||'';
