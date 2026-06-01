@@ -1,4 +1,4 @@
-const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|MB-\d{3}|MD-\d{3}|AWS\s*Certified\s*[\w\s-]+|AWS\s*(?:Solutions?\s*Architect|Security\s*Specialty|Cloud\s*Practitioner|SysOps)|Google\s*Cloud\s*(?:Professional|Associate)\s*[\w\s-]+|CCSP|CCNA|CCNP|CCIE|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF|SABSA|CISSP-ISSAP|CISSP-ISSEP|CISSP-ISSMP|Zero\s*Trust|PCNSE/gi;
+const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|CompTIA\s*Server\+|CompTIA\s*A\+|CompTIA\s*Linux\+|CompTIA\s*Cloud\+|CompTIA\s*PenTest\+|CompTIA\s*SecurityX|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|MB-\d{3}|MD-\d{3}|AWS\s*Certified\s*[\w\s-]+|AWS\s*(?:Solutions?\s*Architect|Security\s*Specialty|Cloud\s*Practitioner|SysOps)|Google\s*Cloud\s*(?:Professional|Associate)\s*[\w\s-]+|CCSP|CCNA|CCNP|CCIE|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF|SABSA|CISSP-ISSAP|CISSP-ISSEP|CISSP-ISSMP|Zero\s*Trust|PCNSE/gi;
 const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII|\bNIST\b/gi;
 const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|Prisma\s*Cloud|Prisma\s*Access|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|Aqua|Twistlock|Trivy|Falco|Sysdig|Anchore|Checkov|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|GitHub\s*Actions|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)|Python|Bash|PowerShell|Golang|Go\s*Lang|Ruby|Perl/gi;
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|patch\s*management|asset\s*management|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
@@ -492,7 +492,7 @@ function detectCountry(job, searchCountry) {
 var JOB_BOARDS = /^(?:indeed|glassdoor|ziprecruiter|dice|monster|careerbuilder|simplyhired|talent\.com|bebee|jobrapido|jobilize|jobleads|usajobs|clearancejobs|virtualvocations|teal|adzuna|jobzmall|jora|workday|lever|greenhouse|icims|smartrecruiters|jazz\s*hr|bullhorn|taleo|brassring|linkedin|snagajob|handshake|wayup|hired|ladders|flexjobs|remote\.co|weworkremotely|angel\.co|wellfound|builtinnyc|builtin|ventureloop|startupers|remotive|nodesk|pangian|talent\s*center)$/i;
 
 // Known Staffing/Recruiting agencies
-var STAFFING_AGENCIES = /^(?:robert\s*half|hays|hays\s*technology|randstad|tek\s*systems|teksystems|adecco|modis|insight\s*global|kforce|cybercoders|aerotek|manpower(?:group)?|kelly\s*services|softworld.*kelly|beacon\s*hill|apex\s*systems|allegis|staffing\s*technologies|harvey\s*nash|michael\s*page|page\s*group|spencer\s*stuart|egon\s*zehnder|man\s*tech|disys|corestaff|matlen\s*silver|experis|vaco|addison\s*group|solis|motion\s*recruitment|talent\s*(?:solutions|bridge|partners)|brainworks|dunhill|recruiting\s*(?:from\s*scratch|innovation)|private\s*label\s*staff|11th\s*hour\s*service|river\s*hawk|nanosoft\s*consulting)$/i;
+var STAFFING_AGENCIES = /^(?:robert\s*half|hays|hays\s*technology|randstad|tek\s*systems|teksystems|adecco|modis|insight\s*global|kforce(?:\s*(?:federal|government|gov)\s*(?:solutions)?)?|cybercoders|aerotek|manpower(?:group)?|kelly\s*services|softworld.*kelly|beacon\s*hill|apex\s*systems|allegis|staffing\s*technologies|harvey\s*nash|michael\s*page|page\s*group|spencer\s*stuart|egon\s*zehnder|man\s*tech|disys|corestaff|matlen\s*silver|experis|vaco|addison\s*group|solis|motion\s*recruitment|talent\s*(?:solutions|bridge|partners)|brainworks|dunhill|recruiting\s*(?:from\s*scratch|innovation)|private\s*label\s*staff|11th\s*hour\s*service|river\s*hawk|nanosoft\s*consulting)$/i;
 
 function classifyCompany(company, desc) {
   var compName = (company || '').trim();
@@ -610,10 +610,40 @@ function extractDuration(desc) {
 // #123: Enrich location with city from JD when API location is sparse
 function enrichLocation(job) {
   var loc = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
+  var d = (job.job_description || '').slice(0, 3000);
+
+  // #228: For staffing/recruiting companies, try to extract actual client location from description
+  var descLoc = null;
+  var clientLocPatterns = [
+    /\bclient\s+(?:is\s+)?(?:located\s+)?in\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*,\s*[A-Z]{2})\b/,
+    /\bseeking\s+[\w\s]+?\s+in\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*,\s*[A-Z]{2})\b/,
+    /\b(?:position|role|opportunity|job|work)\s+(?:is\s+)?(?:located\s+)?in\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*,\s*[A-Z]{2})\b/,
+    /\b(?:based|located|working)\s+(?:out\s+of\s+)?in\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*,\s*[A-Z]{2})\b/,
+    /\b(?:On[\s-]?site|Hybrid)\s+(?:in\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*,\s*[A-Z]{2})\b/,
+    /\bPlace\s+of\s+Performance\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\s*,\s*[A-Z]{2})\b/i
+  ];
+  for (var pi = 0; pi < clientLocPatterns.length; pi++) {
+    var pm = d.match(clientLocPatterns[pi]);
+    if (pm && pm[1] && pm[1].length > 3 && pm[1].length < 40) {
+      var cLoc = pm[1].trim();
+      if (!/^(?:Remote|Hybrid|The|This|Our)$/i.test(cLoc)) { descLoc = cLoc; break; }
+    }
+  }
+
+  // If description location found and differs from JSearch location, prefer description
+  if (descLoc) {
+    var descCity = descLoc.split(',')[0].trim().toLowerCase();
+    var jsCity = (job.job_city || '').toLowerCase();
+    if (descCity !== jsCity) {
+      // Description location is different — use it (likely the actual work site)
+      if (job.job_country) return descLoc + ', ' + job.job_country;
+      return descLoc;
+    }
+  }
+
   // If we already have a good location (has city), return it
   if (job.job_city && job.job_city.length > 2) return loc || 'Remote';
   // Try to extract city from description
-  var d = (job.job_description || '').slice(0, 2000);
   var cityPatterns = [
     /(?:Location|Office|Based\s*in|Work\s*Location|Job\s*Location|Position\s*Location)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?:\s*,\s*[A-Z][a-z]+)?)/,
     /(?:Location|Office)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*\(/,
@@ -623,9 +653,7 @@ function enrichLocation(job) {
     var m = d.match(cityPatterns[i]);
     if (m && m[1] && m[1].length > 2 && m[1].length < 40) {
       var city = m[1].trim();
-      // Don't use generic words
       if (/^(?:Remote|Hybrid|The|This|Our|Full|Part|Any|Not|See|TBD)$/i.test(city)) continue;
-      // If we have country from API, append it
       if (job.job_country) return city + ', ' + job.job_country;
       return city;
     }
