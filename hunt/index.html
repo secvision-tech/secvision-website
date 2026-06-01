@@ -1464,7 +1464,8 @@ function renderCSSPie(containerId,data,linkFn){
     var name=(d._id||'Unknown');
     var pct=(d.count/total*100).toFixed(1);
     var tooltip=LONGFORMS[name]||name;
-    paths+='<path d="M'+cx+','+cy+' L'+x1.toFixed(2)+','+y1.toFixed(2)+' A'+r+','+r+' 0 '+large+',1 '+x2.toFixed(2)+','+y2.toFixed(2)+' Z" fill="'+PIE_COLORS[i]+'"><title>'+tooltip+': '+d.count+' ('+pct+'%)</title></path>';
+    var clickAttr=linkFn&&name!=='Others'?' onclick="event.preventDefault();'+linkFn(name)+'" style="cursor:pointer"':'';
+    paths+='<path d="M'+cx+','+cy+' L'+x1.toFixed(2)+','+y1.toFixed(2)+' A'+r+','+r+' 0 '+large+',1 '+x2.toFixed(2)+','+y2.toFixed(2)+' Z" fill="'+PIE_COLORS[i]+'"'+clickAttr+'><title>'+tooltip+': '+d.count+' ('+pct+'%)'+(clickAttr?' — Click to view':'')+'</title></path>';
     angle+=slice;
   });
   var svg='<svg viewBox="0 0 180 180">'+paths+'</svg>';

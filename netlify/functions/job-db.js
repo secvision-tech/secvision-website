@@ -663,11 +663,15 @@ exports.handler = async (event) => {
           return caseMap[k] || val;
         }
         var newToolsArr = uniqueMatch(fullText, TOOL_RE);
+        // Cleanup: remove incorrectly extracted values
+        var BAD_TOOLS = {'go':1,'sso':0,'fair':0};  // 'go' always bad; others context-dependent
+        var TOOL_REMOVE = /^go$/i;
         if (newToolsArr.length > 0 || (j.tools && j.tools !== 'See details')) {
           var existingTools = (j.tools && j.tools !== 'See details') ? j.tools.split(', ') : [];
           var merged = {}, mergedArr = [];
           existingTools.concat(newToolsArr).forEach(function(t) {
             var k = t.toLowerCase().trim();
+            if (TOOL_REMOVE.test(k)) return; // Skip bad values
             if (!merged[k]) { merged[k] = true; mergedArr.push(fixCase(t, TOOL_CASE)); }
           });
           var newToolsStr = mergedArr.slice(0, 15).join(', ');
@@ -786,6 +790,16 @@ exports.handler = async (event) => {
               changes.titleClean = tc + ' - ' + durNum + durUnit;
               break;
             }
+          }
+        }
+
+        // Cleanup certifications: remove non-cybersecurity certs (CKA, CKAD, CKS)
+        var CERT_REMOVE = /^(?:cka|ckad|cks)$/i;
+        if (j.certifications && j.certifications !== 'See details') {
+          var certParts = j.certifications.split(/,\s*/);
+          var cleanedCerts = certParts.filter(function(c) { return !CERT_REMOVE.test(c.trim()); });
+          if (cleanedCerts.length < certParts.length) {
+            changes.certifications = cleanedCerts.length ? cleanedCerts.join(', ') : 'See details';
           }
         }
 
