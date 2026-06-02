@@ -22,7 +22,10 @@ function extractExp(job) {
   // P1: "X+ years of [adj] experience in/with..." #70: added work|practical|industry|related|combined|prior|recent
   var p1 = /(\d+)\+?\s*years?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*|work\s*|practical\s*|industry\s*|related\s*|combined\s*|cumulative\s*|prior\s*|recent\s*|minimum\s*)?(?:experience|expertise|background)\s*(?:in|with|working\s*(?:in|with)|leading|managing|performing|supporting|conducting|across|within|using|on)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or|in|plus|specific))/gi;
   var m; while ((m = p1.exec(d)) !== null && parts.length < 5) {
-    var c = m[2].trim().slice(0, 40).replace(/^\s*(?:a|an|the)\s*/i, '');
+    var c = m[2].trim().slice(0, 40);
+    // Remove trailing partial word (cut at last space if truncated)
+    if (c.length >= 38) c = c.replace(/\s+\S{0,4}$/, '');
+    c = c.replace(/^\s*(?:a|an|the|as|s)\s*/i, '').replace(/\s+$/,'');
     if (c.length < 3) continue; var k = m[1] + c.toLowerCase();
     if (!seen[k]) { seen[k] = true; parts.push(m[1] + '+ yr ' + c); }
   }
@@ -40,7 +43,10 @@ function extractExp(job) {
   // P3: "minimum/at least/requires X years"
   var p3 = /(?:minimum|at\s*least|requires?)\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\-\u2010\u2011\s]*)?(?:experience|expertise)\s*(?:in|with|using)?\s*([\w\s,\/&\-]+?)(?:\.|;|,|\n|$)/gi;
   while ((m = p3.exec(d)) !== null && parts.length < 5) {
-    var c3 = m[2].trim().slice(0, 40); if (c3.length < 3) continue;
+    var c3 = m[2].trim().slice(0, 40);
+    if (c3.length >= 38) c3 = c3.replace(/\s+\S{0,4}$/, '');
+    c3 = c3.replace(/^\s*(?:a|an|the|as|s)\s*/i, '').replace(/\s+$/,'');
+    if (c3.length < 3) continue;
     var k3 = 'min'+m[1]+c3.toLowerCase(); if (!seen[k3]) { seen[k3] = true; parts.push(m[1]+'+ yr '+c3); }
   }
   // P5: #71 "Experience Required: 8-10" or "Experience: 5+" or "Years of Experience: 7"
@@ -52,7 +58,10 @@ function extractExp(job) {
   // P6: Bullet point "* X+ years of work experience with..."
   var p6 = /[\u2022\-\*]\s*(\d+)\+?\s*years?\s*(?:of\s*)?(?:[\w\s]*?)(?:experience|expertise|background)\s*(?:in|with|on|across)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$)/gi;
   while ((m = p6.exec(d)) !== null && parts.length < 5) {
-    var c6 = m[2].trim().slice(0, 40); if (c6.length < 3) continue;
+    var c6 = m[2].trim().slice(0, 40);
+    if (c6.length >= 38) c6 = c6.replace(/\s+\S{0,4}$/, '');
+    c6 = c6.replace(/^\s*(?:a|an|the|as|s)\s*/i, '').replace(/\s+$/,'');
+    if (c6.length < 3) continue;
     var k6 = 'p6'+m[1]+c6.toLowerCase(); if (!seen[k6]) { seen[k6] = true; parts.push(m[1]+'+ yr '+c6); }
   }
   // P4: Broad fallback
@@ -257,12 +266,26 @@ function extractContractDuration(desc) {
     /\b(\d+)\s*(?:months?|mos?)\s*(?:\+\s*(?:\d+\s*)?(?:months?|extension))/i,
     /\b(\d+)\s*(?:[-–])\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement)?/i,
     /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*(?:weeks?)/i,
+    // Year-based patterns
+    /\b(\d+)[\s-]*(?:year|yr)\s*(?:renewable|rolling|extendable|fixed[\s-]*term)?\s*(?:contract|engagement|assignment)/i,
+    /\b(?:contract|engagement)\s*(?:[\-–:(]\s*)?(\d+)[\s-]*(?:year|yr)(?:\s*(?:renewable|rolling|extendable|initial))?\s*[):]?/i,
   ];
   for (var i = 0; i < patterns.length; i++) {
     var m = d.match(patterns[i]);
     if (m) {
       if (m[2] && i === 4) return m[1] + '-' + m[2] + ' months';
       var num = parseInt(m[1]);
+      // Year patterns (indices 6, 7)
+      if (i >= 6) {
+        if (num >= 1 && num <= 5) {
+          var yearLabel = num === 1 ? '1 year' : num + ' years';
+          // Check for "renewable" in context
+          var ctx = d.substring(Math.max(0, (m.index||0) - 10), (m.index||0) + m[0].length + 20);
+          if (/renewable|rolling|extendable/i.test(ctx)) yearLabel += ' (renewable)';
+          return yearLabel;
+        }
+        continue;
+      }
       if (num >= 1 && num <= 36) {
         if (/weeks/.test(patterns[i].toString())) return num + ' weeks';
         return num + ' months';

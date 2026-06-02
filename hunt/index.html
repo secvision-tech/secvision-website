@@ -298,7 +298,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
             <div class="dash-sec-sub">Focus outreach on regions with highest concentration of openings</div>
             <div class="dash-charts">
               <div class="dash-chart-box"><div class="dash-chart-title">Countries</div><div id="chartCountry" class="css-chart"></div></div>
-              <div class="dash-chart-box"><div class="dash-chart-title">Top Locations (Cities)</div><div id="chartLocation" class="css-chart"></div></div>
+              <div class="dash-chart-box"><div class="dash-chart-title">Top Job Locations (Cities)</div><div id="chartLocation" class="css-chart"></div></div>
             </div>
           </div>
 
@@ -1674,7 +1674,7 @@ async function searchDbByCompany(company){
 function renderPartnerTable(data){
   var el=document.getElementById('partnerTable');if(!el)return;
   if(!data||!data.length){el.innerHTML='';return}
-  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Size</th><th>Openings</th><th>Pipeline Status</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Size</th><th>Openings</th><th>Pipeline Status</th><th>Job Locations</th><th>Action</th></tr></thead><tbody>';
   data.slice(0,15).forEach(function(d,i){
     var company=d._id?.company||'Unknown';
     var type=d._id?.type||'';
@@ -1704,7 +1704,7 @@ function renderPartnerTable(data){
 function renderContractTable(data){
   var el=document.getElementById('contractTable');if(!el)return;
   if(!data||!data.length){el.innerHTML='<div class="css-no-data">No contract jobs yet. Run searches with contract-specific roles.</div>';return}
-  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Size</th><th>Contracts</th><th>Rate/Salary</th><th>Pipeline</th><th>Locations</th><th>Action</th></tr></thead><tbody>';
+  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Size</th><th>Contracts</th><th>Rate/Salary</th><th>Pipeline</th><th>Job Locations</th><th>Action</th></tr></thead><tbody>';
   data.forEach(function(d,i){
     var company=d._id||'Unknown';
     var type=d.companyType||'';
@@ -1854,7 +1854,14 @@ function searchContractByCountry(country){
   document.getElementById('dbCompanyType').value='all';
   document.getElementById('dbJobType').value='Contract';
   document.getElementById('dbPeriod').value='all';
-  try{document.getElementById('dbCountry').value=country}catch(e){}
+  var dbCountrySel=document.getElementById('dbCountry');
+  if(dbCountrySel){
+    // Add country option if not present
+    var found=false;
+    for(var oi=0;oi<dbCountrySel.options.length;oi++){if(dbCountrySel.options[oi].value===country){found=true;break}}
+    if(!found){var opt=document.createElement('option');opt.value=country;opt.textContent=country;dbCountrySel.appendChild(opt)}
+    dbCountrySel.value=country;
+  }
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading contract jobs in '+country+'...';
   document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
