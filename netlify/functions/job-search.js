@@ -911,6 +911,15 @@ exports.handler = async (event) => {
         });
       }
 
+      // #247: Clean non-cybersecurity certs from all jobs before save
+      var BAD_CERTS = /^(?:cka|ckad|cks)$/i;
+      jobs.forEach(function(j) {
+        if (j.certifications && j.certifications !== 'See details') {
+          var cleaned = j.certifications.split(/[,\n]+/).map(function(c){return c.trim()}).filter(function(c){return c && !BAD_CERTS.test(c)});
+          j.certifications = cleaned.length ? cleaned.join(', ') : 'See details';
+        }
+      });
+
       var ops = jobs.map(function(j) {
         return {
           updateOne: {

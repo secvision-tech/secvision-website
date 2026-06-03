@@ -979,31 +979,45 @@ function addTooltips(text){
 }
 function formatDesc(text){
   if(!text)return'No description available.';
-  return text
+  var h = text
     .replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/\r\n/g,'\n')
-    // Make URLs clickable (before other transforms)
+    .replace(/\r\n/g,'\n').replace(/\r/g,'\n')
+    // Make URLs clickable
     .replace(/(https?:\/\/[^\s<>"')\]]+)/gi,'<a href="$1" target="_blank" style="color:var(--ac);word-break:break-all">$1</a>')
     // Make email addresses clickable
     .replace(/([\w.+-]+@[\w-]+\.[\w.]+)/gi,'<a href="mailto:$1" style="color:var(--ac)">$1</a>')
-    // Handle inline bullets (• or special chars mid-text)
-    .replace(/\s*[•\u2022\u25CF\u25CB\u25AA\u25AB\u2023\u2043]\s*/g,'\n\u2022 ')
+    // Handle inline bullets (• or special chars mid-text without preceding newline)
+    .replace(/([^\n])\s*[•\u2022\u2023\u2043\u25CF\u25CB\u25AA\u25AB]\s*/g,'$1\n\u2022 ')
     // Handle dash/asterisk bullets at line start
-    .replace(/^[\s]*[\-\*]\s+/gm,'\n\u2022 ')
+    .replace(/^\s*[\-\*]\s+/gm,'\u2022 ')
     // Handle numbered items at line start
-    .replace(/^[\s]*(\d+[\.\)])\s+/gm,'\n$1 ')
-    // Collapse excess newlines
-    .replace(/\n{3,}/g,'\n\n')
-    // Convert newlines to <br>
-    .replace(/\n/g,'<br>')
+    .replace(/^\s*(\d+[\.\)])\s*/gm,'\n$1 ');
+
+  // Split into lines for structured processing
+  var lines = h.split('\n');
+  var out = [];
+  for(var li=0;li<lines.length;li++){
+    var line = lines[li].trim();
+    if(!line){out.push('');continue}
+    // Section headers: standalone line ending with ":" or all-caps short line
+    if(/^[A-Z][A-Za-z\s&\/\-,()]{2,50}:?\s*$/.test(line) && !/^\u2022/.test(line) && line.length<55){
+      var cleanHdr=line.replace(/:$/,'');
+      out.push('<strong style="color:var(--pri);font-size:.85rem;display:block;margin-top:.6rem">'+cleanHdr+'</strong>');
+      continue;
+    }
+    // "Key: Value" pattern inline (short key followed by longer value)
+    var kvMatch=line.match(/^([A-Z][\w\s&\/]{1,25}):\s+(.+)/);
+    if(kvMatch && kvMatch[1].length<28 && !/^\u2022/.test(line)){
+      out.push('<strong>'+kvMatch[1]+':</strong> '+kvMatch[2]);
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join('<br>')
     // Collapse excess <br>
     .replace(/(<br>){3,}/g,'<br><br>')
-    // Bold section headers (at line start, followed by colon)
-    .replace(/(?:<br>|^)\s*((?:Key\s*)?(?:Responsibilities|Requirements|Qualifications|Education|Benefits|About\s*(?:Us|the|This)|Duties|Overview|Summary|Position|Role|Location|Compensation|Salary|What\s*(?:You|We)|Who\s*(?:You|We)|Preferred|Desired|Minimum|Essential|Nice[\s-]*to[\s-]*Have|Must[\s-]*Have|Soft\s*Skills|Technical\s*Skills|Hard\s*Skills|Core\s*Skills|Required\s*Skills|Key\s*Skills|Experience|Work\s*Experience|Professional\s*Experience|Job\s*Description|Job\s*Summary|Job\s*Purpose|Company\s*Description|About\s*Company|Why\s*Join|Perks|How\s*to\s*Apply|Application|Instructions|Note|Important|Disclaimer|Pay\s*Details|Candidates\s*Only|Equal\s*Opportunity|EEO|Diversity|Accommodation|Description|Clearance|Security\s*Clearance|Travel|Work\s*Schedule|Work\s*Setting|Work\s*Location|Place\s*of\s*(?:Work|Performance))[^<:]{0,20})\s*(?::|(?=<br>))/gi,'<br><strong style="color:var(--pri);font-size:.85rem">$1:</strong><br>')
-    // Sub-headers: "Capitalized Words:" inline
-    .replace(/([.!?]|<br>)\s*([A-Z][a-zA-Z]+(?:\s+(?:&|and|of|for|in|the|with|to)?\s*[A-Z][a-zA-Z]+){1,6})\s*:/g,'$1<br><strong>$2:</strong>')
-    // Catch-all key headers inline
-    .replace(/([^<])\s*((?:Job\s*Description|Job\s*Summary|Job\s*Purpose|Company\s*Description|About\s*the\s*Role|About\s*the\s*Company|About\s*Us|Pay\s*Details|Position\s*Overview)\s*:)/gi,'$1<br><strong>$2</strong><br>')
+    // Style bullet points
+    .replace(/\u2022\s*/g,'<span style="color:var(--ac);margin-right:.2rem">\u2022</span>')
     .trim();
 }
 function contactCell(j){
