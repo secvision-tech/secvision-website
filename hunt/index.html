@@ -1083,6 +1083,7 @@ async function viewDet(i){
   if(j.detectedCountry&&j.detectedCountry!=='Unknown'&&mapQuery.indexOf(j.detectedCountry)===-1)mapQuery+=', '+j.detectedCountry;
   if(/^Remote$/i.test(j.location))mapQuery=j.company+(j.detectedCountry&&j.detectedCountry!=='Unknown'?', '+j.detectedCountry:'');
   var locationHtml=j.location?'<a href="https://www.google.com/maps/search/'+encodeURIComponent(mapQuery)+'" target="_blank" style="color:var(--ac)" title="View on Google Maps: '+mapQuery+'">'+j.location+' 📍</a>':'N/A';
+  locationHtml+=' <span onclick="editFieldInView('+i+',\'location\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit location">✎</span>';
   var countryHtml=(j.detectedCountry||'Unknown')+' <span onclick="editCountry('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit country">✎</span>';
   var jobTypeHtml=(j.jobType||'Not specified')+' <span onclick="editField('+i+',\'jobType\',\'Job Type\',\'Full-time,Contract,Part-time,Internship,Not specified\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit job type">✎</span>';
   var salaryHtml=(j.salary||'Not disclosed')+' <span onclick="editFieldFree('+i+',\'salary\',\'Salary/Rate\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit salary">✎</span>';
@@ -1296,6 +1297,20 @@ async function editCountry(idx){
     }
     viewDet(idx);
   }catch(e){console.error(e);alert('Failed to update country.')}
+}
+
+async function editFieldInView(idx,field){
+  var j=allJobs[idx];if(!j)return;
+  var labels={location:'Job Location',experience:'Experience',salary:'Salary'};
+  var current=j[field]||'';
+  var input=prompt('Edit '+(labels[field]||field)+':\n\nCurrent: '+current);
+  if(input===null)return;
+  try{
+    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
+    j[field]=input;
+    viewDet(idx);
+  }catch(e){alert('Error: '+e.message)}
 }
 
 async function editCompanyUrl(idx){
