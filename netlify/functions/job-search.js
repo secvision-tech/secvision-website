@@ -25,7 +25,7 @@ function extractExp(job) {
     var c = m[2].trim().slice(0, 40);
     // Remove trailing partial word (cut at last space if truncated)
     if (c.length >= 38) c = c.replace(/\s+\S{0,4}$/, '');
-    c = c.replace(/^\s*(?:a|an|the|as|s)\s*/i, '').replace(/\s+$/,'');
+    c = c.replace(/^\s*(?:a|an|the|as|s)\s+/i, '').replace(/\s+$/,'');
     if (c.length < 3) continue; var k = m[1] + c.toLowerCase();
     if (!seen[k]) { seen[k] = true; parts.push(m[1] + '+ yr ' + c); }
   }
@@ -47,7 +47,7 @@ function extractExp(job) {
   while ((m = p3.exec(d)) !== null && parts.length < 5) {
     var c3 = m[2].trim().slice(0, 40);
     if (c3.length >= 38) c3 = c3.replace(/\s+\S{0,4}$/, '');
-    c3 = c3.replace(/^\s*(?:a|an|the|as|s)\s*/i, '').replace(/\s+$/,'');
+    c3 = c3.replace(/^\s*(?:a|an|the|as|s)\s+/i, '').replace(/\s+$/,'');
     if (c3.length < 3) continue;
     var k3 = 'min'+m[1]+c3.toLowerCase(); if (!seen[k3]) { seen[k3] = true; parts.push(m[1]+'+ yr '+c3); }
   }
@@ -62,7 +62,7 @@ function extractExp(job) {
   while ((m = p6.exec(d)) !== null && parts.length < 5) {
     var c6 = m[2].trim().slice(0, 40);
     if (c6.length >= 38) c6 = c6.replace(/\s+\S{0,4}$/, '');
-    c6 = c6.replace(/^\s*(?:a|an|the|as|s)\s*/i, '').replace(/\s+$/,'');
+    c6 = c6.replace(/^\s*(?:a|an|the|as|s)\s+/i, '').replace(/\s+$/,'');
     if (c6.length < 3) continue;
     var k6 = 'p6'+m[1]+c6.toLowerCase(); if (!seen[k6]) { seen[k6] = true; parts.push(m[1]+'+ yr '+c6); }
   }
@@ -876,7 +876,10 @@ exports.handler = async (event) => {
       // Non-IT job title indicators (including military/defense/clearance roles)
       var nonITTitle = /\b(?:compensation\s*analyst|benefits\s*analyst|payroll|human\s*resources|hr\s*(?:analyst|manager|coordinator|generalist|specialist|director|assistant)|recruiter|talent\s*acquisition|staffing\s*(?:coordinator|specialist)|financial\s*analyst|accountant|bookkeeper|tax\s*(?:analyst|specialist)|auditor(?!\s*(?:security|IT|cyber))|marketing\s*(?:analyst|manager|coordinator|specialist)|sales\s*(?:rep|representative|executive|manager)|real\s*estate|property\s*manager|teacher|professor|instructor|librarian|janitor|custodian|mechanic|plumber|electrician|carpenter|welder|driver|truck\s*driver|warehouse|forklift|cashier|barista|waiter|waitress|chef|cook|bartender|humint|sigint|geoint|masint|imint|all\s*source\s*analyst|program\s*analyst|budget\s*analyst|operations?\s*(?:concept\s*)?analyst|concept\s*analyst|space\s*(?:threat|analyst|operations)|operational\s*concept|weapons?\s*analyst|mission\s*analyst|battle|combat|acquisition\s*analyst|contracts?\s*(?:specialist|analyst)|procurement|customer\s*success|optimizer|maintenance(?!\s*(?:security|cyber))|personnel\s*security|physical\s*security(?:\s*(?:operations|officer|specialist|manager|analyst))?|sap\s*(?:fiori|security|consultant|basis)|supply\s*chain|business\s*operations|action\s*officer|case\s*management|service\s*desk|data\s*entry|administrative|executive\s*assistant|office\s*manager|workday\s*(?:hcm|consultant|architect|developer)|hcm\s*(?:solutions|architect|consultant|analyst)|peoplesoft|oracle\s*(?:hcm|erp|financials)|salesforce\s*(?:admin|developer|consultant)|full[\s-]*stack(?:\s*(?:engineer|developer))?|front[\s-]*end(?:\s*(?:engineer|developer))?|back[\s-]*end(?:\s*(?:engineer|developer))?|software\s*(?:engineer|developer)(?!\s*(?:security|cyber|soc|siem))|web\s*developer|mobile\s*developer|ui[\s\/]*ux\s*(?:designer|developer)|data\s*(?:engineer|scientist)(?!\s*(?:security|cyber))|machine\s*learning\s*engineer|ml\s*engineer|database\s*(?:admin|developer)|devops\s*engineer(?!\s*(?:security|sec)))\b/i;
       if (nonITTitle.test(titleOnly)) return false;
-      // #258: Filter physical security SOC roles (title may say SOC but description is physical security)
+      // #258 #267: Filter physical/personnel security roles (title may say SOC/Security Analyst but description is not cybersecurity)
+      if (/\b(?:physical\s*security\s*(?:operations|center|monitoring)|personnel\s*security\s*(?:and|operations|clearance|processing)|clearance\s*(?:processing|adjudication|investigations))\b/i.test(text)) {
+        if (!/\b(?:SIEM|EDR|endpoint|malware|intrusion|cyber|threat\s*hunt|vulnerability|penetration|firewall|SOC\s*(?:analyst|engineer))\b/i.test(text)) return false;
+      }
       if (/\bphysical\s*security\s*(?:operations|center|monitoring)\b/i.test(text) && /\b(?:alarm\s*monitoring|cctv|access\s*control\s*badge|guard\s*force|patrol|visitor\s*management)\b/i.test(text)) {
         if (!/\b(?:SIEM|EDR|endpoint|malware|intrusion|cyber|threat\s*hunt)\b/i.test(text)) return false;
       }
