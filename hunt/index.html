@@ -873,11 +873,18 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
       return;
     }
 
-    // Process and save to MongoDB
-    apSt.textContent='🔄 LinkedIn: Processing and saving '+allApifyJobs.length+' unique jobs...';
-    var pr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'processAndSave',jobs:allApifyJobs})});
-    var pd=await pr.json();
+    // Process and save to MongoDB IN BATCHES (avoid Netlify timeout)
+    var BATCH_SIZE=15,totalSaved=0;
+    for(var bi=0;bi<allApifyJobs.length;bi+=BATCH_SIZE){
+      var batch=allApifyJobs.slice(bi,bi+BATCH_SIZE);
+      apSt.textContent='🔄 LinkedIn: Saving batch '+(Math.floor(bi/BATCH_SIZE)+1)+'/'+Math.ceil(allApifyJobs.length/BATCH_SIZE)+' ('+batch.length+' jobs)...';
+      try{
+        var pr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'processAndSave',jobs:batch})});
+        var pd=await pr.json();
+        totalSaved+=(pd.saved||0);
+      }catch(e){console.error('Batch save error:',e)}
+    }
 
     // Merge into current view — add new jobs that aren't already displayed
     var existingTitles={};
@@ -905,7 +912,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
     var currentText=apiTextEl.textContent;
     apiTextEl.textContent=currentText+' + '+allApifyJobs.length+' LinkedIn ('+newCount+' new)';
     if(newCount>0){filtered=allJobs.slice();renderTable()}
-    apSt.textContent='✅ LinkedIn: '+allApifyJobs.length+' jobs found ('+totalQueries+' queries, '+selectedGroups.length+' roles), '+pd.saved+' saved. '+newCount+' new in view.';
+    apSt.textContent='✅ LinkedIn: '+allApifyJobs.length+' jobs found ('+totalQueries+' queries, '+selectedGroups.length+' roles), '+totalSaved+' saved. '+newCount+' new in view.';
     setTimeout(function(){apSt.style.display='none'},10000);
     // Auto-enrich any new companies from Apify results
     if(newCount>0)autoEnrichCompanies();
@@ -931,11 +938,16 @@ async function autoEnrichCompanies(){
   enSt.style.display='inline-block';
   enSt.textContent='🏢 Checking '+companyList.length+' companies for enrichment...';
   try{
-    // Check which companies need enrichment
-    var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'getEnrichmentStatus',companies:companyList})});
-    var sd=await sr.json();
-    var toEnrich=sd.needsEnrichment||[];
+    // Check which companies need enrichment IN BATCHES
+    var toEnrich=[];
+    var ENRICH_BATCH=20;
+    for(var ebi=0;ebi<companyList.length;ebi+=ENRICH_BATCH){
+      var batch=companyList.slice(ebi,ebi+ENRICH_BATCH);
+      var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'getEnrichmentStatus',companies:batch})});
+      var sd=await sr.json();
+      if(sd.needsEnrichment)toEnrich=toEnrich.concat(sd.needsEnrichment);
+    }
     if(!toEnrich.length){
       enSt.textContent='✅ All companies already enriched.';
       companyList.forEach(function(c){enrichedCompaniesCache[c.toLowerCase()]=true});
