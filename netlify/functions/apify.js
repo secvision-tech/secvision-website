@@ -18,17 +18,35 @@ exports.handler = async function(event) {
       var location = body.location || 'United States';
       var rows = body.rows || 25;
 
-      // Build LinkedIn search URL with exact phrase matching
-      var searchUrl = 'https://www.linkedin.com/jobs/search/?keywords=' + encodeURIComponent('"' + title + '"') + '&location=' + encodeURIComponent(location);
-      if (body.contractType) searchUrl += '&f_JT=' + (body.contractType === 'Contract' ? 'C' : body.contractType === 'Full-time' ? 'F' : '');
-      if (body.datePosted === 'week') searchUrl += '&f_TPR=r604800';
-      else if (body.datePosted === 'month') searchUrl += '&f_TPR=r2592000';
-      else if (body.datePosted === 'day') searchUrl += '&f_TPR=r86400';
+      // Map datePosted to Bebity publishedAt format
+      var publishedAt = '';
+      if (body.datePosted === 'day') publishedAt = 'r86400';
+      else if (body.datePosted === 'week') publishedAt = 'r604800';
+      else if (body.datePosted === 'month' || body.datePosted === 'all') publishedAt = 'r2592000';
+      else publishedAt = 'r604800'; // Default: last week
+
+      // Map contractType: C=Contract, F=Full-time, empty=All
+      var contractType = '';
+      if (body.contractType === 'Contract' || body.contractType === 'C') contractType = 'C';
+      else if (body.contractType === 'Full-time' || body.contractType === 'F') contractType = 'F';
+
+      // Build structured input for Bebity LinkedIn Jobs Scraper
+      var actorInput = {
+        title: title,
+        location: location,
+        rows: rows,
+        publishedAt: publishedAt,
+        proxy: {
+          useApifyProxy: true,
+          apifyProxyGroups: ['RESIDENTIAL']
+        }
+      };
+      if (contractType) actorInput.contractType = contractType;
 
       var resp = await fetch('https://api.apify.com/v2/acts/' + ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ searchUrl: searchUrl, rows: rows })
+        body: JSON.stringify(actorInput)
       });
 
       if (!resp.ok) {

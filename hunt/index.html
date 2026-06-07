@@ -726,8 +726,7 @@ async function searchJobs(){
       document.getElementById('rCount').textContent='No results found.';
     }else{filtered=allJobs.slice();curPage=1;renderTable();document.getElementById('exportBtns').style.display='flex'}
     // Start Apify LinkedIn search in background
-    var apifyCountry=CCODE_TO_NAME[selCountry]||'United States';
-    apifySearchBackground(searchRoles,apifyCountry,datePosted);
+    apifySearchBackground(searchRoles,selRegion,selCountry,datePosted,types);
     // Start auto-enrichment of companies (size + contacts) in background
     autoEnrichCompanies();
   }catch(err){console.error(err);document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';
@@ -736,31 +735,104 @@ async function searchJobs(){
 }
 
 // Apify LinkedIn search - runs in background, merges results when done
-async function apifySearchBackground(roles,country,datePosted){
+async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTypes){
   var apSt=document.getElementById('apifyStatus');
   apSt.style.display='inline-block';
   apSt.textContent='🔄 Starting LinkedIn search via Apify...';
   try{
-    // Search top 3 roles to keep Apify usage reasonable
-    var topRoles=roles.slice(0,3);
-    var allApifyJobs=[];
-    for(var ri=0;ri<topRoles.length;ri++){
-      apSt.textContent='🔄 LinkedIn: Searching "'+topRoles[ri]+'" ('+(ri+1)+'/'+topRoles.length+')...';
+    // --- ROLE CONSOLIDATION: 16 roles → 6 strategic groups ---
+    var ROLE_GROUPS=[
+      {search:'SOC Analyst',covers:['SOC Analyst','SOC Consultant']},
+      {search:'Security Engineer',covers:['Security Engineer','Cloud Security Engineer']},
+      {search:'Security Architect',covers:['Security Architect','Cloud Security Consultant']},
+      {search:'SIEM Engineer',covers:['SIEM Engineer','SIEM Consultant']},
+      {search:'Cybersecurity Analyst',covers:['Cybersecurity Analyst','Cybersecurity Contractor','Cyber Contractor']},
+      {search:'Security Consultant',covers:['Security Consultant','InfoSec Consultant','Security Operations Consultant']},
+      {search:'Threat Hunter',covers:['Threat Hunter']},
+      {search:'Incident Responder',covers:['Incident Responder']}
+    ];
+    // Select groups that match user's selected roles
+    var selectedGroups=[];
+    var rolesLower=roles.map(function(r){return r.toLowerCase()});
+    var isAnyRoles=roles.length>=10; // If 10+ roles selected, treat as "Any"
+    ROLE_GROUPS.forEach(function(g){
+      if(isAnyRoles){selectedGroups.push(g.search);return}
+      g.covers.forEach(function(c){if(rolesLower.indexOf(c.toLowerCase())>-1&&selectedGroups.indexOf(g.search)===-1)selectedGroups.push(g.search)});
+    });
+    if(!selectedGroups.length)selectedGroups=['SOC Analyst','Security Engineer','Cybersecurity Analyst'];
+
+    // --- LOCATION GROUPING: region-wise multi-location queries ---
+    var CCODE_TO_NAME={'us':'United States','ca':'Canada','mx':'Mexico','uk':'United Kingdom','de':'Germany','fr':'France','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','no':'Norway','dk':'Denmark','fi':'Finland','be':'Belgium','at':'Austria','es':'Spain','it':'Italy','pl':'Poland','pt':'Portugal','cz':'Czech Republic','ro':'Romania','in':'India','au':'Australia','sg':'Singapore','jp':'Japan','kr':'South Korea','nz':'New Zealand','hk':'Hong Kong','my':'Malaysia','ph':'Philippines','id':'Indonesia','th':'Thailand','ae':'UAE','sa':'Saudi Arabia','il':'Israel','qa':'Qatar','bh':'Bahrain','kw':'Kuwait','om':'Oman','za':'South Africa','ng':'Nigeria','ke':'Kenya','eg':'Egypt','gh':'Ghana','ma':'Morocco','br':'Brazil','ar':'Argentina','cl':'Chile','co':'Colombia','pe':'Peru'};
+    var REGION_LOCATIONS={
+      'NA':'United States, Canada',
+      'EU':'United Kingdom, Germany, Netherlands, Ireland, Switzerland, Sweden, France',
+      'AP':'Australia, Singapore, India, Japan, New Zealand',
+      'ME':'UAE, Saudi Arabia, Israel, Qatar',
+      'AF':'South Africa, Nigeria, Kenya, Egypt',
+      'SA':'Brazil, Argentina, Chile, Colombia'
+    };
+    var locationQueries=[];
+    if(selRegion==='Any'){
+      // SecVision targets: NA + EU primarily
+      locationQueries=['United States, Canada','United Kingdom, Germany, Netherlands, Ireland'];
+    }else if(selCountry&&CCODE_TO_NAME[selCountry]){
+      locationQueries=[CCODE_TO_NAME[selCountry]];
+    }else if(REGION_LOCATIONS[selRegion]){
+      locationQueries=[REGION_LOCATIONS[selRegion]];
+    }else{
+      locationQueries=['United States'];
+    }
+
+    // --- EMPLOYMENT TYPE ---
+    var contractType='';
+    if(empTypes&&empTypes.length===1){
+      if(empTypes[0]==='CONTRACTOR')contractType='C';
+      else if(empTypes[0]==='FULLTIME')contractType='F';
+    }
+    var apifyDate=datePosted==='month'?'month':datePosted==='all'?'all':'week';
+
+    // --- BUILD QUERY PLAN: roles × locations ---
+    var queries=[];
+    selectedGroups.forEach(function(role){
+      locationQueries.forEach(function(loc){
+        queries.push({title:role,location:loc});
+      });
+    });
+
+    // --- DEDUP SET: existing jobs from JSearch + DB ---
+    var seenKeys={};
+    allJobs.forEach(function(j){
+      seenKeys[(j.title+'|'+j.company).toLowerCase()]=true;
+      if(j.applyLink)seenKeys[j.applyLink.toLowerCase()]=true;
+    });
+
+    var totalQueries=queries.length;
+    apSt.textContent='🔄 LinkedIn: '+totalQueries+' queries planned ('+selectedGroups.length+' roles × '+locationQueries.length+' locations)...';
+    var allApifyJobs=[],seenLinkedinIds={};
+
+    for(var qi=0;qi<queries.length;qi++){
+      var q=queries[qi];
+      apSt.textContent='🔄 LinkedIn: "'+q.title+'" in '+q.location.split(',')[0]+'... ('+(qi+1)+'/'+totalQueries+')';
+
       // Start the Apify run
       var sr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'startSearch',title:topRoles[ri],location:country,rows:25,
-          datePosted:datePosted==='week'?'week':datePosted==='month'?'month':'week'})});
+        body:JSON.stringify({action:'startSearch',title:q.title,location:q.location,rows:25,
+          datePosted:apifyDate,contractType:contractType})});
       var sd=await sr.json();
-      if(sd.error){apSt.textContent='⚠️ LinkedIn: '+sd.error;setTimeout(function(){apSt.style.display='none'},8000);return}
+      if(sd.error){
+        apSt.textContent='⚠️ LinkedIn: '+sd.error;
+        if(sd.error.indexOf('rented')>-1){setTimeout(function(){apSt.style.display='none'},8000);return}
+        continue; // Skip this query, try next
+      }
 
-      // Poll for completion (max 3 minutes per role)
+      // Poll for completion (max 3 minutes per query)
       var runId=sd.runId,datasetId=sd.datasetId;
-      var maxPolls=36,pollCount=0;// 36 * 5s = 3 min
+      var maxPolls=36,pollCount=0;
       var status='RUNNING';
       while(status==='RUNNING'||status==='READY'){
         await new Promise(function(r){setTimeout(r,5000)});
         pollCount++;
-        apSt.textContent='🔄 LinkedIn: "'+topRoles[ri]+'" running... ('+Math.round(pollCount*5)+'s)';
+        apSt.textContent='🔄 LinkedIn: "'+q.title+'" running... ('+Math.round(pollCount*5)+'s)';
         var cr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({action:'checkRun',runId:runId})});
         var cd=await cr.json();
@@ -770,33 +842,39 @@ async function apifySearchBackground(roles,country,datePosted){
       }
 
       if(status!=='SUCCEEDED'){
-        apSt.textContent='⚠️ LinkedIn: "'+topRoles[ri]+'" timed out. Continuing...';
+        apSt.textContent='⚠️ LinkedIn: "'+q.title+'" timed out. Continuing...';
         continue;
       }
 
       // Fetch results
-      apSt.textContent='🔄 LinkedIn: Fetching "'+topRoles[ri]+'" results...';
+      apSt.textContent='🔄 LinkedIn: Fetching "'+q.title+'" results...';
       var rr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'getResults',datasetId:datasetId})});
       var rd=await rr.json();
-      if(rd.jobs)allApifyJobs=allApifyJobs.concat(rd.jobs);
+      if(rd.jobs){
+        // Deduplicate within Apify results (by linkedinJobId)
+        rd.jobs.forEach(function(j){
+          if(j.linkedinJobId&&seenLinkedinIds[j.linkedinJobId])return;
+          if(j.linkedinJobId)seenLinkedinIds[j.linkedinJobId]=true;
+          // Also dedup by title+company against JSearch results
+          var key=(j.title+'|'+j.company).toLowerCase();
+          if(seenKeys[key])return;
+          seenKeys[key]=true;
+          allApifyJobs.push(j);
+        });
+      }
+      // Brief pause between queries to avoid rate limiting
+      if(qi<queries.length-1)await new Promise(function(r){setTimeout(r,1000)});
     }
 
     if(!allApifyJobs.length){
-      apSt.textContent='ℹ️ LinkedIn: No additional jobs found.';
+      apSt.textContent='ℹ️ LinkedIn: No additional jobs found ('+totalQueries+' queries, all deduplicated).';
       setTimeout(function(){apSt.style.display='none'},5000);
       return;
     }
 
-    // Deduplicate Apify results by linkedinJobId
-    var seenIds={};
-    allApifyJobs=allApifyJobs.filter(function(j){
-      if(seenIds[j.linkedinJobId])return false;
-      seenIds[j.linkedinJobId]=true;return true;
-    });
-
     // Process and save to MongoDB
-    apSt.textContent='🔄 LinkedIn: Processing and saving '+allApifyJobs.length+' jobs...';
+    apSt.textContent='🔄 LinkedIn: Processing and saving '+allApifyJobs.length+' unique jobs...';
     var pr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'processAndSave',jobs:allApifyJobs})});
     var pd=await pr.json();
@@ -827,7 +905,7 @@ async function apifySearchBackground(roles,country,datePosted){
     var currentText=apiTextEl.textContent;
     apiTextEl.textContent=currentText+' + '+allApifyJobs.length+' LinkedIn ('+newCount+' new)';
     if(newCount>0){filtered=allJobs.slice();renderTable()}
-    apSt.textContent='✅ LinkedIn: '+allApifyJobs.length+' jobs found, '+pd.saved+' saved. '+newCount+' new in view.';
+    apSt.textContent='✅ LinkedIn: '+allApifyJobs.length+' jobs found ('+totalQueries+' queries, '+selectedGroups.length+' roles), '+pd.saved+' saved. '+newCount+' new in view.';
     setTimeout(function(){apSt.style.display='none'},10000);
     // Auto-enrich any new companies from Apify results
     if(newCount>0)autoEnrichCompanies();
