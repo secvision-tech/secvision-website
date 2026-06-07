@@ -763,26 +763,6 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
 
     // --- LOCATION GROUPING: region-wise multi-location queries ---
     var CCODE_TO_NAME={'us':'United States','ca':'Canada','mx':'Mexico','uk':'United Kingdom','de':'Germany','fr':'France','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','no':'Norway','dk':'Denmark','fi':'Finland','be':'Belgium','at':'Austria','es':'Spain','it':'Italy','pl':'Poland','pt':'Portugal','cz':'Czech Republic','ro':'Romania','in':'India','au':'Australia','sg':'Singapore','jp':'Japan','kr':'South Korea','nz':'New Zealand','hk':'Hong Kong','my':'Malaysia','ph':'Philippines','id':'Indonesia','th':'Thailand','ae':'UAE','sa':'Saudi Arabia','il':'Israel','qa':'Qatar','bh':'Bahrain','kw':'Kuwait','om':'Oman','za':'South Africa','ng':'Nigeria','ke':'Kenya','eg':'Egypt','gh':'Ghana','ma':'Morocco','br':'Brazil','ar':'Argentina','cl':'Chile','co':'Colombia','pe':'Peru'};
-    var REGION_LOCATIONS={
-      'NA':'United States, Canada',
-      'EU':'United Kingdom, Germany, Netherlands, Ireland, Switzerland, Sweden, France',
-      'AP':'Australia, Singapore, India, Japan, New Zealand',
-      'ME':'UAE, Saudi Arabia, Israel, Qatar',
-      'AF':'South Africa, Nigeria, Kenya, Egypt',
-      'SA':'Brazil, Argentina, Chile, Colombia'
-    };
-    var locationQueries=[];
-    if(selRegion==='Any'){
-      // SecVision targets: NA + EU primarily
-      locationQueries=['United States, Canada','United Kingdom, Germany, Netherlands, Ireland'];
-    }else if(selCountry&&CCODE_TO_NAME[selCountry]){
-      locationQueries=[CCODE_TO_NAME[selCountry]];
-    }else if(REGION_LOCATIONS[selRegion]){
-      locationQueries=[REGION_LOCATIONS[selRegion]];
-    }else{
-      locationQueries=['United States'];
-    }
-
     // --- EMPLOYMENT TYPE ---
     var contractType='';
     if(empTypes&&empTypes.length===1){
@@ -791,13 +771,43 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
     }
     var apifyDate=datePosted==='month'?'month':datePosted==='all'?'all':'week';
 
-    // --- BUILD QUERY PLAN: roles × locations ---
+    // --- LOCATION: One country per query (Bebity only honors single location) ---
+    var REGION_COUNTRIES={
+      'NA':['United States','Canada'],
+      'EU':['United Kingdom','Germany','Netherlands','Ireland','Switzerland','Sweden','France'],
+      'AP':['Australia','Singapore','India','Japan','New Zealand'],
+      'ME':['UAE','Saudi Arabia','Israel','Qatar'],
+      'AF':['South Africa','Nigeria','Kenya'],
+      'SA':['Brazil','Argentina','Chile']
+    };
+    // Priority markets for SecVision BD
+    var ALL_PRIORITY=['United States','United Kingdom','Canada','Germany','Netherlands','Ireland','Australia','Singapore','India','UAE'];
+
+    var targetCountries=[];
+    if(selRegion==='Any'){
+      targetCountries=ALL_PRIORITY;
+    }else if(selCountry&&CCODE_TO_NAME[selCountry]){
+      targetCountries=[CCODE_TO_NAME[selCountry]];
+    }else if(REGION_COUNTRIES[selRegion]){
+      targetCountries=REGION_COUNTRIES[selRegion];
+    }else{
+      targetCountries=['United States'];
+    }
+
+    // --- BUILD QUERY PLAN: roles × countries (interleaved for even coverage) ---
+    // Interleave: role1-country1, role1-country2, ..., role2-country1, ...
+    // This ensures all countries get some coverage even if MAX_QUERIES is hit
+    var MAX_QUERIES=30; // Cost cap
     var queries=[];
-    selectedGroups.forEach(function(role){
-      locationQueries.forEach(function(loc){
-        queries.push({title:role,location:loc});
-      });
-    });
+    // For single country: use all roles. For multiple: prioritize top roles
+    var maxRolesPerCountry=targetCountries.length<=2?selectedGroups.length:Math.min(4,selectedGroups.length);
+    var rolesToUse=selectedGroups.slice(0,maxRolesPerCountry);
+
+    for(var ri2=0;ri2<rolesToUse.length&&queries.length<MAX_QUERIES;ri2++){
+      for(var ci2=0;ci2<targetCountries.length&&queries.length<MAX_QUERIES;ci2++){
+        queries.push({title:rolesToUse[ri2],location:targetCountries[ci2]});
+      }
+    }
 
     // --- DEDUP SET: existing jobs from JSearch + DB ---
     var seenKeys={};
@@ -807,7 +817,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
     });
 
     var totalQueries=queries.length;
-    apSt.textContent='🔄 LinkedIn: '+totalQueries+' queries planned ('+selectedGroups.length+' roles × '+locationQueries.length+' locations)...';
+    apSt.textContent='🔄 LinkedIn: '+totalQueries+' queries planned ('+rolesToUse.length+' roles × '+targetCountries.length+' countries, max '+MAX_QUERIES+')...';
     var allApifyJobs=[],seenLinkedinIds={};
 
     for(var qi=0;qi<queries.length;qi++){
