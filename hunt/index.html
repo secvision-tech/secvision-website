@@ -318,6 +318,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
+              <button onclick="enrichFromLinkedIn()" id="enrichLinkedInBtn" style="padding:.2rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Enrich from LinkedIn</button>
               <button onclick="cleanNonCyberJobs()" id="cleanCyberBtn" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🧹 Clean Non-Cyber LinkedIn Jobs</button>
               <span id="fixCountryStatus" style="font-size:.6rem;color:var(--ac);align-self:center"></span>
               <span id="fixDescStatus" style="font-size:.6rem;color:var(--pri);align-self:center"></span>
@@ -972,22 +973,50 @@ async function autoEnrichCompanies(){
       var comp=toEnrich[i];
       enSt.textContent='🏢 '+(i+1)+'/'+toEnrich.length+': '+comp.company+'...';
 
-      // Step 1: Get company size if missing
+      // Step 1: Get company size if missing — try Apollo first, then LinkedIn scraper
       if(!comp.hasSize){
         try{
-          var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+          var ed=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({action:'enrichCompany',company:comp.company,domain:''})});
-          var ed=await er.json();
           if(ed.error&&ed.error.indexOf('insufficient credits')>-1){
             enSt.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies.';
-            setTimeout(function(){enSt.style.display='none'},8000);return;
-          }
-          if(ed.size||ed.linkedin){
+            // Continue with LinkedIn scraper for remaining
+          }else if(ed.size||ed.linkedin){
             await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({action:'updateCompanyInfo',company:comp.company,companySize:ed.size||'',companyLinkedin:ed.linkedin||'',companyWebsite:ed.website||''})});
+              body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:{companySize:ed.size||0,companyLinkedin:ed.linkedin||'',companyUrl:ed.website||''}})});
             enriched++;
           }
         }catch(e){failed++}
+      }
+
+      // Step 1b: If still no size, try LinkedIn Company Scraper
+      if(!comp.hasSize&&!comp.hasContacts){
+        try{
+          // Find LinkedIn URL from jobs
+          var linkedinUrl='';
+          allJobs.forEach(function(j){
+            if(j.company.toLowerCase()===comp.company.toLowerCase()){
+              if(j.companyLinkedin)linkedinUrl=j.companyLinkedin;
+              else if(j.companyUrl&&j.companyUrl.indexOf('linkedin.com/company')>-1)linkedinUrl=j.companyUrl;
+            }
+          });
+          if(linkedinUrl||comp.company){
+            var lr=await safeApiFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({action:'scrapeCompany',linkedinUrl:linkedinUrl,company:comp.company})});
+            if(lr.found){
+              var updates={};
+              if(lr.size&&lr.size>0)updates.companySize=lr.size;
+              if(lr.companyType)updates.companyType=lr.companyType;
+              if(lr.linkedin)updates.companyLinkedin=lr.linkedin;
+              if(lr.website)updates.companyUrl=lr.website;
+              if(Object.keys(updates).length){
+                await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+                  body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:updates})});
+                enriched++;
+              }
+            }
+          }
+        }catch(e){}
       }
 
       // Step 2: Discover contacts if missing
@@ -1303,14 +1332,35 @@ async function getCompanySizeFromView(idx){
       body:JSON.stringify({action:'enrichCompany',company:j.company,domain:domain})});
     if(d.size||d.linkedin){
       await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companySize:d.size||'',companyLinkedin:d.linkedin||'',companyWebsite:d.website||''})});
+        body:JSON.stringify({action:'updateCompanyIfEmpty',company:j.company,updates:{companySize:d.size||0,companyLinkedin:d.linkedin||'',companyUrl:d.website||''}})});
       var sizeNum=parseInt(String(d.size).replace(/[^0-9]/g,''));
       if(!isNaN(sizeNum)){j.companySize=sizeNum;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum})}
       if(d.linkedin){j.companyLinkedin=d.linkedin;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyLinkedin=d.linkedin})}
       viewDet(idx);
     }else{
-      var msg=d.mismatch?'Name mismatch — Apollo found: "'+d.foundCompany+'"':'Company not found in Apollo.';
-      if(el)el.innerHTML='<div style="color:#DC2626;font-size:.65rem">'+msg+' Use ✎ buttons to enter manually.</div>';
+      // Fallback: try LinkedIn Company Scraper
+      if(el)el.innerHTML='<div style="color:#0A66C2;font-size:.65rem">🔗 Apollo not found. Trying LinkedIn scraper for '+j.company+'...</div>';
+      var linkedinUrl=j.companyLinkedin||'';
+      if(!linkedinUrl&&j.companyUrl&&j.companyUrl.indexOf('linkedin.com/company')>-1)linkedinUrl=j.companyUrl;
+      try{
+        var lr=await safeApiFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({action:'scrapeCompany',linkedinUrl:linkedinUrl,company:j.company})});
+        if(lr.found){
+          var updates={};
+          if(lr.size&&lr.size>0)updates.companySize=lr.size;
+          if(lr.companyType)updates.companyType=lr.companyType;
+          if(lr.linkedin)updates.companyLinkedin=lr.linkedin;
+          if(lr.website)updates.companyUrl=lr.website;
+          if(Object.keys(updates).length){
+            await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({action:'updateCompanyIfEmpty',company:j.company,updates:updates})});
+            if(updates.companySize){j.companySize=updates.companySize;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=updates.companySize})}
+            if(updates.companyType){j.companyType=updates.companyType;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=updates.companyType})}
+            if(updates.companyLinkedin){j.companyLinkedin=updates.companyLinkedin;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyLinkedin=updates.companyLinkedin})}
+            viewDet(idx);
+          }else{if(el)el.innerHTML='<div style="color:#DC2626;font-size:.65rem">No data found on LinkedIn. Use ✎ buttons to enter manually.</div>'}
+        }else{if(el)el.innerHTML='<div style="color:#DC2626;font-size:.65rem">'+(lr.error||'Company not found on LinkedIn.')+' Use ✎ buttons to enter manually.</div>'}
+      }catch(e2){if(el)el.innerHTML='<div style="color:#DC2626;font-size:.65rem">LinkedIn scraper failed: '+e2.message+'</div>'}
     }
   }catch(e){if(el)el.innerHTML=origHtml;alert('Error: '+e.message)}
 }
@@ -1730,6 +1780,72 @@ async function enrichAllCompanies(){
     if(enriched>0)loadDashboard();
   }catch(e){st.textContent='Error: '+e.message}
   finally{btn.disabled=false}
+}
+
+async function enrichFromLinkedIn(){
+  var btn=document.getElementById('enrichLinkedInBtn');
+  btn.disabled=true;btn.textContent='🔗 Running...';
+  try{
+    // Get companies needing enrichment (missing size/type/LinkedIn)
+    var batch=0,totalEnriched=0,totalCompanies=0;
+    var BATCH=10;
+    // First get total count
+    var cr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'getCompaniesNeedingEnrichment',skip:0,limit:1})});
+    var cd=await cr.json();
+    totalCompanies=cd.total||0;
+    if(!totalCompanies){btn.textContent='✅ All companies already enriched!';setTimeout(function(){btn.textContent='🔗 Enrich from LinkedIn';btn.disabled=false},5000);return}
+    if(!confirm('Found '+totalCompanies+' companies with missing data.\nThis will scrape LinkedIn company pages using Apify.\nProceed?')){btn.textContent='🔗 Enrich from LinkedIn';btn.disabled=false;return}
+
+    while(batch*BATCH<totalCompanies&&batch<20){// Max 200 companies
+      btn.textContent='🔗 Batch '+(batch+1)+': fetching companies...';
+      var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'getCompaniesNeedingEnrichment',skip:batch*BATCH,limit:BATCH})});
+      var d=await r.json();
+      var companies=d.companies||[];
+      if(!companies.length)break;
+
+      for(var ci=0;ci<companies.length;ci++){
+        var comp=companies[ci];
+        // Skip Job Board companies
+        if(comp.companyType&&comp.companyType==='Job Board')continue;
+        btn.textContent='🔗 '+(batch*BATCH+ci+1)+'/'+totalCompanies+': '+comp.company+'...';
+
+        // Build LinkedIn URL
+        var linkedinUrl=comp.companyLinkedin||'';
+        if(!linkedinUrl){
+          // Check if any job has LinkedIn company URL
+          var slug=comp.company.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+          linkedinUrl='https://www.linkedin.com/company/'+slug+'/';
+        }
+
+        try{
+          var sr=await safeApiFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'scrapeCompany',linkedinUrl:linkedinUrl,company:comp.company})});
+          if(sr.found){
+            var updates={};
+            if(sr.size&&sr.size>0&&(!comp.companySize||comp.companySize===0))updates.companySize=sr.size;
+            if(sr.companyType&&!comp.companyType)updates.companyType=sr.companyType;
+            if(sr.linkedin&&!comp.companyLinkedin)updates.companyLinkedin=sr.linkedin;
+            if(sr.website&&(!comp.companyUrl||comp.companyUrl.indexOf('google.com/search')>-1))updates.companyUrl=sr.website;
+            if(Object.keys(updates).length){
+              await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:updates})});
+              totalEnriched++;
+            }
+          }
+        }catch(e){console.error('LinkedIn enrich error for '+comp.company+':',e)}
+        // Delay between scrapes
+        await new Promise(function(r){setTimeout(r,2000)});
+      }
+      batch++;
+    }
+    btn.textContent='✅ Enriched '+totalEnriched+'/'+totalCompanies+' companies from LinkedIn!';
+    setTimeout(function(){btn.textContent='🔗 Enrich from LinkedIn';btn.disabled=false},10000);
+  }catch(e){
+    btn.textContent='⚠️ Error: '+e.message;
+    setTimeout(function(){btn.textContent='🔗 Enrich from LinkedIn';btn.disabled=false},8000);
+  }
 }
 
 async function reExtractFields(){

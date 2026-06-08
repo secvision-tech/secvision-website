@@ -1,6 +1,7 @@
 // Apify Bebity LinkedIn Jobs Scraper integration
 const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 const ACTOR_ID = 'bebity~linkedin-jobs-scraper';
+const COMPANY_ACTOR_ID = 'bebity~linkedin-company-scraper';
 const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
 
 exports.handler = async function(event) {
@@ -123,6 +124,98 @@ exports.handler = async function(event) {
     }
 
     // ACTION: processAndSave - process Apify results through extraction pipeline and save to MongoDB
+    // ACTION: scrapeCompany - Scrape LinkedIn company page for size/type/website
+    if (action === 'scrapeCompany') {
+      var linkedinUrl = body.linkedinUrl || '';
+      var companyName = body.company || '';
+
+      // Build LinkedIn company URL if not provided
+      if (!linkedinUrl && companyName) {
+        var slug = companyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        linkedinUrl = 'https://www.linkedin.com/company/' + slug + '/';
+      }
+      if (!linkedinUrl) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No LinkedIn URL or company name provided' }) };
+
+      try {
+        // Start the Company Scraper actor
+        var resp = await fetch('https://api.apify.com/v2/acts/' + COMPANY_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            urls: [linkedinUrl],
+            proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }
+          })
+        });
+        var run = await resp.json();
+        if (!run.data || !run.data.id) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start company scraper', details: run }) };
+
+        var runId = run.data.id;
+        var datasetId = run.data.defaultDatasetId;
+
+        // Poll for completion (max 60 seconds)
+        var maxPolls = 12, pollCount = 0, status = 'RUNNING';
+        while (status === 'RUNNING' || status === 'READY') {
+          await new Promise(function(r) { setTimeout(r, 5000); });
+          pollCount++;
+          var cr = await fetch('https://api.apify.com/v2/actor-runs/' + runId + '?token=' + APIFY_TOKEN);
+          var cd = await cr.json();
+          status = cd.data ? cd.data.status : 'FAILED';
+          datasetId = (cd.data && cd.data.defaultDatasetId) || datasetId;
+          if (pollCount >= maxPolls) break;
+        }
+
+        if (status !== 'SUCCEEDED') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Company scraper timed out or failed', status: status }) };
+
+        // Fetch results
+        var dr = await fetch('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN);
+        var items = await dr.json();
+
+        if (!items || !items.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No company data returned' }) };
+
+        var c = items[0];
+        // Extract and normalize company data
+        var result = {
+          found: true,
+          name: c.name || c.companyName || companyName,
+          size: 0,
+          sizeRange: '',
+          industry: c.industry || c.sector || '',
+          website: c.website || c.websiteUrl || '',
+          linkedin: linkedinUrl,
+          headquarters: c.headquarters || c.hqLocation || '',
+          description: (c.description || '').slice(0, 500),
+          specialties: c.specialties || []
+        };
+
+        // Parse employee count
+        var empCount = c.employeeCount || c.staffCount || c.employeesCount || 0;
+        var empRange = c.employeeCountRange || c.staffCountRange || c.companySize || '';
+        if (typeof empCount === 'number' && empCount > 0) {
+          result.size = empCount;
+        } else if (empRange) {
+          result.sizeRange = empRange;
+          // Parse range like "1,001-5,000" or "1001-5000"
+          var rangeMatch = empRange.replace(/,/g, '').match(/(\d+)\s*[-–]\s*(\d+)/);
+          if (rangeMatch) result.size = Math.round((parseInt(rangeMatch[1]) + parseInt(rangeMatch[2])) / 2);
+          // Handle "10,001+" format
+          var plusMatch = empRange.replace(/,/g, '').match(/(\d+)\+/);
+          if (plusMatch && !result.size) result.size = parseInt(plusMatch[1]);
+        }
+
+        // Map industry to company type
+        var ind = (result.industry || '').toLowerCase();
+        if (/security|cyber|infosec/i.test(ind)) result.companyType = 'MSSP/MDR';
+        else if (/government|defense|military|federal/i.test(ind)) result.companyType = 'Government';
+        else if (/consult|advisory|professional\s*services/i.test(ind)) result.companyType = 'IT Consulting';
+        else if (/staffing|recruit|talent|employment/i.test(ind)) result.companyType = 'Staffing/Recruiting';
+        else result.companyType = 'Enterprise';
+
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify(result) };
+      } catch (e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Company scraper error: ' + e.message }) };
+      }
+    }
+
     if (action === 'processAndSave') {
       var jobs = body.jobs || [];
       // Filter for cybersecurity relevance

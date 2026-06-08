@@ -525,6 +525,77 @@ exports.handler = async (event) => {
     }
 
     // Get unique companies (for bulk enrichment)
+    // Get companies needing enrichment (missing size OR type OR LinkedIn)
+    if (action === 'getCompaniesNeedingEnrichment') {
+      var skip = body.skip || 0;
+      var limit = body.limit || 20;
+      var companies = await col.aggregate([
+        { $match: { company: { $ne: null } } },
+        { $group: {
+          _id: { $toLower: '$company' },
+          company: { $first: '$company' },
+          companySize: { $max: '$companySize' },
+          companyType: { $first: { $cond: [{ $and: [{ $ne: ['$companyType', ''] }, { $ne: ['$companyType', null] }] }, '$companyType', null] } },
+          companyLinkedin: { $first: { $cond: [{ $and: [{ $ne: ['$companyLinkedin', ''] }, { $ne: ['$companyLinkedin', null] }] }, '$companyLinkedin', null] } },
+          companyUrl: { $first: { $cond: [{ $and: [{ $ne: ['$companyUrl', ''] }, { $ne: ['$companyUrl', null] }, { $not: { $regexMatch: { input: { $ifNull: ['$companyUrl', ''] }, regex: /google\.com\/search/ } } }] }, '$companyUrl', null] } },
+          jobCount: { $sum: 1 }
+        } },
+        { $match: { $or: [
+          { companySize: { $in: [null, 0] } },
+          { companyType: null },
+          { companyLinkedin: null }
+        ] } },
+        { $sort: { jobCount: -1 } },
+        { $skip: skip },
+        { $limit: limit }
+      ]).toArray();
+      var totalCount = await col.aggregate([
+        { $match: { company: { $ne: null } } },
+        { $group: { _id: { $toLower: '$company' }, companySize: { $max: '$companySize' }, companyType: { $first: { $cond: [{ $and: [{ $ne: ['$companyType', ''] }, { $ne: ['$companyType', null] }] }, '$companyType', null] } }, companyLinkedin: { $first: { $cond: [{ $and: [{ $ne: ['$companyLinkedin', ''] }, { $ne: ['$companyLinkedin', null] }] }, '$companyLinkedin', null] } } } },
+        { $match: { $or: [{ companySize: { $in: [null, 0] } }, { companyType: null }, { companyLinkedin: null }] } },
+        { $count: 'total' }
+      ]).toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: totalCount[0] ? totalCount[0].total : 0 }) };
+    }
+
+    // Update company fields ONLY if currently empty (safe — never overwrites)
+    if (action === 'updateCompanyIfEmpty') {
+      var company = body.company;
+      var updates = body.updates || {}; // {companySize, companyType, companyLinkedin, companyUrl}
+      if (!company) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No company name' }) };
+
+      var setFields = {};
+      var filter = { company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } };
+
+      // Only update fields that are currently empty in DB
+      if (updates.companySize && updates.companySize > 0) {
+        // Use $max to only increase, never decrease
+        await col.updateMany(
+          { ...filter, $or: [{ companySize: { $in: [null, 0, ''] } }, { companySize: { $exists: false } }] },
+          { $set: { companySize: updates.companySize } }
+        );
+      }
+      if (updates.companyType) {
+        await col.updateMany(
+          { ...filter, $or: [{ companyType: { $in: [null, ''] } }, { companyType: { $exists: false } }] },
+          { $set: { companyType: updates.companyType } }
+        );
+      }
+      if (updates.companyLinkedin) {
+        await col.updateMany(
+          { ...filter, $or: [{ companyLinkedin: { $in: [null, ''] } }, { companyLinkedin: { $exists: false } }] },
+          { $set: { companyLinkedin: updates.companyLinkedin } }
+        );
+      }
+      if (updates.companyUrl) {
+        await col.updateMany(
+          { ...filter, $or: [{ companyUrl: { $in: [null, ''] } }, { companyUrl: { $exists: false } }, { companyUrl: { $regex: /google\.com\/search/ } }] },
+          { $set: { companyUrl: updates.companyUrl } }
+        );
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true, company: company }) };
+    }
+
     // Get single job by ID (for View from dashboard)
     if (action === 'getJob') {
       var { ObjectId } = require('mongodb');
