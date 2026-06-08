@@ -1194,17 +1194,17 @@ async function viewDet(i){
         body:JSON.stringify({action:'get',id:j._id})});
       if(r.ok){var data=await r.json();if(data.job){
         j.description=data.job.description||'';
-        j.qualifications=data.job.qualifications||[];
-        j.responsibilities=data.job.responsibilities||[];
-        j.benefits=data.job.benefits||[];
+        j.qualifications=Array.isArray(data.job.qualifications)?data.job.qualifications:[];
+        j.responsibilities=Array.isArray(data.job.responsibilities)?data.job.responsibilities:[];
+        j.benefits=Array.isArray(data.job.benefits)?data.job.benefits:[];
       }}
     }catch(e){console.error('Failed to fetch details:',e)}
   }
   document.getElementById('detTitle').textContent=j.titleClean||j.title;
   var desc=j.description||'No description available.';
-  var quals=j.qualifications||[];
-  var resps=j.responsibilities||[];
-  var bens=j.benefits||[];
+  var quals=Array.isArray(j.qualifications)?j.qualifications:[];
+  var resps=Array.isArray(j.responsibilities)?j.responsibilities:[];
+  var bens=Array.isArray(j.benefits)?j.benefits:[];
   var countryForSearch=j.detectedCountry&&j.detectedCountry!=='Unknown'?' '+j.detectedCountry:'';
   var companyLink=j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1?j.companyUrl:'https://www.google.com/search?q='+encodeURIComponent(j.company+countryForSearch+' official website');
   var companyHtml='<a href="'+companyLink+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
