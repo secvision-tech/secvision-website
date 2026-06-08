@@ -93,12 +93,17 @@ exports.handler = async function(event) {
         var desc = (j.description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
         var descHtml = j.descriptionHtml || j.description || '';
 
+        // #273: LinkedIn companyUrl is actually the LinkedIn page, not the website
+        var rawCompanyUrl = (j.companyUrl || '').replace(/\?trk=.*$/, '');
+        var isLinkedIn = rawCompanyUrl.indexOf('linkedin.com/company') > -1;
+
         return {
           jobId: 'li_' + (j.id || ''),
           linkedinJobId: j.id || '',
           title: j.title || '',
           company: j.companyName || '',
-          companyUrl: (j.companyUrl || '').replace(/\?trk=.*$/, ''),
+          companyUrl: isLinkedIn ? '' : rawCompanyUrl,
+          companyLinkedin: isLinkedIn ? rawCompanyUrl : '',
           companyLogo: j.companyLogo || '',
           location: j.location || '',
           description: desc,
@@ -277,13 +282,22 @@ exports.handler = async function(event) {
           if (j.posterProfileUrl) contact += ' (' + j.posterProfileUrl + ')';
         }
 
+        // #273: Ensure LinkedIn URL goes to companyLinkedin, not companyUrl
+        var saveCompanyUrl = j.companyUrl || '';
+        var saveCompanyLinkedin = j.companyLinkedin || '';
+        if (saveCompanyUrl.indexOf('linkedin.com/company') > -1) {
+          saveCompanyLinkedin = saveCompanyLinkedin || saveCompanyUrl;
+          saveCompanyUrl = '';
+        }
+
         var jobDoc = {
           jobId: j.jobId,
           linkedinJobId: j.linkedinJobId,
           title: j.title,
           titleClean: j.title,
           company: j.company,
-          companyUrl: j.companyUrl,
+          companyUrl: saveCompanyUrl,
+          companyLinkedin: saveCompanyLinkedin,
           companyLogo: j.companyLogo,
           location: j.location,
           description: desc,

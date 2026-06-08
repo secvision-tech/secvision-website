@@ -1645,13 +1645,13 @@ async function loadDashboard(){
         }
       });
     }
-    renderCSSPie('chartType',d.typeCounts||[]);
-    renderCSSPie('chartCompany',d.companyCounts||[]);
-    renderCSSPie('chartLocation',d.locationCounts||[]);
-    renderCSSPie('chartCountry',d.countryCounts||[]);
-    renderCSSPie('chartCerts',d.certCounts||[]);
-    renderCSSPie('chartCompliance',d.complianceCounts||[]);
-    renderCSSPie('chartTools',d.toolsCounts||[]);
+    renderCSSPie('chartType',d.typeCounts||[],function(v){return "searchDashPie('companyType','"+v.replace(/'/g,"\\'")+"')"});
+    renderCSSPie('chartCompany',d.companyCounts||[],function(v){return "searchDashPie('company','"+v.replace(/'/g,"\\'")+"')"});
+    renderCSSPie('chartLocation',d.locationCounts||[],function(v){return "searchDashPie('location','"+v.replace(/'/g,"\\'")+"')"});
+    renderCSSPie('chartCountry',d.countryCounts||[],function(v){return "searchDashPie('country','"+v.replace(/'/g,"\\'")+"')"});
+    renderCSSPie('chartCerts',d.certCounts||[],function(v){return "searchDashPie('certifications','"+v.replace(/'/g,"\\'")+"')"});
+    renderCSSPie('chartCompliance',d.complianceCounts||[],function(v){return "searchDashPie('compliance','"+v.replace(/'/g,"\\'")+"')"});
+    renderCSSPie('chartTools',d.toolsCounts||[],function(v){return "searchDashPie('tools','"+v.replace(/'/g,"\\'")+"')"});
     renderCSSBars('chartScans',d.recentScans||[]);
     // Partnership target table
     renderPartnerTable(d.partnerTargets||[]);
@@ -1903,7 +1903,7 @@ async function loadContractPipeline(){
     document.getElementById('contractLoading').style.display='none';
     document.getElementById('contractContent').style.display='block';
     renderCSSPie('chartContractCountry',d.contractByCountry||[],function(country){return "searchContractByCountry('"+country.replace(/'/g,"\\'")+"')"});
-    renderCSSPie('chartContractSkills',d.contractSkills||[]);
+    renderCSSPie('chartContractSkills',d.contractSkills||[],function(v){return "searchContractBySkill('"+v.replace(/'/g,"\\'")+"')"});
     renderContractTable(d.contractByCompany||[]);
     // Fetch latest 100 contract jobs
     fetchRecentContracts();
@@ -2119,6 +2119,84 @@ async function viewContractJob(jobId){
       viewDet(tempIdx);
     }
   }catch(e){alert('Error loading job: '+e.message)}
+}
+
+// #275: Generic Dashboard pie chart click → search DB
+function searchDashPie(field,value){
+  setMode('db');
+  document.getElementById('dbQuery').value='';
+  document.getElementById('dbStatus').value='all';
+  document.getElementById('dbCompanyType').value='all';
+  document.getElementById('dbJobType').value='all';
+  document.getElementById('dbPeriod').value='all';
+  try{document.getElementById('dbCountry').value='all'}catch(e){}
+
+  // Set the right filter based on field
+  if(field==='companyType'){
+    var ctSel=document.getElementById('dbCompanyType');
+    if(ctSel){
+      var found=false;
+      for(var i=0;i<ctSel.options.length;i++){if(ctSel.options[i].value===value){found=true;break}}
+      if(!found){var opt=document.createElement('option');opt.value=value;opt.textContent=value;ctSel.appendChild(opt)}
+      ctSel.value=value;
+    }
+  }else if(field==='country'){
+    var dbCS=document.getElementById('dbCountry');
+    if(dbCS){
+      var f2=false;
+      for(var i2=0;i2<dbCS.options.length;i2++){if(dbCS.options[i2].value===value){f2=true;break}}
+      if(!f2){var o2=document.createElement('option');o2.value=value;o2.textContent=value;dbCS.appendChild(o2)}
+      dbCS.value=value;
+    }
+  }else{
+    document.getElementById('dbQuery').value=value;
+  }
+
+  document.getElementById('loadState').style.display='block';
+  document.getElementById('loadState').textContent='Loading '+field+': '+value+'...';
+  document.getElementById('rTable').style.display='none';
+  document.getElementById('emptyState').style.display='none';
+  document.getElementById('pag').classList.remove('show');
+  document.getElementById('exportBtns').style.display='none';
+
+  var params={action:'search',limit:500,sort:JSON.stringify({datePosted:-1})};
+  if(field==='companyType')params.companyType=value;
+  else if(field==='country')params.detectedCountry=value;
+  else params.query=value;
+
+  fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)})
+  .then(function(r){return r.json()}).then(function(data){
+    allJobs=data.jobs||[];
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    filtered=allJobs.slice();renderTable();
+    document.getElementById('apiText').textContent='DB: '+allJobs.length+' results for '+field+'='+value;
+    document.getElementById('exportBtns').style.display=allJobs.length?'flex':'none';
+  }).catch(function(e){
+    document.getElementById('loadState').textContent='Error: '+e.message;
+  });
+}
+
+// #275: Contract Pipeline skills pie click
+function searchContractBySkill(skill){
+  setMode('db');
+  document.getElementById('dbQuery').value=skill;
+  document.getElementById('dbStatus').value='all';
+  document.getElementById('dbCompanyType').value='all';
+  document.getElementById('dbJobType').value='Contract';
+  document.getElementById('dbPeriod').value='all';
+  try{document.getElementById('dbCountry').value='all'}catch(e){}
+  document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading contract jobs with '+skill+'...';
+  document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
+  document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
+  fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action:'search',query:skill,jobType:'Contract',limit:500,sort:JSON.stringify({datePosted:-1})})})
+  .then(function(r){return r.json()}).then(function(data){
+    allJobs=data.jobs||[];
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    filtered=allJobs.slice();renderTable();
+    document.getElementById('apiText').textContent='DB: '+allJobs.length+' contract jobs with '+skill;
+    document.getElementById('exportBtns').style.display=allJobs.length?'flex':'none';
+  }).catch(function(e){document.getElementById('loadState').textContent='Error: '+e.message});
 }
 
 function searchContractByCountry(country){

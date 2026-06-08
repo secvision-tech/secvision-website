@@ -37,8 +37,9 @@ function extractExp(job) {
     var y1 = parseInt(m[1]), y2 = parseInt(m[2]);
     if (y1 < 1 || y1 > 30 || y2 < 1 || y2 > 30 || y2 <= y1) continue;
     // Skip rating scales: "rate...1-10", "scale of 1-10", "(1-10)", "skills (1-10)"
-    var ctx = d.substring(Math.max(0, m.index - 80), m.index + m[0].length + 20).toLowerCase();
-    if (/\b(?:rate|rating|scale|score|rank|level|grade|skill|proficien)\b/.test(ctx)) continue;
+    var ctx = d.substring(Math.max(0, m.index - 30), m.index + m[0].length + 10).toLowerCase();
+    if (/\b(?:rate|rating|scale|score|rank|grade)\b/.test(ctx)) continue;
+    if (/\b(?:proficiency|skill|level)\s*[\(:]\s*\d/.test(ctx)) continue;
     if (d.charAt(m.index - 1) === '(' || /\(\d+[\s\-]+\d+\)/.test(ctx)) continue;
     // Skip if range is 1-10 or 1-5 (common rating scales, unlikely experience)
     if ((y1 === 1 && (y2 === 5 || y2 === 10))) continue;
