@@ -1274,7 +1274,32 @@ async function viewDet(i){
 var viewDirty=false;
 function closeDet(){
   document.getElementById('detailOverlay').classList.remove('open');
-  if(viewDirty){filtered=allJobs.slice();renderTable();viewDirty=false}
+  if(viewDirty){
+    // Re-render search results table
+    filtered=allJobs.slice();renderTable();
+    // Sync changes to contract jobs table data and re-render if visible
+    if(cjData.length&&currentViewIdx>=0){
+      var vj=allJobs[currentViewIdx];
+      if(vj&&vj.company){
+        var companyLower=vj.company.toLowerCase();
+        for(var ci=0;ci<cjData.length;ci++){
+          if((cjData[ci].company||'').toLowerCase()===companyLower){
+            ['companyType','companySize','companyLinkedin','companyUrl','status'].forEach(function(f){
+              if(vj[f]!==undefined)cjData[ci][f]=vj[f];
+            });
+          }
+          // Also sync exact job by _id for non-company fields
+          if(cjData[ci]._id===vj._id){
+            ['location','salary','experience','status'].forEach(function(f){
+              if(vj[f]!==undefined)cjData[ci][f]=vj[f];
+            });
+          }
+        }
+      }
+      if(document.getElementById('contractJobsList'))renderContractJobs();
+    }
+    viewDirty=false;
+  }
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()});
 
