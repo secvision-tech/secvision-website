@@ -595,7 +595,7 @@ async function cycleStatus(jobIdx,el){
   var j=allJobs[jobIdx];if(!j)return;
   var order=['new','reviewed','contacted','archived'];
   var cur=j.status||'new';var next=order[(order.indexOf(cur)+1)%order.length];
-  j.status=next;
+  j.status=next;viewDirty=true;
   // Update badge immediately
   var cls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
   el.className='status-badge '+(cls[next]||'status-new');
@@ -1271,7 +1271,11 @@ async function viewDet(i){
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" class="dm-apply">Apply Now &rarr;</a>';
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
 }
-function closeDet(){document.getElementById('detailOverlay').classList.remove('open')}
+var viewDirty=false;
+function closeDet(){
+  document.getElementById('detailOverlay').classList.remove('open');
+  if(viewDirty){filtered=allJobs.slice();renderTable();viewDirty=false}
+}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()});
 
 function findContacts(idx){
@@ -1304,7 +1308,7 @@ async function cycleStatusInView(idx){
   var order=['new','reviewed','contacted','archived'];
   var cur=j.status||'new';
   var next=order[(order.indexOf(cur)+1)%order.length];
-  j.status=next;
+  j.status=next;viewDirty=true;
   if(j._id){
     try{
       await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -1334,7 +1338,7 @@ async function getCompanySizeFromView(idx){
       await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateCompanyIfEmpty',company:j.company,updates:{companySize:d.size||0,companyLinkedin:d.linkedin||'',companyUrl:d.website||''}})});
       var sizeNum=parseInt(String(d.size).replace(/[^0-9]/g,''));
-      if(!isNaN(sizeNum)){j.companySize=sizeNum;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum})}
+      if(!isNaN(sizeNum)){viewDirty=true;j.companySize=sizeNum;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum})}
       if(d.linkedin){j.companyLinkedin=d.linkedin;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyLinkedin=d.linkedin})}
       viewDet(idx);
     }else{
@@ -1354,7 +1358,7 @@ async function getCompanySizeFromView(idx){
           if(Object.keys(updates).length){
             await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
               body:JSON.stringify({action:'updateCompanyIfEmpty',company:j.company,updates:updates})});
-            if(updates.companySize){j.companySize=updates.companySize;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=updates.companySize})}
+            if(updates.companySize){viewDirty=true;j.companySize=updates.companySize;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=updates.companySize})}
             if(updates.companyType){j.companyType=updates.companyType;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=updates.companyType})}
             if(updates.companyLinkedin){j.companyLinkedin=updates.companyLinkedin;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyLinkedin=updates.companyLinkedin})}
             viewDet(idx);
@@ -1381,7 +1385,7 @@ async function editCompanyTypeInView(idx){
   try{
     await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'bulkUpdateCompanyType',company:j.company,companyType:selected})});
-    j.companyType=selected;
+    j.companyType=selected;viewDirty=true;
     allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=selected});
     viewDet(idx);
   }catch(e){alert('Error: '+e.message)}
@@ -1408,7 +1412,7 @@ async function editField(idx,field,label,optionsStr){
   var current=j[field]||'';
   var input=prompt(label+' (current: '+current+'):\n\nOptions: '+options.join(', ')+'\n\nType value:',current);
   if(!input||input===current)return;
-  j[field]=input;
+  j[field]=input;viewDirty=true;
   try{
     if(j._id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
     else if(j.id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateFieldByJobId',jobId:j.id,field:field,value:input})});
@@ -1421,7 +1425,7 @@ async function editFieldFree(idx,field,label){
   var current=j[field]||'';
   var input=prompt('Enter '+label+':',current);
   if(input===null||input===current)return;
-  j[field]=input;
+  j[field]=input;viewDirty=true;
   try{
     if(j._id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
     else if(j.id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateFieldByJobId',jobId:j.id,field:field,value:input})});
@@ -1458,7 +1462,7 @@ async function editFieldInView(idx,field){
   try{
     await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
-    j[field]=input;
+    j[field]=input;viewDirty=true;
     viewDet(idx);
   }catch(e){alert('Error: '+e.message)}
 }
@@ -2314,6 +2318,7 @@ function closeContactPopup(){
   document.getElementById('contactPopup').style.display='none';
   // Refresh View if open
   if(currentViewIdx>=0&&document.getElementById('detailOverlay')&&document.getElementById('detailOverlay').classList.contains('open')){
+    viewDirty=true;
     viewDet(currentViewIdx);
   }
 }
