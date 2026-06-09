@@ -441,7 +441,7 @@ function showApp(){
   var today=new Date().toISOString().split('T')[0];
   document.getElementById('dateTo').value=today;
   document.getElementById('dbDateTo').value=today;
-  loadDashboard();
+  loadDashboard();dashLoaded=true;
 }
 document.addEventListener('click',function(){document.getElementById('userDropdown')?.classList.remove('open')});
 
@@ -1733,7 +1733,7 @@ async function fixCountries(){
     if(!r.ok)throw new Error('Failed');
     var d=await r.json();
     st.textContent='Checked '+d.total+' records. Fixed '+d.fixed+'. '+d.remaining+' still unknown.';
-    if(d.fixed>0)loadDashboard();
+    if(d.fixed>0){dashLoaded=false;contractLoaded=false;loadDashboard();dashLoaded=true;}
   }catch(e){st.textContent='Error: '+e.message}
 }
 
@@ -1758,7 +1758,7 @@ async function cleanNonCyberJobs(){
     var r=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cleanupNonCyber'})});
     var d=await r.json();
     st.textContent='✅ Checked '+d.checked+' LinkedIn jobs: '+d.deleted+' non-cyber removed, '+d.kept+' kept.';
-    if(d.deleted>0)loadDashboard();
+    if(d.deleted>0){dashLoaded=false;contractLoaded=false;loadDashboard();dashLoaded=true;}
   }catch(e){st.textContent='Error: '+e.message}
   finally{btn.disabled=false}
 }
@@ -1808,7 +1808,7 @@ async function enrichAllCompanies(){
       await new Promise(function(resolve){setTimeout(resolve,300)});
     }
     st.textContent='✅ Done! Enriched '+enriched+' companies. '+failed+' not found. Refresh dashboard to see sizes.';
-    if(enriched>0)loadDashboard();
+    if(enriched>0){dashLoaded=false;contractLoaded=false;loadDashboard();dashLoaded=true;}
   }catch(e){st.textContent='Error: '+e.message}
   finally{btn.disabled=false}
 }
@@ -1887,7 +1887,7 @@ async function reExtractFields(){
     if(!r.ok)throw new Error('Failed');
     var d=await r.json();
     st.textContent='Processed '+d.total+' jobs. Updated '+d.updated+' records.';
-    if(d.updated>0)loadDashboard();
+    if(d.updated>0){dashLoaded=false;contractLoaded=false;loadDashboard();dashLoaded=true;}
   }catch(e){st.textContent='Error: '+e.message}
 }
 
