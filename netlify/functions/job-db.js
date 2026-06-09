@@ -892,6 +892,43 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: allJobs.length, updated: updated }) };
     }
 
+    // ACTION: fixCompanyTypes - set empty companyType to Enterprise (default)
+    if (action === 'fixCompanyTypes') {
+      // Known classification lists
+      var JOB_BOARDS = /\b(?:indeed|glassdoor|ziprecruiter|monster|careerbuilder|dice|linkedin|hired|angel\.co|wellfound|simplyhired|ladders|lensa|talent\.com|themuse|remote\.co|flexjobs|weworkremotely|remoteok|jobvite|greenhouse|lever|workday|smartrecruiters|icims|jazz\s*hr|breezy\s*hr|bamboo\s*hr|bullhorn|clearance\s*jobs|usajobs|governmentjobs|govcio|clearancejobs|cybercoders)\b/i;
+      var STAFFING = /\b(?:robert\s*half|hays|adecco|randstad|manpower|kelly\s*services|kforce|insight\s*global|teksystems|apex\s*systems|modis|aston\s*carter|aerotek|beacon\s*hill|cybercoders|michael\s*page|page\s*group|harvey\s*nash|nigel\s*frank|brewer\s*morris|la\s*fosse|barclay\s*simpson|spencer\s*ogden|lorien|reed|huxley|sthree|talentworks|glocomms|akkodis|mondo|addison\s*group|vaco|judge\s*group|motionpoint|genesis10|artech|compuGain|aquent|mastech|net2source|softnice|synergy|hirekeyz|teksky|collabera|wipro)\b/i;
+
+      var allRecs = await col.find({
+        $or: [{ companyType: null }, { companyType: '' }, { companyType: { $exists: false } }]
+      }).project({ _id: 1, company: 1, description: 1 }).toArray();
+
+      var ops = [];
+      allRecs.forEach(function(j) {
+        var name = (j.company || '').toLowerCase();
+        var desc = (j.description || '').slice(0, 2000).toLowerCase();
+        var type = 'Enterprise'; // default
+
+        if (JOB_BOARDS.test(name)) type = 'Job Board';
+        else if (STAFFING.test(name)) type = 'Staffing/Recruiting';
+        else if (/\bmssp\b|\bmdr\b|managed\s*(?:security|detection|soc)|security\s*(?:operations\s*center|service\s*provider)/i.test(desc)) type = 'MSSP/MDR';
+        else if (/\bgovernment\b|\bfederal\b|\bdod\b|\bdefense\b|\bintelligence\s*community\b|\bclearance\b/i.test(desc)) type = 'Government';
+        else if (/\bconsulting\b|\badvisory\b|\bprofessional\s*services\b|\bsystem\s*integrator\b/i.test(desc)) type = 'IT Consulting';
+        else if (/\bstartup\b|\bseries\s*[a-d]\b|\bfounded\s*in\s*20[12]\d\b/i.test(desc)) type = 'Startup';
+
+        ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { companyType: type } } } });
+      });
+
+      if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
+
+      // Count breakdown
+      var counts = await col.aggregate([
+        { $group: { _id: '$companyType', count: { $sum: 1 } } },
+        { $sort: { count: -1 } }
+      ]).toArray();
+
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: allRecs.length, fixed: ops.length, breakdown: counts }) };
+    }
+
     // ACTION: fixCountries - comprehensive country detection and fix
     if (action === 'fixCountries') {
       var ccMap = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','AE':'United Arab Emirates','IL':'Israel','BR':'Brazil','MX':'Mexico','NZ':'New Zealand','ZA':'South Africa','ES':'Spain','IT':'Italy','PL':'Poland','EG':'Egypt','MY':'Malaysia','PH':'Philippines','TH':'Thailand','ID':'Indonesia','KR':'South Korea','TW':'Taiwan','HK':'Hong Kong','PK':'Pakistan','SA':'Saudi Arabia','QA':'Qatar','NG':'Nigeria','KE':'Kenya','PT':'Portugal','CZ':'Czech Republic','RO':'Romania','BE':'Belgium','AT':'Austria','TR':'Turkey','RU':'Russia','UA':'Ukraine','NO':'Norway','DK':'Denmark','FI':'Finland','HU':'Hungary','GR':'Greece','BH':'Bahrain','KW':'Kuwait','CL':'Chile','CO':'Colombia','AR':'Argentina','PE':'Peru','BD':'Bangladesh','MA':'Morocco','GH':'Ghana','LU':'Luxembourg','OM':'Oman'};
