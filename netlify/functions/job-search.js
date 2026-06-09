@@ -18,7 +18,11 @@ function unique(text, re) {
 }
 
 function extractExp(job) {
-  var d = job.job_description || '', parts = [], seen = {};
+  var d = (job.job_description || '')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(p|div|li|ul|ol|h[1-6])[^>]*>/gi, '\n')
+    .replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&#?\w+;/g, ' ').replace(/\s+/g, ' ');
+  var parts = [], seen = {};
   // P1: "X+ years of [adj] experience in/with..." #70: added work|practical|industry|related|combined|prior|recent
   var p1 = /(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]??\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*|work\s*|practical\s*|industry\s*|related\s*|combined\s*|cumulative\s*|prior\s*|recent\s*|minimum\s*)?(?:experience|expertise|background)\s*(?:in|with|as|focused\s*on|focusing\s*on|implementing|deploying|configuring|working\s*(?:in|with|as)|leading|managing|performing|supporting|conducting|across|within|using|on)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or|in|plus|specific))/gi;
   var m; while ((m = p1.exec(d)) !== null && parts.length < 5) {
@@ -94,6 +98,22 @@ function extractExp(job) {
       if (c8.length < 3) continue;
       var k8 = 'p8'+y8+c8.toLowerCase();
       if (!seen[k8]) { seen[k8] = true; parts.push(y8+'+ yr '+c8); }
+    }
+
+    // P9: "X+ years in [field]" without "experience" keyword (common in LinkedIn JDs)
+    // Requires bullet/newline/comma prefix to avoid false matches
+    var p9 = /(?:^|[\n\u2022\-\*;,])\s*(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:in|with)\s+([\w\s,\/&\-()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or|plus))/gim;
+    while ((m = p9.exec(d)) !== null && parts.length < 6) {
+      var y9 = parseInt(m[1]);
+      if (y9 < 1 || y9 > 30) continue;
+      var c9 = m[2].trim().slice(0, 40);
+      if (c9.length >= 38) c9 = c9.replace(/\s+\S{0,4}$/, '');
+      c9 = c9.replace(/\s*\(e\.g\.?.*$/, '').replace(/^\s*(?:a|an|the|as|s)\s+/i, '').replace(/\s+$/,'');
+      if (c9.length < 3) continue;
+      // Skip obviously non-experience contexts
+      if (/\b(?:the company|business|operation|prison|service|market)\b/i.test(c9)) continue;
+      var k9 = c9.substring(0,25).toLowerCase();
+      if (!seen[k9]) { seen[k9] = true; parts.push(y9+'+ yr '+c9); }
     }
   }
   if (parts.length === 0) {

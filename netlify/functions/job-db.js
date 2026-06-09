@@ -882,6 +882,37 @@ exports.handler = async (event) => {
           if (deduped.length < expParts.length) changes.experience = deduped.join(', ');
         }
 
+        // Re-extract experience from description if currently empty/Not specified
+        if ((!j.experience || j.experience === 'Not specified') && j.description) {
+          var desc = j.description.replace(/<br\s*\/?>/gi, '\n').replace(/<\/?(p|div|li|ul|ol|h[1-6])[^>]*>/gi, '\n').replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#?\w+;/g, ' ');
+          var expParts2 = [], seenExp = {};
+          // Pattern A: "X+ years of experience in [field]"
+          var pA = /(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:\w+\s*)?(?:experience|expertise|background)\s*(?:in|with|as|focused\s*on|implementing|deploying|working\s*(?:in|with)|supporting|managing|performing|using|on)?\s*([\w\s,\/&\-()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or))/gi;
+          var em; while ((em = pA.exec(desc)) !== null && expParts2.length < 4) {
+            var yr = parseInt(em[1]); if (yr < 1 || yr > 30) continue;
+            var ctx = em[2].trim().slice(0, 35).replace(/\s+\S{0,4}$/, '').replace(/^\s*(?:a|an|the)\s+/i, '');
+            if (ctx.length >= 3) { var k = ctx.substring(0,25).toLowerCase(); if (!seenExp[k]) { seenExp[k] = true; expParts2.push(yr+'+ yr '+ctx); } }
+          }
+          // Pattern B: "X-Y years [of experience]"
+          var pB = /(\d+)\s*[\-\u2013\u2014]+\s*(\d+)\s*(?:years?|yrs?)\s*(?:of\s*)?(?:[\w\s]*?)(?:experience|expertise)?/gi;
+          while ((em = pB.exec(desc)) !== null && expParts2.length < 4) {
+            var y1 = parseInt(em[1]), y2 = parseInt(em[2]);
+            if (y1 >= 1 && y1 <= 30 && y2 > y1 && y2 <= 30 && !(y1 === 1 && (y2 === 5 || y2 === 10))) {
+              var k2 = 'range'+y1+'-'+y2; if (!seenExp[k2]) { seenExp[k2] = true; expParts2.push(y1+'-'+y2+' years'); }
+            }
+          }
+          // Pattern C: "X+ years in [field]" (no experience keyword, common in LinkedIn)
+          var pC = /(?:^|[\n\u2022\-\*;,])\s*(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:in|with)\s+([\w\s,\/&\-]+?)(?:\.|;|\n|$|,)/gim;
+          while ((em = pC.exec(desc)) !== null && expParts2.length < 4) {
+            var yr3 = parseInt(em[1]); if (yr3 < 1 || yr3 > 30) continue;
+            var ctx3 = em[2].trim().slice(0, 35).replace(/\s+\S{0,4}$/, '').replace(/^\s*(?:a|an|the)\s+/i, '');
+            if (ctx3.length >= 3 && !/\b(?:the company|business|prison|service)\b/i.test(ctx3)) {
+              var k3 = ctx3.substring(0,25).toLowerCase(); if (!seenExp[k3]) { seenExp[k3] = true; expParts2.push(yr3+'+ yr '+ctx3); }
+            }
+          }
+          if (expParts2.length > 0) changes.experience = expParts2.join(', ');
+        }
+
         if (Object.keys(changes).length > 0) {
           changes.reExtractedAt = new Date();
           ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: changes } } });
