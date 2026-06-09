@@ -1,5 +1,5 @@
 const CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GSEC|GREM|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|CompTIA\s*Server\+|CompTIA\s*A\+|CompTIA\s*Linux\+|CompTIA\s*Cloud\+|CompTIA\s*PenTest\+|CompTIA\s*SecurityX|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|MB-\d{3}|MD-\d{3}|AWS\s*Certified\s*[\w\s-]+|AWS\s*(?:Solutions?\s*Architect|Security\s*Specialty|Cloud\s*Practitioner|SysOps)|Google\s*Cloud\s*(?:Professional|Associate)\s*[\w\s-]+|CCSP|CCNA|CCNP|CCIE|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF|SABSA|CISSP-ISSAP|CISSP-ISSEP|CISSP-ISSMP|Zero\s*Trust|PCNSE|NSE\s*[4-8]|Fortinet\s*NSE|Azure\s*Security\s*Engineer(?:\s*Associate)?|Azure\s*(?:Network|Solutions?\s*Architect|Administrator|DevOps)\s*(?:Engineer\s*)?(?:Associate|Expert)?|Microsoft\s*Certified\s*:?\s*[\w\s-]{5,40}(?:Associate|Expert)|DoD\s*8570|DoD\s*8140|IAT\s*Level\s*(?:I{1,3}|[1-3])|IAM\s*Level\s*(?:I{1,3}|[1-3])/gi;
-const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII|\bNIST\b/gi;
+const COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|ISO\s*27017|ISO\s*27018|ISO[\s\/]*IEC\s*\d{4,5}|NIST\s*(?:SP[\s-]*)?800[\s-]*53|NIST\s*(?:SP[\s-]*)?800[\s-]*61|NIST\s*(?:SP[\s-]*)?800[\s-]*171|NIST\s*(?:SP[\s-]*)?800[\s-]*37|NIST\s*(?:SP[\s-]*)?800[\s-]*\d{2,3}|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|TIC\s*3\.0|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|DISA\s*STIGs?|STIGs?|SCAP|cyber\s*kill\s*chain|kill\s*chain\s*framework|Lockheed\s*Martin\s*kill\s*chain|Diamond\s*Model|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s/]*TAXII|\bNIST\b/gi;
 const TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365|Cloud\s*Apps))?|Microsoft\s*Sentinel|Microsoft\s*Entra(?:\s*ID)?|Microsoft\s*(?:Information\s*Protection|Purview|Intune)|Entra\s*ID|EntraID|(?<!\w)Sentinel(?!\s*(?:One|1))|Defender\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365)|M365(?:\s*Security)?|Azure\s*(?:Sentinel|AD|Active\s*Directory|Security\s*Center|Information\s*Protection)|Conditional\s*Access|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|VMware\s*Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|Demisto|KQL|SPL|YARA|Sigma|ServiceNow\s*(?:SecOps|ITSM)?|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|SIEM|SOAR|EDR|XDR|NDR|IDS[\s/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|Prisma\s*Cloud|Prisma\s*Access|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|Aqua|Twistlock|Trivy|Falco|Sysdig|Anchore|Checkov|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|GitHub\s*Actions|Federated\s*Identity|threat\s*intelligence\s*platform|cloud\s*security\s*(?:tools|platforms)|SD[\s-]*WAN|SCADA|OT\s*(?:network|security)|ICS[\s\/]+(?:SCADA|security|systems?|networks?|environments?)|Modbus|DNP3|OPC[\s-]*UA?|BACnet|Profinet|IEC\s*61850|McAfee(?:\s*(?:SIEM|ESM|ePO|ENS))?|Trellix|FireEye(?:\s*(?:NX|EX|HX|CM))?|AWS\s*(?:VPC\s*Flow\s*Logs|CloudWatch|CloudTrail)|Azure\s*(?:Monitor|Log\s*Analytics|Arc)|Fortinet\s*NSE|FortiAnalyzer|FortiManager|SAML|OAuth(?:\s*2\.?0?)?|TLS[\s\/]*SSL|LDAP|RADIUS|Kerberos|OIDC|Node\.?js|Python|Bash|PowerShell|Golang|Go\s*Lang|Ruby|Perl/gi;
 const SKILL_RE = /incident\s*response|threat\s*(?:hunting|analysis|detection|modeling|reporting|intelligence)|forensic\s*(?:analysis|investigation)|digital\s*forensics|malware\s*(?:analysis|reverse\s*engineering)|reverse\s*engineering|vulnerability\s*(?:management|assessment|scanning)|penetration\s*testing|pen\s*testing|red\s*team(?:ing)?|blue\s*team(?:ing)?|purple\s*team(?:ing)?|security\s*(?:monitoring|operations|engineering|architecture|assessment|automation|orchestration)|SOC\s*(?:operations|monitoring|analysis)|log\s*(?:analysis|management|correlation)|network\s*(?:security|forensics|analysis|monitoring)|cloud\s*security|endpoint\s*(?:security|protection)|identity\s*(?:management|governance)|access\s*(?:management|control)|data\s*(?:loss\s*prevention|protection|classification)|risk\s*(?:assessment|management|analysis)|compliance\s*(?:monitoring|management|auditing)|alert\s*triage|detection\s*engineering|rule\s*(?:writing|development|tuning)|playbook\s*(?:development|automation)|KQL|scripting|Python|PowerShell|Bash|JavaScript|SQL|RegEx|API\s*(?:security|integration)|SDLC|DevSecOps|CI[\s/]*CD|container\s*security|Kubernetes\s*security|RBAC|PKI|encryption|cryptography|PCAP\s*analysis|packet\s*analysis|memory\s*forensics|disk\s*forensics|evidence\s*(?:collection|preservation)|tabletop\s*exercises|disaster\s*recovery|business\s*continuity|patch\s*management|asset\s*management|phishing\s*(?:analysis|simulation)|email\s*security|DNS\s*security|web\s*application\s*security|mobile\s*security|IoT\s*security|OT\s*security|ICS\s*security|SCADA\s*security/gi;
 
@@ -81,6 +81,19 @@ function extractExp(job) {
       if (c7.length < 3) continue;
       var k7 = 'p7'+numVal+c7.toLowerCase();
       if (!seen[k7]) { seen[k7] = true; parts.push(numVal+'+ yr '+c7); }
+    }
+
+    // P8: "including [at least] X years in [field]" or "with X+ years in [role]"
+    var p8 = /(?:including\s*(?:at\s*least\s*)?|plus\s*(?:at\s*least\s*)?|with\s*(?:at\s*least\s*)?)(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)'?\s*(?:of\s*)?(?:[\w\s]*?)\s*(?:in|with|as)\s+([\w\s,\/&\-()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or))/gi;
+    while ((m = p8.exec(d)) !== null && parts.length < 5) {
+      var y8 = parseInt(m[1]);
+      if (y8 < 1 || y8 > 30) continue;
+      var c8 = m[2].trim().slice(0, 40);
+      if (c8.length >= 38) c8 = c8.replace(/\s+\S{0,4}$/, '');
+      c8 = c8.replace(/\s*\(e\.g\.?.*$/, '').replace(/^\s*(?:a|an|the|as|s)\s+/i, '').replace(/\s+$/,'');
+      if (c8.length < 3) continue;
+      var k8 = 'p8'+y8+c8.toLowerCase();
+      if (!seen[k8]) { seen[k8] = true; parts.push(y8+'+ yr '+c8); }
     }
   }
   if (parts.length === 0) {
@@ -431,65 +444,21 @@ var US_STATES = /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connec
 var US_STATE_CODES = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
 
 function detectCountry(job, searchCountry) {
-  // Priority 1: API structured country field
-  var apiCountry = (job.job_country || '').trim();
-  if (apiCountry) {
-    var c = apiCountry.toUpperCase();
-    if (c === 'US' || c === 'USA' || c === 'UNITED STATES') return 'United States';
-    if (c === 'CA' || c === 'CANADA') return 'Canada';
-    if (c === 'GB' || c === 'UK' || c === 'UNITED KINGDOM') return 'United Kingdom';
-    if (c === 'IN' || c === 'INDIA') return 'India';
-    if (c === 'AU' || c === 'AUSTRALIA') return 'Australia';
-    if (c === 'DE' || c === 'GERMANY') return 'Germany';
-    if (c === 'FR' || c === 'FRANCE') return 'France';
-    if (c === 'JP' || c === 'JAPAN') return 'Japan';
-    if (c === 'SG' || c === 'SINGAPORE') return 'Singapore';
-    if (c === 'NL' || c === 'NETHERLANDS') return 'Netherlands';
-    if (c === 'IE' || c === 'IRELAND') return 'Ireland';
-    if (c === 'CH' || c === 'SWITZERLAND') return 'Switzerland';
-    if (c === 'SE' || c === 'SWEDEN') return 'Sweden';
-    if (c === 'AE' || c === 'UAE') return 'United Arab Emirates';
-    if (c === 'IL' || c === 'ISRAEL') return 'Israel';
-    if (c === 'BR' || c === 'BRAZIL') return 'Brazil';
-    if (c === 'MX' || c === 'MEXICO') return 'Mexico';
-    if (c === 'NZ' || c === 'NEW ZEALAND') return 'New Zealand';
-    if (c === 'ZA' || c === 'SOUTH AFRICA') return 'South Africa';
-    if (c === 'ES' || c === 'SPAIN') return 'Spain';
-    if (c === 'IT' || c === 'ITALY') return 'Italy';
-    if (c === 'PL' || c === 'POLAND') return 'Poland';
-    if (c === 'BE' || c === 'BELGIUM') return 'Belgium';
-    if (c === 'AT' || c === 'AUSTRIA') return 'Austria';
-    if (c === 'NO' || c === 'NORWAY') return 'Norway';
-    if (c === 'DK' || c === 'DENMARK') return 'Denmark';
-    if (c === 'FI' || c === 'FINLAND') return 'Finland';
-    if (c === 'SA' || c === 'SAUDI ARABIA') return 'Saudi Arabia';
-    if (c === 'QA' || c === 'QATAR') return 'Qatar';
-  }
-
-  // Priority 2: Check location/state fields for US state codes
+  // Priority 1: Check location fields for known cities/states FIRST (more accurate than API country)
   var state = (job.job_state || '').trim().toUpperCase();
   var usStates = ['AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC'];
   if (state && usStates.indexOf(state) !== -1) return 'United States';
 
-  // Priority 3: Check full location string
   var loc = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
-  // US state names in location
+  // Check location string for specific country indicators
   if (/\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b/i.test(loc)) return 'United States';
-  // US state codes in location (2-letter after comma)
   if (/,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/.test(loc)) return 'United States';
-  // Major US cities
   if (/\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|San Antonio|San Diego|Dallas|San Jose|Austin|Jacksonville|Fort Worth|Columbus|Charlotte|Indianapolis|San Francisco|Seattle|Denver|Nashville|Washington|Boston|Memphis|Portland|Oklahoma City|Las Vegas|Louisville|Baltimore|Milwaukee|Albuquerque|Tucson|Fresno|Sacramento|Mesa|Kansas City|Atlanta|Omaha|Colorado Springs|Raleigh|Long Beach|Virginia Beach|Miami|Tampa|Orlando|Minneapolis|Cleveland|St\.? Louis|Pittsburgh|Cincinnati|Irvine|Arlington|Plano|Durham|Richmond|Huntsville|McLean|Tysons|Bethesda|Herndon|Reston|Chantilly|Springfield|Columbia|Annapolis|Fort Meade|Fort Belvoir|Quantico|San Bernardino|Scottsdale|Chandler|Gilbert|Boise|Salt Lake City)\b/i.test(loc)) return 'United States';
-  // UK cities
   if (/\b(?:London|Manchester|Birmingham|Leeds|Glasgow|Edinburgh|Bristol|Liverpool|Sheffield|Newcastle|Nottingham|Cardiff|Belfast|Cambridge|Oxford|Reading|Southampton|Brighton)\b/i.test(loc)) return 'United Kingdom';
-  // Canadian cities
   if (/\b(?:Toronto|Vancouver|Montreal|Ottawa|Calgary|Edmonton|Winnipeg|Quebec|Hamilton|Mississauga)\b/i.test(loc)) return 'Canada';
-  // Indian cities
   if (/\b(?:Bangalore|Bengaluru|Mumbai|Hyderabad|Pune|Delhi|New Delhi|Chennai|Kolkata|Noida|Gurgaon|Gurugram|Ahmedabad|Jaipur|Lucknow|Kochi|Chandigarh|Indore|Thiruvananthapuram)\b/i.test(loc)) return 'India';
-  // Australian cities
   if (/\b(?:Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra|Hobart|Darwin|Gold Coast)\b/i.test(loc)) return 'Australia';
-  // German cities
   if (/\b(?:Berlin|Munich|Frankfurt|Hamburg|Stuttgart|Dusseldorf|Cologne|Bonn)\b/i.test(loc)) return 'Germany';
-  // Other countries by city
   if (/\b(?:Paris|Lyon|Marseille)\b/i.test(loc)) return 'France';
   if (/\b(?:Tokyo|Osaka|Yokohama)\b/i.test(loc)) return 'Japan';
   if (/\b(?:Dublin|Cork|Galway)\b/i.test(loc)) return 'Ireland';
@@ -500,9 +469,22 @@ function detectCountry(job, searchCountry) {
   if (/\b(?:Tel Aviv|Jerusalem|Haifa)\b/i.test(loc)) return 'Israel';
   if (/\b(?:Sao Paulo|Rio de Janeiro)\b/i.test(loc)) return 'Brazil';
   if (/\b(?:Mexico City|Guadalajara|Monterrey)\b/i.test(loc)) return 'Mexico';
+  if (/\b(?:Kuala Lumpur|Penang|Johor)\b/i.test(loc)) return 'Malaysia';
+  if (/\b(?:Hong Kong)\b/i.test(loc)) return 'Hong Kong';
+  if (/\b(?:Seoul|Busan)\b/i.test(loc)) return 'South Korea';
+  if (/\b(?:Riyadh|Jeddah|Dammam)\b/i.test(loc)) return 'Saudi Arabia';
+  if (/\b(?:Doha)\b/i.test(loc)) return 'Qatar';
   if (/\bSingapore\b/i.test(loc)) return 'Singapore';
 
-  // Priority 4: Check title + description (first 1500 chars)
+  // Priority 2: API structured country field
+  var apiCountry = (job.job_country || '').trim();
+  if (apiCountry) {
+    var c = apiCountry.toUpperCase();
+    var apiMap = {'US':'United States','USA':'United States','UNITED STATES':'United States','CA':'Canada','CANADA':'Canada','GB':'United Kingdom','UK':'United Kingdom','UNITED KINGDOM':'United Kingdom','IN':'India','INDIA':'India','AU':'Australia','AUSTRALIA':'Australia','DE':'Germany','GERMANY':'Germany','FR':'France','FRANCE':'France','JP':'Japan','JAPAN':'Japan','SG':'Singapore','SINGAPORE':'Singapore','NL':'Netherlands','NETHERLANDS':'Netherlands','IE':'Ireland','IRELAND':'Ireland','CH':'Switzerland','SWITZERLAND':'Switzerland','SE':'Sweden','SWEDEN':'Sweden','AE':'United Arab Emirates','UAE':'United Arab Emirates','IL':'Israel','ISRAEL':'Israel','BR':'Brazil','BRAZIL':'Brazil','MX':'Mexico','MEXICO':'Mexico','NZ':'New Zealand','NEW ZEALAND':'New Zealand','ZA':'South Africa','SOUTH AFRICA':'South Africa','ES':'Spain','SPAIN':'Spain','IT':'Italy','ITALY':'Italy','PL':'Poland','POLAND':'Poland','BE':'Belgium','AT':'Austria','NO':'Norway','DK':'Denmark','FI':'Finland','SA':'Saudi Arabia','QA':'Qatar','MY':'Malaysia','MALAYSIA':'Malaysia','HK':'Hong Kong','KR':'South Korea'};
+    if (apiMap[c]) return apiMap[c];
+  }
+
+  // Priority 3: Check title + description for country names
   var text = (job.job_title || '') + ' ' + (job.job_description || '').slice(0, 1500);
   if (/\b(?:USA|United\s*States|U\.S\.)\b/i.test(text)) return 'United States';
   if (/\bRemote\s*[-,]?\s*US\b/i.test(text)) return 'United States';

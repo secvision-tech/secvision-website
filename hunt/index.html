@@ -501,6 +501,7 @@ function applyFilters(){
 }
 
 var searchMode='dash';
+var dashLoaded=false,contractLoaded=false;
 var webResults={jobs:[],filtered:[],page:1,info:'',shown:false};
 var dbResults={jobs:[],filtered:[],page:1,info:'',shown:false};
 var dashCharts={};
@@ -521,10 +522,10 @@ function setMode(mode){
   // Show/hide results panel for search modes vs dashboard
   document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract')?'none':'flex';
   if(mode==='dash'){
-    loadDashboard();return;
+    if(!dashLoaded){loadDashboard();dashLoaded=true}return;
   }
   if(mode==='contract'){
-    loadContractPipeline();return;
+    if(!contractLoaded){loadContractPipeline();contractLoaded=true}return;
   }
   // Restore previous results for the target mode
   var restore=mode==='web'?webResults:dbResults;
@@ -718,6 +719,7 @@ async function searchJobs(){
       allJobs.forEach(function(j,i){j.idx=i+1});
     }
     var savedMsg=data.savedToDb?' | '+data.savedToDb+' saved to database':'';
+    dashLoaded=false;contractLoaded=false; // Reset dashboard cache for fresh data
     document.getElementById('apiText').textContent='Found '+data.totalResults+' jobs ('+data.apiCalls+' API calls, '+data.rolesSearched.length+' roles). '+allJobs.length+' after filters.'+savedMsg;
     colFilters={};sortCol='';sortDir=1;
     document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
@@ -1221,7 +1223,7 @@ async function viewDet(i){
   var companySizeHtml='N/A';
   if(companySizeVal){
     var sizeNum=typeof companySizeVal==='number'?companySizeVal:parseInt(String(companySizeVal).replace(/[^0-9]/g,''));
-    companySizeHtml=sizeNum&&!isNaN(sizeNum)?sizeNum.toLocaleString()+' employees':String(companySizeVal).replace(/\s*employees\s*/gi,'').trim()+' employees';
+    companySizeHtml=sizeNum&&!isNaN(sizeNum)?sizeNum.toLocaleString()+(sizeNum===1?' employee':' employees'):String(companySizeVal).replace(/\s*employees\s*/gi,'').trim()+' employees';
   }
   companySizeHtml+=' <span onclick="editCompanySize('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company size">✎</span>';
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
