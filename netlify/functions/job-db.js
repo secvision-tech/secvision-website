@@ -918,7 +918,48 @@ exports.handler = async (event) => {
       ];
       var US_STATE_NAMES = /\b(?:Alabama|Alaska|Arizona|Arkansas|California|Colorado|Connecticut|Delaware|Florida|Georgia|Hawaii|Idaho|Illinois|Indiana|Iowa|Kansas|Kentucky|Louisiana|Maine|Maryland|Massachusetts|Michigan|Minnesota|Mississippi|Missouri|Montana|Nebraska|Nevada|New Hampshire|New Jersey|New Mexico|New York|North Carolina|North Dakota|Ohio|Oklahoma|Oregon|Pennsylvania|Rhode Island|South Carolina|South Dakota|Tennessee|Texas|Utah|Vermont|Virginia|Washington|West Virginia|Wisconsin|Wyoming|District of Columbia)\b/i;
       var US_STATE_CD = /,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
-      var US_CITIES = /\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|Dallas|San Jose|Austin|San Francisco|Seattle|Denver|Nashville|Washington|Boston|Portland|Las Vegas|Baltimore|Atlanta|Raleigh|Miami|Tampa|Orlando|Minneapolis|Cleveland|Pittsburgh|Cincinnati|Irvine|Arlington|Plano|Durham|Richmond|Huntsville|McLean|Tysons|Bethesda|Herndon|Reston|Chantilly|Springfield|Columbia|Annapolis|Fort Meade|Salt Lake City|Charlotte|San Diego|Sacramento|Philadelphia|Detroit|Memphis|Louisville|Milwaukee)\b/i;
+      var US_CITIES = /\b(?:New York|Los Angeles|Chicago|Houston|Phoenix|Dallas|San Jose|Austin|San Francisco|Seattle|Denver|Nashville|Washington|Boston|Portland|Las Vegas|Baltimore|Atlanta|Raleigh|Miami|Tampa|Orlando|Minneapolis|Cleveland|Pittsburgh|Cincinnati|Irvine|Arlington|Plano|Durham|Richmond|Huntsville|McLean|Tysons|Bethesda|Herndon|Reston|Chantilly|Springfield|Columbia|Annapolis|Fort Meade|Salt Lake City|Charlotte|San Diego|Sacramento|Philadelphia|Detroit|Memphis|Louisville|Milwaukee|San Antonio|Jacksonville|Fort Worth|Columbus|Indianapolis|Virginia Beach|Oklahoma City|Albuquerque|Tucson|Fresno|Mesa|Kansas City|Omaha|Colorado Springs|Long Beach|Scottsdale|Chandler|Gilbert|Boise|Quantico|Fort Belvoir|Lake Mary|Sterling|Manassas|Ewing)\b/i;
+      var UK_CITIES = /\b(?:London|Manchester|Birmingham|Leeds|Glasgow|Edinburgh|Bristol|Liverpool|Sheffield|Newcastle|Nottingham|Cardiff|Belfast|Cambridge|Oxford|Reading|Southampton|Brighton|Cheltenham|Canary Wharf|Milton Keynes)\b/i;
+      var CA_CITIES = /\b(?:Toronto|Vancouver|Montreal|Ottawa|Calgary|Edmonton|Winnipeg|Quebec|Hamilton|Mississauga|Kitchener|Halifax|Victoria)\b/i;
+      var IN_CITIES = /\b(?:Bangalore|Bengaluru|Mumbai|Hyderabad|Pune|Delhi|New Delhi|Chennai|Kolkata|Noida|Gurgaon|Gurugram|Ahmedabad|Jaipur|Lucknow|Kochi|Chandigarh|Indore|Thiruvananthapuram)\b/i;
+      var AU_CITIES = /\b(?:Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra|Hobart|Darwin|Gold Coast)\b/i;
+      var DE_CITIES = /\b(?:Berlin|Munich|Frankfurt|Hamburg|Stuttgart|Dusseldorf|Cologne|Bonn|Leipzig|Dresden)\b/i;
+      var CITY_COUNTRY_MAP = [
+        [/\b(?:Paris|Lyon|Marseille|Toulouse|Nice|Nantes|Strasbourg|Lille)\b/i, 'France'],
+        [/\b(?:Tokyo|Osaka|Yokohama|Nagoya|Kyoto)\b/i, 'Japan'],
+        [/\b(?:Dublin|Cork|Galway|Limerick)\b/i, 'Ireland'],
+        [/\b(?:Amsterdam|Rotterdam|The Hague|Utrecht|Eindhoven)\b/i, 'Netherlands'],
+        [/\b(?:Zurich|Geneva|Basel|Bern|Lausanne)\b/i, 'Switzerland'],
+        [/\b(?:Stockholm|Gothenburg|Malmo)\b/i, 'Sweden'],
+        [/\b(?:Dubai|Abu Dhabi|Sharjah)\b/i, 'United Arab Emirates'],
+        [/\b(?:Tel Aviv|Jerusalem|Haifa)\b/i, 'Israel'],
+        [/\b(?:Sao Paulo|Rio de Janeiro|Brasilia)\b/i, 'Brazil'],
+        [/\b(?:Mexico City|Guadalajara|Monterrey)\b/i, 'Mexico'],
+        [/\b(?:Kuala Lumpur|Penang|Johor|Cyberjaya)\b/i, 'Malaysia'],
+        [/\b(?:Hong Kong)\b/i, 'Hong Kong'],
+        [/\b(?:Seoul|Busan|Incheon)\b/i, 'South Korea'],
+        [/\b(?:Riyadh|Jeddah|Dammam)\b/i, 'Saudi Arabia'],
+        [/\b(?:Doha)\b/i, 'Qatar'],
+        [/\b(?:Manama)\b/i, 'Bahrain'],
+        [/\b(?:Madrid|Barcelona|Valencia|Seville)\b/i, 'Spain'],
+        [/\b(?:Rome|Milan|Turin|Naples)\b/i, 'Italy'],
+        [/\b(?:Warsaw|Krakow|Wroclaw|Gdansk)\b/i, 'Poland'],
+        [/\b(?:Brussels|Antwerp|Ghent)\b/i, 'Belgium'],
+        [/\b(?:Vienna|Graz|Linz)\b/i, 'Austria'],
+        [/\b(?:Oslo|Bergen|Trondheim)\b/i, 'Norway'],
+        [/\b(?:Copenhagen|Aarhus)\b/i, 'Denmark'],
+        [/\b(?:Helsinki|Espoo|Tampere)\b/i, 'Finland'],
+        [/\b(?:Prague|Brno)\b/i, 'Czech Republic'],
+        [/\b(?:Bucharest|Cluj)\b/i, 'Romania'],
+        [/\b(?:Budapest|Debrecen)\b/i, 'Hungary'],
+        [/\b(?:Lisbon|Porto)\b/i, 'Portugal'],
+        [/\b(?:Auckland|Wellington|Christchurch)\b/i, 'New Zealand'],
+        [/\b(?:Cape Town|Johannesburg|Durban|Pretoria)\b/i, 'South Africa'],
+        [/\b(?:Lagos|Abuja)\b/i, 'Nigeria'],
+        [/\b(?:Nairobi|Mombasa)\b/i, 'Kenya'],
+        [/\b(?:Cairo|Alexandria)\b/i, 'Egypt'],
+        [/\bSingapore\b/i, 'Singapore'],
+      ];
 
       function detectFromAll(j) {
         var loc = j.location || '';
@@ -948,12 +989,29 @@ exports.handler = async (event) => {
           if (textCountryPatterns[tp][0].test(comp)) return textCountryPatterns[tp][1];
         }
 
-        // Check 5: Location has country/state names
+        // Check 5: Location has country/state names or known cities
         if (US_STATE_NAMES.test(loc) || US_STATE_CD.test(loc) || US_CITIES.test(loc)) return 'United States';
+        if (UK_CITIES.test(loc)) return 'United Kingdom';
+        if (CA_CITIES.test(loc)) return 'Canada';
+        if (IN_CITIES.test(loc)) return 'India';
+        if (AU_CITIES.test(loc)) return 'Australia';
+        if (DE_CITIES.test(loc)) return 'Germany';
+        for (var cm = 0; cm < CITY_COUNTRY_MAP.length; cm++) {
+          if (CITY_COUNTRY_MAP[cm][0].test(loc)) return CITY_COUNTRY_MAP[cm][1];
+        }
 
-        // Check 6: Description/title has country names
+        // Check 6: Description/title has country names or known cities
         for (var tp2 = 0; tp2 < textCountryPatterns.length; tp2++) {
           if (textCountryPatterns[tp2][0].test(text)) return textCountryPatterns[tp2][1];
+        }
+        if (US_STATE_NAMES.test(text) || US_CITIES.test(text)) return 'United States';
+        if (UK_CITIES.test(text)) return 'United Kingdom';
+        if (CA_CITIES.test(text)) return 'Canada';
+        if (IN_CITIES.test(text)) return 'India';
+        if (AU_CITIES.test(text)) return 'Australia';
+        if (DE_CITIES.test(text)) return 'Germany';
+        for (var cm2 = 0; cm2 < CITY_COUNTRY_MAP.length; cm2++) {
+          if (CITY_COUNTRY_MAP[cm2][0].test(text)) return CITY_COUNTRY_MAP[cm2][1];
         }
 
         // Check 7: Detect non-English text by script (don't default to US/UK)
