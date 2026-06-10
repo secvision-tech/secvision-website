@@ -865,7 +865,7 @@ exports.handler = async (event) => {
         }
 
         // Cleanup certifications: remove non-cybersecurity certs (CKA, CKAD, CKS)
-        var CERT_REMOVE = /^(?:cka|ckad|cks)$/i;
+        var CERT_REMOVE = /^(?:cka|ckad|cks|zero\s*trust)$/i;
         if (j.certifications && j.certifications !== 'See details') {
           var certParts = j.certifications.split(/[,\n]+/).map(function(c){return c.trim()}).filter(Boolean);
           var cleanedCerts = certParts.filter(function(c) { return !CERT_REMOVE.test(c); });
