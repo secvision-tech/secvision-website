@@ -24,7 +24,7 @@ function extractExp(job) {
     .replace(/&#?\w+;/g, ' ').replace(/\s+/g, ' ');
   var parts = [], seen = {};
   // P1: "X+ years of [adj] experience in/with..." #70: added work|practical|industry|related|combined|prior|recent
-  var p1 = /(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]??\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*|work\s*|practical\s*|industry\s*|related\s*|combined\s*|cumulative\s*|prior\s*|recent\s*|minimum\s*)?(?:experience|expertise|background)\s*(?:in|with|as|focused\s*on|focusing\s*on|implementing|deploying|configuring|working\s*(?:in|with|as)|leading|managing|performing|supporting|conducting|across|within|using|on)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or|in|plus|specific))/gi;
+  var p1 = /(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*|work\s*|practical\s*|industry\s*|related\s*|combined\s*|cumulative\s*|prior\s*|recent\s*|minimum\s*)?(?:experience|expertise|background)\s*(?:in|with|as|focused\s*on|focusing\s*on|implementing|deploying|configuring|working\s*(?:in|with|as)|leading|managing|performing|supporting|conducting|across|within|using|on)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or|in|plus|specific))/gi;
   var m; while ((m = p1.exec(d)) !== null && parts.length < 5) {
     var c = m[2].trim().slice(0, 40);
     // Remove trailing partial word (cut at last space if truncated)
@@ -50,7 +50,7 @@ function extractExp(job) {
     var k2 = m[1]+'-'+m[2]; if (!seen[k2]) { seen[k2] = true; parts.unshift(m[1]+'-'+m[2]+' years'); }
   }
   // P3: "minimum/at least/requires X years"
-  var p3 = /(?:minimum|at\s*least|requires?)\s*(?:of\s*)?(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]??\s*(?:of\s*)?(?:[\w\-\u2010\u2011\s]*)?(?:experience|expertise)\s*(?:in|with|as|using)?\s*([\w\s,\/&\-()]+?)(?:\.|;|,|\n|$)/gi;
+  var p3 = /(?:minimum|at\s*least|requires?)\s*(?:of\s*)?(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:[\w\-\u2010\u2011\s]*)?(?:experience|expertise)\s*(?:in|with|as|using)?\s*([\w\s,\/&\-()]+?)(?:\.|;|,|\n|$)/gi;
   while ((m = p3.exec(d)) !== null && parts.length < 5) {
     var c3 = m[2].trim().slice(0, 40);
     if (c3.length >= 38) c3 = c3.replace(/\s+\S{0,4}$/, '');
@@ -65,7 +65,7 @@ function extractExp(job) {
     var k5 = 'p5'+m[1]+(m[2]||''); if (!seen[k5]) { seen[k5] = true; parts.push(val); }
   }
   // P6: Bullet point "* X+ years of work experience with..."
-  var p6 = /[\u2022\-\*]\s*(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]??\s*(?:of\s*)?(?:[\w\s]*?)(?:experience|expertise|background)\s*(?:in|with|as|on|across)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$)/gi;
+  var p6 = /[\u2022\-\*]\s*(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:[\w\s]*?)(?:experience|expertise|background)\s*(?:in|with|as|on|across)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$)/gi;
   while ((m = p6.exec(d)) !== null && parts.length < 5) {
     var c6 = m[2].trim().slice(0, 40);
     if (c6.length >= 38) c6 = c6.replace(/\s+\S{0,4}$/, '');
