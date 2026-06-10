@@ -24,7 +24,7 @@ function extractExp(job) {
     .replace(/&#?\w+;/g, ' ').replace(/\s+/g, ' ');
   var parts = [], seen = {};
   // P1: "X+ years of [adj] experience in/with..." #70: added work|practical|industry|related|combined|prior|recent
-  var p1 = /(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*|work\s*|practical\s*|industry\s*|related\s*|combined\s*|cumulative\s*|prior\s*|recent\s*|minimum\s*)?(?:experience|expertise|background)\s*(?:in|with|as|focused\s*on|focusing\s*on|implementing|deploying|configuring|working\s*(?:in|with|as)|leading|managing|performing|supporting|conducting|across|within|using|on)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or|in|plus|specific))/gi;
+  var p1 = /(\d+)(?:\+|\s*plus)?\s*(?:years?|yrs?)['\u2019]?\s*(?:of\s*)?(?:demonstrated\s*|proven\s*|hands[\s\-\u2010\u2011\u2013\u2014]*on\s*|relevant\s*|professional\s*|progressive\s*|direct\s*|solid\s*|extensive\s*|total\s*|work\s*|practical\s*|industry\s*|related\s*|combined\s*|cumulative\s*|prior\s*|recent\s*|minimum\s*)?(?:experience|expertise|background)\s*(?:in|with|as|focused\s*on|focusing\s*on|implementing|deploying|configuring|working\s*(?:in|with|as)|leading|managing|performing|supporting|conducting|across|within|using|on)?\s*([\w\s,\/&\-\u2010\u2013()]+?)(?:\.|;|\n|$|,\s*(?:with|including|and|or|in|plus|specific))/gi;
   var m; while ((m = p1.exec(d)) !== null && parts.length < 5) {
     var c = m[2].trim().slice(0, 40);
     // Remove trailing partial word (cut at last space if truncated)

@@ -923,6 +923,29 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: allJobs.length, updated: updated }) };
     }
 
+    // ACTION: fixCompanyUrls - move LinkedIn URLs from companyUrl to companyLinkedin
+    if (action === 'fixCompanyUrls') {
+      // Find records where companyUrl contains linkedin.com
+      var linkedinInUrl = await col.find({
+        companyUrl: { $regex: /linkedin\.com\/company/i }
+      }).project({ _id: 1, company: 1, companyUrl: 1, companyLinkedin: 1 }).toArray();
+
+      var ops = [];
+      linkedinInUrl.forEach(function(j) {
+        var update = {};
+        // Move LinkedIn URL to companyLinkedin if empty
+        if (!j.companyLinkedin || j.companyLinkedin === '') {
+          update.companyLinkedin = j.companyUrl;
+        }
+        // Clear companyUrl (it's a LinkedIn URL, not a website)
+        update.companyUrl = '';
+        ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: update } } });
+      });
+
+      if (ops.length > 0) await col.bulkWrite(ops, { ordered: false });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ total: linkedinInUrl.length, fixed: ops.length }) };
+    }
+
     // ACTION: fixCompanyTypes - set empty companyType to Enterprise (default)
     if (action === 'fixCompanyTypes') {
       // Known classification lists
