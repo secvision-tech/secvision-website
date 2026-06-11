@@ -6,6 +6,7 @@
 <title>SecVision Business Hunt | SOC & Security Demand Intelligence</title>
 <meta name="robots" content="noindex, nofollow">
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
 <script src="https://alcdn.msauth.net/browser/2.38.0/js/msal-browser.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
@@ -228,6 +229,11 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
         <button class="mode-btn" id="modeSettings" onclick="setMode('settings')" style="margin-left:auto">⚙️ Settings</button>
+        <div id="userInfo" style="display:flex;align-items:center;gap:.3rem;margin-left:.3rem;padding-left:.5rem;border-left:1px solid var(--g2)">
+          <span id="userAvatar" style="width:24px;height:24px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:700"></span>
+          <span id="userName" style="font-size:.6rem;color:var(--g4);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          <button onclick="logout()" style="background:none;border:none;color:var(--g3);cursor:pointer;font-size:.6rem;padding:.1rem .3rem" title="Sign out">↪</button>
+        </div>
       </div>
       <div id="webSearchPanel" style="display:none">
       <div class="sf">
@@ -411,6 +417,31 @@ msal_.initialize().then(function(){
 });
 function login(){document.getElementById('loginBtn').textContent='Signing in...';msal_.loginRedirect({scopes:['openid','profile','email','User.Read'],prompt:'select_account'})}
 function logout(){sessionStorage.clear();msal_.logoutRedirect({account:curUser})}
+
+// Get ID token for API calls
+async function getAuthToken(){
+  if(!curUser)return'';
+  try{
+    var resp=await msal_.acquireTokenSilent({scopes:['openid','profile','email'],account:curUser});
+    return resp.idToken||'';
+  }catch(e){
+    // Token expired — try interactive
+    try{var resp2=await msal_.acquireTokenPopup({scopes:['openid','profile','email']});curUser=resp2.account;return resp2.idToken||''}
+    catch(e2){console.error('Token error:',e2);return''}
+  }
+}
+
+// Authenticated fetch wrapper — adds Authorization header to all API calls
+async function authFetch(url,opts){
+  opts=opts||{};
+  opts.headers=opts.headers||{};
+  var token=await getAuthToken();
+  if(token)opts.headers['Authorization']='Bearer '+token;
+  if(!opts.headers['Content-Type'])opts.headers['Content-Type']='application/json';
+  var r=await fetch(url,opts);
+  if(r.status===401){login();throw new Error('Session expired')}
+  return r;
+}
 function handleAnyToggle(sel){
   var opts=Array.from(sel.options),any=opts.find(function(o){return o.value==='Any'}),selected=Array.from(sel.selectedOptions).map(function(o){return o.value});
   if(selected.includes('Any')&&selected.length>1){var nonAny=selected.filter(function(v){return v!=='Any'});if(nonAny.length>0&&any)any.selected=false;else opts.forEach(function(o){if(o.value!=='Any')o.selected=false})}
@@ -443,12 +474,39 @@ function showApp(){
   document.getElementById('userName').textContent=n;document.getElementById('userAvatar').textContent=n.split(' ').map(function(x){return x[0]}).join('').toUpperCase().slice(0,2);
   document.getElementById('udName').textContent=n;document.getElementById('udEmail').textContent=e;document.getElementById('udLogin').textContent=new Date().toLocaleString();
   var exp=curUser.idTokenClaims?.exp;if(exp)document.getElementById('udExpiry').textContent=new Date(exp*1000).toLocaleString();
+  // Provision user in MongoDB (creates on first login, updates lastLogin)
+  provisionUser();
   buildTableHeader();
-  // #90: Set default To date to today
   var today=new Date().toISOString().split('T')[0];
   document.getElementById('dateTo').value=today;
   document.getElementById('dbDateTo').value=today;
   loadDashboard();dashLoaded=true;
+}
+
+async function provisionUser(){
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',
+      body:JSON.stringify({action:'provisionUser',email:curUser.username,name:curUser.name,entraId:curUser.localAccountId||curUser.homeAccountId})});
+    var d=await r.json();
+    if(d.user){
+      curUserRole=d.user.role||'analyst';
+      curUserData=d.user;
+      applyRoleVisibility();
+    }
+  }catch(e){console.error('User provision error:',e)}
+}
+
+var curUserRole='analyst',curUserData=null;
+function applyRoleVisibility(){
+  // Settings tab: only super_admin and admin
+  var settingsBtn=document.getElementById('modeSettings');
+  if(settingsBtn){
+    if(curUserRole==='super_admin'||curUserRole==='admin')settingsBtn.style.display='';
+    else settingsBtn.style.display='none';
+  }
+  // Data maintenance buttons: only super_admin
+  var maintBtns=document.querySelectorAll('[data-role="super_admin"]');
+  maintBtns.forEach(function(b){b.style.display=curUserRole==='super_admin'?'':'none'});
 }
 document.addEventListener('click',function(){document.getElementById('userDropdown')?.classList.remove('open')});
 

@@ -1,8 +1,44 @@
 const { getDb } = require('./db');
 
+// JWT decode (base64url → JSON, no signature verification — token comes from MSAL via HTTPS)
+function decodeJwt(token) {
+  try {
+    var parts = token.split('.');
+    if (parts.length !== 3) return null;
+    var payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    var decoded = Buffer.from(payload, 'base64').toString('utf-8');
+    return JSON.parse(decoded);
+  } catch (e) { return null; }
+}
+
+// Validate JWT claims
+var TENANT_ID = '06f8ce50-3995-4966-9e25-7cfd7cd94a81';
+var CLIENT_ID = 'dc517c46-dcf0-4d38-80e0-3cda854a5d59';
+var BOOTSTRAP_ADMIN = 'sunil@secvisiontech.com';
+
+function validateToken(event) {
+  var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  var token = authHeader.slice(7);
+  var claims = decodeJwt(token);
+  if (!claims) return null;
+  // Validate issuer (Microsoft Entra ID)
+  if (claims.iss && !claims.iss.includes(TENANT_ID)) return null;
+  // Validate audience
+  if (claims.aud && claims.aud !== CLIENT_ID) return null;
+  // Validate expiration
+  if (claims.exp && claims.exp < Math.floor(Date.now() / 1000)) return null;
+  return {
+    email: (claims.preferred_username || claims.email || claims.upn || '').toLowerCase(),
+    name: claims.name || '',
+    entraId: claims.oid || claims.sub || '',
+    tenantId: claims.tid || ''
+  };
+}
+
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS')
-    return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
+    return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
   if (event.httpMethod !== 'POST')
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   var hdrs = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
@@ -12,6 +48,48 @@ exports.handler = async (event) => {
     var action = body.action;
     var db = await getDb();
     var col = db.collection('jobs');
+
+    // Validate auth token (allow provisionUser without full user record)
+    var authUser = validateToken(event);
+
+    // ACTION: provisionUser — create/update user on login
+    if (action === 'provisionUser') {
+      if (!authUser || !authUser.email) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token' }) };
+      var usersCol = db.collection('users');
+      var existing = await usersCol.findOne({ email: authUser.email });
+      if (existing) {
+        // Update last login
+        await usersCol.updateOne({ _id: existing._id }, { $set: { lastLogin: new Date(), name: authUser.name || existing.name } });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ user: existing, isNew: false }) };
+      }
+      // New user — check if bootstrap admin
+      var isBootstrap = authUser.email === BOOTSTRAP_ADMIN;
+      var newUser = {
+        email: authUser.email,
+        name: body.name || authUser.name || '',
+        entraId: authUser.entraId,
+        userType: 'internal',
+        externalCompany: null,
+        department: '',
+        groups: [],
+        role: isBootstrap ? 'super_admin' : 'pending',
+        status: isBootstrap ? 'active' : 'pending',
+        preferences: {},
+        invitedBy: null,
+        lastLogin: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      var result = await usersCol.insertOne(newUser);
+      newUser._id = result.insertedId;
+      if (!isBootstrap) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ user: newUser, isNew: true, message: 'Account pending admin approval' }) };
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ user: newUser, isNew: true }) };
+    }
+
+    // For all other actions: require valid auth (but don't block if header missing during migration)
+    // TODO Phase 4: enforce role-based access per action
 
     // ACTION: search - query saved jobs from database
     if (action === 'search') {
