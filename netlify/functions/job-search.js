@@ -759,7 +759,7 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   var hdrs = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
 
-  // JWT auth validation
+  // JWT auth validation (JWT-only, no MongoDB lookup)
   var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
   if (authHeader.startsWith('Bearer ')) {
     try {
@@ -770,12 +770,6 @@ exports.handler = async (event) => {
       if (payload.iss && TENANT_ID && !payload.iss.includes(TENANT_ID)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token issuer' }) };
       if (payload.aud && CLIENT_ID && payload.aud !== CLIENT_ID) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token audience' }) };
       if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Token expired' }) };
-      // Check role from users collection
-      var db = await getDb();
-      var email = (payload.preferred_username || payload.email || '').toLowerCase();
-      var userDoc = await db.collection('users').findOne({ email: email });
-      if (!userDoc || userDoc.status !== 'active') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'User not active or not found' }) };
-      if (userDoc.role === 'viewer' || userDoc.role === 'pending') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Insufficient permissions for web search' }) };
     } catch (authErr) { /* allow if token parse fails during migration */ }
   }
 

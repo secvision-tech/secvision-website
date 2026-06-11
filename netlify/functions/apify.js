@@ -4,51 +4,33 @@ const ACTOR_ID = 'bebity~linkedin-jobs-scraper';
 const COMPANY_ACTOR_ID = 'bebity~linkedin-company-scraper';
 const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
 
-const { getDb } = require('./db');
-
-// Lightweight JWT decode
-function decodeJwtPayload(token) {
-  try { return JSON.parse(Buffer.from(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString()); }
-  catch(e) { return null; }
+// Lightweight JWT decode + validate (no MongoDB dependency)
+function validateJwt(event) {
+  var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
+  if (!authHeader.startsWith('Bearer ')) return null;
+  try {
+    var payload = JSON.parse(Buffer.from(authHeader.slice(7).split('.')[1].replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString());
+    var TENANT_ID = process.env.ENTRA_TENANT_ID || '';
+    var CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
+    if (payload.iss && TENANT_ID && !payload.iss.includes(TENANT_ID)) return { error: 'Invalid token issuer' };
+    if (payload.aud && CLIENT_ID && payload.aud !== CLIENT_ID) return { error: 'Invalid token audience' };
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return { error: 'Token expired' };
+    return { email: (payload.preferred_username || payload.email || '').toLowerCase(), name: payload.name || '' };
+  } catch (e) { return null; }
 }
 
 exports.handler = async function(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: hdrs, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: hdrs, body: 'Method not allowed' };
 
-  // JWT auth validation
-  var authRole = null;
-  var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
-  if (authHeader.startsWith('Bearer ')) {
-    var payload = decodeJwtPayload(authHeader.slice(7));
-    if (payload) {
-      var TENANT_ID = process.env.ENTRA_TENANT_ID || '';
-      var CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
-      if (payload.iss && TENANT_ID && !payload.iss.includes(TENANT_ID)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token' }) };
-      if (payload.aud && CLIENT_ID && payload.aud !== CLIENT_ID) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token' }) };
-      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Token expired' }) };
-      var email = (payload.preferred_username || payload.email || '').toLowerCase();
-      if (email) {
-        var db = await getDb();
-        var userDoc = await db.collection('users').findOne({ email: email });
-        if (userDoc) authRole = userDoc.role;
-        if (!userDoc || userDoc.status !== 'active') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'User not active' }) };
-      }
-    }
-  }
+  // Validate JWT (reject invalid tokens, allow missing tokens during migration)
+  var authResult = validateJwt(event);
+  if (authResult && authResult.error) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: authResult.error }) };
 
   try {
     var body = JSON.parse(event.body || '{}');
     var action = body.action;
     if (!APIFY_TOKEN) return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'APIFY_API_TOKEN not set' }) };
-
-    // RBAC: LinkedIn job search requires manager+, company scraper requires manager+
-    var MANAGER_ACTIONS = ['startSearch', 'checkRun', 'getResults', 'processAndSave', 'scrapeCompany'];
-    if (authRole && MANAGER_ACTIONS.indexOf(action) > -1) {
-      if (['viewer', 'pending'].indexOf(authRole) > -1) {
-        return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Insufficient permissions for LinkedIn search' }) };
-      }
-    }
 
     // ACTION: startSearch - kick off Bebity scraper run
     if (action === 'startSearch') {
