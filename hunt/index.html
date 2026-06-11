@@ -160,6 +160,9 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
 .pag-jump{display:flex;align-items:center;gap:.2rem;font-size:.65rem;color:var(--g5)}
 .pag-jump input{width:36px;padding:.12rem .2rem;border:1px solid var(--g100);border-radius:4px;font-size:.65rem;text-align:center;font-family:'DM Sans',sans-serif}
 .do{position:fixed;inset:0;background:rgba(15,35,65,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}.do.open{display:flex}
+.set-label{font-size:.65rem;font-weight:600;color:var(--g4);display:block;margin-bottom:.15rem}
+.set-input{width:100%;padding:.3rem .4rem;font-size:.7rem;border:1px solid var(--g2);border-radius:4px;font-family:'DM Sans',sans-serif;background:var(--bg)}
+.set-hint{font-size:.55rem;color:var(--g3);display:block;margin-top:.1rem}
 .dm{background:#fff;border-radius:14px;max-width:720px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.25)}
 .dm-h{background:var(--pri);padding:1rem 1.2rem;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center}
 .dm-h h3{color:#fff;font-family:'Playfair Display',serif;font-size:1rem}
@@ -224,6 +227,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <button class="mode-btn" id="modeContract" onclick="setMode('contract')">Contract Pipeline</button>
         <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
+        <button class="mode-btn" id="modeSettings" onclick="setMode('settings')" style="margin-left:auto">⚙️ Settings</button>
       </div>
       <div id="webSearchPanel" style="display:none">
       <div class="sf">
@@ -520,15 +524,19 @@ function setMode(mode){
   document.getElementById('modeContract').classList.toggle('active',mode==='contract');
   document.getElementById('webSearchPanel').style.display=mode==='web'?'block':'none';
   document.getElementById('dbSearchPanel').style.display=mode==='db'?'block':'none';
+  document.getElementById('settingsPage').style.display=mode==='settings'?'block':'none';
   document.getElementById('dashPanel').classList.toggle('show',mode==='dash');
   document.getElementById('contractPanel').classList.toggle('show',mode==='contract');
-  // Show/hide results panel for search modes vs dashboard
-  document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract')?'none':'flex';
+  // Show/hide results panel for search modes vs dashboard/contract/settings
+  document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract'||mode==='settings')?'none':'flex';
   if(mode==='dash'){
     if(!dashLoaded){loadDashboard();dashLoaded=true}return;
   }
   if(mode==='contract'){
     if(!contractLoaded){loadContractPipeline();contractLoaded=true}return;
+  }
+  if(mode==='settings'){
+    initSettingsPage();return;
   }
   // Restore previous results for the target mode
   var restore=mode==='web'?webResults:dbResults;
@@ -571,7 +579,7 @@ async function searchDb(){
       body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,limit:500})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
-    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     document.getElementById('dbInfo').textContent='Found '+data.total+' jobs in database.';
     colFilters={};sortCol='';sortDir=1;
     document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
@@ -1963,7 +1971,7 @@ async function searchDbByCompany(company){
       body:JSON.stringify({action:'search',company:company,limit:500,sort:JSON.stringify({datePosted:-1})})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
-    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     document.getElementById('dbInfo').textContent='Found '+data.total+' openings for '+company+'.';
     colFilters={};sortCol='';sortDir=1;
     document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
@@ -2047,7 +2055,7 @@ async function fetchRecentContracts(){
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getRecentContracts'})});
     var d=await r.json();
     cjData=(d.contracts||[]).map(function(j,i){
-      j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
+      j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';
       j.status=j.status||'new';j.companyType=j.companyType||'';return j;
     });
     if(!cjData.length){el.innerHTML='<div class="css-no-data">No contract jobs found.</div>';return}
@@ -2141,7 +2149,7 @@ async function viewContractJob(jobId){
     var d=await r.json();
     if(d.job){
       var j=d.job;
-      j.idx=0;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';
+      j.idx=0;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';
       j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||'';
       // Temporarily add to allJobs for viewDet
       var tempIdx=allJobs.length;
@@ -2197,7 +2205,7 @@ function searchDashPie(field,value){
   fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)})
   .then(function(r){return r.json()}).then(function(data){
     allJobs=data.jobs||[];
-    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     filtered=allJobs.slice();renderTable();
     document.getElementById('apiText').textContent='DB: '+allJobs.length+' results for '+field+'='+value;
     document.getElementById('exportBtns').style.display=allJobs.length?'flex':'none';
@@ -2222,7 +2230,7 @@ function searchContractBySkill(skill){
     body:JSON.stringify({action:'search',query:skill,jobType:'Contract',limit:500,sort:JSON.stringify({datePosted:-1})})})
   .then(function(r){return r.json()}).then(function(data){
     allJobs=data.jobs||[];
-    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     filtered=allJobs.slice();renderTable();
     document.getElementById('apiText').textContent='DB: '+allJobs.length+' contract jobs with '+skill;
     document.getElementById('exportBtns').style.display=allJobs.length?'flex':'none';
@@ -2251,7 +2259,7 @@ function searchContractByCountry(country){
     body:JSON.stringify({action:'search',jobType:'Contract',detectedCountry:country,limit:500,sort:JSON.stringify({datePosted:-1})})})
   .then(function(r){return r.json()}).then(function(data){
     allJobs=data.jobs||[];
-    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     document.getElementById('dbInfo').textContent='Found '+data.total+' contract jobs in '+country+'.';
     colFilters={};sortCol='';sortDir=1;
     if(!allJobs.length){document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='block';document.getElementById('emptyState').innerHTML='<h3>No contract jobs</h3><p>No contract positions found in '+country+'.</p>'}
@@ -2280,7 +2288,7 @@ async function searchDbByCompanyAndType(company,jobType){
     var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
-    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?new Date(j.datePosted).toLocaleDateString('en-US'):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     document.getElementById('dbInfo').textContent='Found '+data.total+' '+(jobType||'')+' openings for '+company+'.';
     colFilters={};sortCol='';sortDir=1;
     document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
@@ -2294,6 +2302,180 @@ async function searchDbByCompanyAndType(company,jobType){
 
 // #176: Contact Finder Popup
 var contactPopupHtml='<div id="contactPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1000;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:620px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="cfTitle">Find Contacts</h3><button onclick="closeContactPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.6rem"><button onclick="apolloSearch()" id="cfAutoBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Auto-Discover Contacts</button><button onclick="apolloEnrich()" id="cfEnrichBtn" style="padding:.3rem .8rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button></div><div id="cfCompanyInfo" style="font-size:.6rem;color:var(--g5);margin-bottom:.4rem"></div><div id="cfDiscovered" style="margin-bottom:.6rem"></div><div id="cfExisting" style="margin-bottom:.6rem"></div><div id="cfManualSearch" style="margin-bottom:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🔗 Manual LinkedIn Search:</div><div style="display:flex;flex-wrap:wrap;gap:.3rem" id="cfLinks"></div></div><div style="border-top:1px solid #e5e7eb;padding-top:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">✏️ Add Contact — Enter name &amp; click Enrich to auto-fill from Apollo</div><div style="display:grid;grid-template-columns:1fr auto;gap:.4rem"><input id="cfName" placeholder="Full Name (e.g. John Smith)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><button onclick="enrichPerson()" id="cfEnrichPersonBtn" style="padding:.3rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Enrich</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.4rem"><input id="cfDesignation" placeholder="Designation (e.g. CISO, HR Head)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfEmail" placeholder="Email" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfLinkedin" placeholder="LinkedIn URL (optional)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><select id="cfSource" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><option value="Apollo.io">Apollo.io</option><option value="LinkedIn">LinkedIn</option><option value="Company Website">Company Website</option><option value="Manual">Manual</option></select></div><button onclick="addContact()" style="margin-top:.4rem;padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Contact</button></div><div id="cfStatus" style="font-size:.6rem;color:var(--pri);margin-top:.3rem"></div></div></div>';
+// ========== APPLICATION SETTINGS ==========
+var GLOBAL_SETTINGS={dateFormat:'DD/MM/YYYY',timeZone:'Asia/Kolkata',timeFormat:'24h',perPage:25,defaultTab:'dash',autoEnrich:'on',defaultCompanyType:'Enterprise',nonCyberFilter:'strict',maxQueries:30};
+var USER_PREFS={dateFormat:'',timeZone:'',timeFormat:'',perPage:'',defaultTab:''};
+var TIMEZONE_LIST=['UTC','Asia/Kolkata','America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Toronto','America/Sao_Paulo','America/Mexico_City','Europe/London','Europe/Berlin','Europe/Paris','Europe/Amsterdam','Europe/Dublin','Europe/Zurich','Europe/Stockholm','Europe/Madrid','Europe/Rome','Europe/Warsaw','Europe/Helsinki','Europe/Oslo','Europe/Copenhagen','Europe/Bucharest','Europe/Prague','Asia/Dubai','Asia/Riyadh','Asia/Jerusalem','Asia/Singapore','Asia/Tokyo','Asia/Hong_Kong','Asia/Seoul','Asia/Shanghai','Asia/Kuala_Lumpur','Asia/Bangkok','Australia/Sydney','Australia/Melbourne','Pacific/Auckland'];
+
+function detectUserLocale(){
+  var tz='UTC';try{tz=Intl.DateTimeFormat().resolvedOptions().timeZone}catch(e){}
+  var locale=navigator.language||'en-US';
+  var df='DD/MM/YYYY';
+  if(/^en-US$/i.test(locale))df='MM/DD/YYYY';
+  else if(/^ja|^zh|^ko/i.test(locale))df='YYYY-MM-DD';
+  var tf=(/^en-US$/i.test(locale))?'12h':'24h';
+  return{dateFormat:df,timeZone:tz,timeFormat:tf,locale:locale};
+}
+
+function loadSettings(){
+  // Load global from MongoDB cache in localStorage
+  var gs=localStorage.getItem('huntGlobalSettings');
+  if(gs){try{Object.assign(GLOBAL_SETTINGS,JSON.parse(gs))}catch(e){}}
+  // Load user prefs
+  var up=localStorage.getItem('huntUserPrefs');
+  if(up){try{Object.assign(USER_PREFS,JSON.parse(up))}catch(e){}}
+  // Auto-detect on first visit
+  if(!localStorage.getItem('huntSettingsInit')){
+    var det=detectUserLocale();
+    GLOBAL_SETTINGS.dateFormat=det.dateFormat;
+    GLOBAL_SETTINGS.timeZone=det.timeZone;
+    GLOBAL_SETTINGS.timeFormat=det.timeFormat;
+    localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS));
+    localStorage.setItem('huntSettingsInit','1');
+  }
+  // Also try to load from MongoDB
+  fetchGlobalSettings();
+}
+
+async function fetchGlobalSettings(){
+  try{
+    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getSettings',scope:'global'})});
+    var d=await r.json();
+    if(d.settings){Object.assign(GLOBAL_SETTINGS,d.settings);localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS))}
+  }catch(e){}
+}
+
+// Effective setting = user pref > global default
+function getSetting(key){
+  if(USER_PREFS[key]&&USER_PREFS[key]!=='')return USER_PREFS[key];
+  return GLOBAL_SETTINGS[key];
+}
+
+function populateTimezoneDropdowns(){
+  ['setGlobalTimeZone','setUserTimeZone'].forEach(function(id){
+    var sel=document.getElementById(id);if(!sel||sel.options.length>2)return;
+    sel.innerHTML=id.indexOf('User')>-1?'<option value="">Use global default</option>':'';
+    TIMEZONE_LIST.forEach(function(tz){var o=document.createElement('option');o.value=tz;o.textContent=tz.replace(/_/g,' ');sel.appendChild(o)});
+  });
+}
+
+function initSettingsPage(){
+  populateTimezoneDropdowns();
+  // Populate global settings
+  document.getElementById('setAutoEnrich').value=GLOBAL_SETTINGS.autoEnrich;
+  document.getElementById('setDefaultCompanyType').value=GLOBAL_SETTINGS.defaultCompanyType;
+  document.getElementById('setNonCyberFilter').value=GLOBAL_SETTINGS.nonCyberFilter;
+  document.getElementById('setMaxQueries').value=GLOBAL_SETTINGS.maxQueries;
+  document.getElementById('setGlobalDateFormat').value=GLOBAL_SETTINGS.dateFormat;
+  document.getElementById('setGlobalTimeZone').value=GLOBAL_SETTINGS.timeZone;
+  document.getElementById('setGlobalPerPage').value=GLOBAL_SETTINGS.perPage;
+  document.getElementById('setGlobalDefaultTab').value=GLOBAL_SETTINGS.defaultTab;
+  // Populate user prefs
+  document.getElementById('setUserDateFormat').value=USER_PREFS.dateFormat||'';
+  document.getElementById('setUserTimeZone').value=USER_PREFS.timeZone||'';
+  document.getElementById('setUserTimeFormat').value=USER_PREFS.timeFormat||'';
+  document.getElementById('setUserPerPage').value=USER_PREFS.perPage||'';
+  document.getElementById('setUserDefaultTab').value=USER_PREFS.defaultTab||'';
+  // Auto-detect info
+  var det=detectUserLocale();
+  document.getElementById('setUserAutoDetected').textContent='Browser: '+det.locale+' | TZ: '+det.timeZone+' | Suggested: '+det.dateFormat;
+  updateSettingsPreview();
+  setSettingsSection('global');
+}
+
+function setSettingsSection(section){
+  ['global','user'].forEach(function(s){
+    document.getElementById('setSection-'+s).style.display=s===section?'block':'none';
+    document.getElementById('setNav-'+s).classList.toggle('active',s===section);
+  });
+}
+
+function updateSettingsPreview(){
+  var df=document.getElementById('setUserDateFormat').value||GLOBAL_SETTINGS.dateFormat;
+  var tz=document.getElementById('setUserTimeZone').value||GLOBAL_SETTINGS.timeZone;
+  var tf=document.getElementById('setUserTimeFormat').value||GLOBAL_SETTINGS.timeFormat;
+  var preview=formatDateWithSettings(new Date(),df,tz,tf);
+  document.getElementById('setUserPreview').textContent=preview;
+}
+
+async function saveGlobalSettings(){
+  GLOBAL_SETTINGS.autoEnrich=document.getElementById('setAutoEnrich').value;
+  GLOBAL_SETTINGS.defaultCompanyType=document.getElementById('setDefaultCompanyType').value;
+  GLOBAL_SETTINGS.nonCyberFilter=document.getElementById('setNonCyberFilter').value;
+  GLOBAL_SETTINGS.maxQueries=parseInt(document.getElementById('setMaxQueries').value);
+  GLOBAL_SETTINGS.dateFormat=document.getElementById('setGlobalDateFormat').value;
+  GLOBAL_SETTINGS.timeZone=document.getElementById('setGlobalTimeZone').value;
+  GLOBAL_SETTINGS.perPage=parseInt(document.getElementById('setGlobalPerPage').value);
+  GLOBAL_SETTINGS.defaultTab=document.getElementById('setGlobalDefaultTab').value;
+  localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS));
+  // Save to MongoDB
+  try{
+    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'saveSettings',scope:'global',settings:GLOBAL_SETTINGS})});
+  }catch(e){}
+  applySettings();
+  var st=document.getElementById('settingsSaveStatus');
+  st.textContent='✅ Global settings saved!';setTimeout(function(){st.textContent=''},4000);
+}
+
+async function saveUserSettings(){
+  USER_PREFS.dateFormat=document.getElementById('setUserDateFormat').value;
+  USER_PREFS.timeZone=document.getElementById('setUserTimeZone').value;
+  USER_PREFS.timeFormat=document.getElementById('setUserTimeFormat').value;
+  USER_PREFS.perPage=document.getElementById('setUserPerPage').value?parseInt(document.getElementById('setUserPerPage').value):'';
+  USER_PREFS.defaultTab=document.getElementById('setUserDefaultTab').value;
+  localStorage.setItem('huntUserPrefs',JSON.stringify(USER_PREFS));
+  // Save to MongoDB
+  try{
+    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({action:'saveSettings',scope:'user',userId:'default',settings:USER_PREFS})});
+  }catch(e){}
+  applySettings();
+  var st=document.getElementById('settingsSaveStatus');
+  st.textContent='✅ User preferences saved!';setTimeout(function(){st.textContent=''},4000);
+}
+
+function resetUserSettings(){
+  if(!confirm('Reset your preferences to use global defaults?'))return;
+  USER_PREFS={dateFormat:'',timeZone:'',timeFormat:'',perPage:'',defaultTab:''};
+  localStorage.setItem('huntUserPrefs',JSON.stringify(USER_PREFS));
+  initSettingsPage();
+  applySettings();
+  var st=document.getElementById('settingsSaveStatus');
+  st.textContent='✅ Preferences reset to global defaults!';setTimeout(function(){st.textContent=''},4000);
+}
+
+function applySettings(){
+  perPage=parseInt(getSetting('perPage'))||25;
+  cjPerPage=perPage;
+  dashLoaded=false;contractLoaded=false;
+  if(filtered.length)renderTable();
+}
+
+// Format date using effective settings
+function formatDateWithSettings(date,fmt,tz,tf){
+  if(!date)return'N/A';
+  if(typeof date==='string')date=new Date(date);
+  if(isNaN(date.getTime()))return'N/A';
+  try{
+    var opts={timeZone:tz||getSetting('timeZone')||'UTC',year:'numeric',month:'2-digit',day:'2-digit'};
+    var formatted=new Intl.DateTimeFormat('en-GB',opts).format(date);
+    var p=formatted.split('/');
+    var dd=p[0],mm=p[1],yyyy=p[2];
+    var monthNames=['','Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var f=fmt||getSetting('dateFormat')||'DD/MM/YYYY';
+    if(f==='MM/DD/YYYY')return mm+'/'+dd+'/'+yyyy;
+    if(f==='YYYY-MM-DD')return yyyy+'-'+mm+'-'+dd;
+    if(f==='DD-MMM-YYYY')return dd+'-'+monthNames[parseInt(mm)]+'-'+yyyy;
+    return dd+'/'+mm+'/'+yyyy;
+  }catch(e){return date.toLocaleDateString()}
+}
+
+function fmtDate(date){return formatDateWithSettings(date)}
+
+// Initialize settings on load
+loadSettings();
+
 document.addEventListener('DOMContentLoaded',function(){document.body.insertAdjacentHTML('beforeend',contactPopupHtml)});
 
 var cfCompany='',cfDomain='';
@@ -2619,7 +2801,7 @@ function exportXLSX(){
 function exportPDF(){
   var d=getExportData();if(!d.length)return;
   var doc=new jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a3'});
-  doc.setFontSize(14);doc.text('SecVision Business Hunt Results - '+new Date().toLocaleDateString(),40,30);
+  doc.setFontSize(14);doc.text('SecVision Business Hunt Results - '+fmtDate(new Date()),40,30);
   doc.setFontSize(8);doc.text(filtered.length+' jobs | Generated '+new Date().toLocaleString(),40,45);
   var cols=Object.keys(d[0]).filter(function(k){return k!=='Apply Link'});
   var rows=d.map(function(r){return cols.map(function(k){return String(r[k]||'').slice(0,40)})});
@@ -2631,5 +2813,112 @@ function downloadFile(content,name,type){
   var a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u);
 }
 </script>
+<!-- Settings Page -->
+<div id="settingsPage" style="display:none;padding:1rem;max-width:900px;margin:0 auto">
+  <h2 style="font-size:1rem;color:var(--pri);margin-bottom:.8rem;display:flex;align-items:center;gap:.4rem">⚙️ Application Settings</h2>
+
+  <!-- Settings Navigation -->
+  <div style="display:flex;gap:.3rem;margin-bottom:1rem;border-bottom:2px solid var(--g2);padding-bottom:.4rem">
+    <button class="mode-btn active" id="setNav-global" onclick="setSettingsSection('global')" style="font-size:.65rem;padding:.25rem .6rem">🏢 Global Settings</button>
+    <button class="mode-btn" id="setNav-user" onclick="setSettingsSection('user')" style="font-size:.65rem;padding:.25rem .6rem">👤 User Preferences</button>
+  </div>
+
+  <!-- GLOBAL SETTINGS (Super Admin) -->
+  <div id="setSection-global">
+    <div style="display:flex;gap:.2rem;align-items:center;margin-bottom:.6rem">
+      <span style="background:#7C3AED;color:#fff;font-size:.5rem;padding:.1rem .3rem;border-radius:3px;font-weight:700">SUPER ADMIN</span>
+      <span style="font-size:.6rem;color:var(--g4)">These settings apply to all users</span>
+    </div>
+
+    <!-- Data Maintenance -->
+    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;padding:.8rem;margin-bottom:.8rem">
+      <h3 style="font-size:.75rem;color:var(--pri);margin-bottom:.6rem;border-bottom:1px solid var(--g2);padding-bottom:.3rem">🔧 Data Maintenance</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+        <div><label class="set-label">Auto-Enrich on Search</label>
+          <select id="setAutoEnrich" class="set-input"><option value="on">Enabled</option><option value="off">Disabled</option></select>
+          <span class="set-hint">Auto-discover company details from Apollo/LinkedIn after search</span></div>
+        <div><label class="set-label">Default Company Type</label>
+          <select id="setDefaultCompanyType" class="set-input"><option value="Enterprise">Enterprise</option><option value="">None (leave blank)</option><option value="MSSP/MDR">MSSP/MDR</option></select>
+          <span class="set-hint">Assigned to companies without a classification</span></div>
+        <div><label class="set-label">Non-Cyber Job Filter</label>
+          <select id="setNonCyberFilter" class="set-input"><option value="strict">Strict — drop all non-cyber</option><option value="moderate">Moderate — keep borderline roles</option></select>
+          <span class="set-hint">How aggressively to filter out non-cybersecurity jobs</span></div>
+        <div><label class="set-label">Apify LinkedIn Queries Cap</label>
+          <select id="setMaxQueries" class="set-input"><option value="15">15 (conservative)</option><option value="30">30 (standard)</option><option value="50">50 (aggressive)</option></select>
+          <span class="set-hint">Max LinkedIn queries per search to control Apify costs</span></div>
+      </div>
+    </div>
+
+    <!-- System Defaults -->
+    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;padding:.8rem;margin-bottom:.8rem">
+      <h3 style="font-size:.75rem;color:var(--pri);margin-bottom:.6rem;border-bottom:1px solid var(--g2);padding-bottom:.3rem">🌐 System Defaults</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+        <div><label class="set-label">Default Date Format</label>
+          <select id="setGlobalDateFormat" class="set-input">
+            <option value="DD/MM/YYYY">DD/MM/YYYY (India, UK, Europe)</option><option value="MM/DD/YYYY">MM/DD/YYYY (United States)</option>
+            <option value="YYYY-MM-DD">YYYY-MM-DD (ISO 8601)</option><option value="DD-MMM-YYYY">DD-MMM-YYYY (01-Jan-2025)</option></select>
+          <span class="set-hint">Default for new users (can be overridden per user)</span></div>
+        <div><label class="set-label">Default Time Zone</label>
+          <select id="setGlobalTimeZone" class="set-input"></select>
+          <span class="set-hint">Default for new users</span></div>
+        <div><label class="set-label">Default Items Per Page</label>
+          <select id="setGlobalPerPage" class="set-input"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
+        <div><label class="set-label">Default Landing Page</label>
+          <select id="setGlobalDefaultTab" class="set-input"><option value="dash">Dashboard</option><option value="web">Search Web</option><option value="db">Search Database</option><option value="contract">Contract Pipeline</option></select></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:.4rem;justify-content:flex-end">
+      <button onclick="saveGlobalSettings()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">💾 Save Global Settings</button>
+    </div>
+  </div>
+
+  <!-- USER PREFERENCES -->
+  <div id="setSection-user" style="display:none">
+    <div style="display:flex;gap:.2rem;align-items:center;margin-bottom:.6rem">
+      <span style="background:#059669;color:#fff;font-size:.5rem;padding:.1rem .3rem;border-radius:3px;font-weight:700">ALL USERS</span>
+      <span style="font-size:.6rem;color:var(--g4)">Personal preferences — override global defaults</span>
+    </div>
+
+    <!-- Regional -->
+    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;padding:.8rem;margin-bottom:.8rem">
+      <h3 style="font-size:.75rem;color:var(--pri);margin-bottom:.6rem;border-bottom:1px solid var(--g2);padding-bottom:.3rem">🌍 Regional</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+        <div><label class="set-label">Date Format</label>
+          <select id="setUserDateFormat" class="set-input" onchange="updateSettingsPreview()">
+            <option value="">Use global default</option>
+            <option value="DD/MM/YYYY">DD/MM/YYYY (India, UK, Europe)</option><option value="MM/DD/YYYY">MM/DD/YYYY (United States)</option>
+            <option value="YYYY-MM-DD">YYYY-MM-DD (ISO 8601)</option><option value="DD-MMM-YYYY">DD-MMM-YYYY (01-Jan-2025)</option></select></div>
+        <div><label class="set-label">Time Zone</label>
+          <select id="setUserTimeZone" class="set-input" onchange="updateSettingsPreview()"></select></div>
+        <div><label class="set-label">Time Format</label>
+          <select id="setUserTimeFormat" class="set-input" onchange="updateSettingsPreview()">
+            <option value="">Use global default</option><option value="24h">24-hour (14:30)</option><option value="12h">12-hour (2:30 PM)</option></select></div>
+      </div>
+      <div style="background:var(--g1);padding:.5rem;border-radius:4px;font-size:.6rem;color:var(--g4);margin-top:.5rem">
+        <strong>Live Preview:</strong> <span id="setUserPreview" style="color:var(--ac);font-weight:600"></span><br>
+        <strong>Auto-detected:</strong> <span id="setUserAutoDetected"></span>
+      </div>
+    </div>
+
+    <!-- Display -->
+    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;padding:.8rem;margin-bottom:.8rem">
+      <h3 style="font-size:.75rem;color:var(--pri);margin-bottom:.6rem;border-bottom:1px solid var(--g2);padding-bottom:.3rem">🖥️ Display</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.6rem">
+        <div><label class="set-label">Items Per Page</label>
+          <select id="setUserPerPage" class="set-input"><option value="">Use global default</option><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
+        <div><label class="set-label">Landing Page</label>
+          <select id="setUserDefaultTab" class="set-input"><option value="">Use global default</option><option value="dash">Dashboard</option><option value="web">Search Web</option><option value="db">Search Database</option><option value="contract">Contract Pipeline</option></select></div>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:.4rem;justify-content:flex-end">
+      <button onclick="resetUserSettings()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif">Reset to Global Defaults</button>
+      <button onclick="saveUserSettings()" style="padding:.35rem .8rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">💾 Save Preferences</button>
+    </div>
+  </div>
+
+  <div id="settingsSaveStatus" style="font-size:.65rem;color:#059669;text-align:right;margin-top:.4rem"></div>
+</div>
 </body>
 </html>

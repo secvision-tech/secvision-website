@@ -596,6 +596,29 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true, company: company }) };
     }
 
+    // ACTION: getSettings - fetch settings from MongoDB
+    if (action === 'getSettings') {
+      var settingsCol = db.collection('settings');
+      var scope = body.scope || 'global';
+      var userId = body.userId || 'default';
+      var query = scope === 'global' ? { scope: 'global' } : { scope: 'user', userId: userId };
+      var doc = await settingsCol.findOne(query);
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ settings: doc ? doc.settings : null }) };
+    }
+
+    // ACTION: saveSettings - save settings to MongoDB
+    if (action === 'saveSettings') {
+      var settingsCol2 = db.collection('settings');
+      var scope2 = body.scope || 'global';
+      var userId2 = body.userId || 'default';
+      var filter2 = scope2 === 'global' ? { scope: 'global' } : { scope: 'user', userId: userId2 };
+      await settingsCol2.updateOne(filter2, {
+        $set: { scope: scope2, userId: scope2 === 'user' ? userId2 : null, settings: body.settings, updatedAt: new Date() },
+        $setOnInsert: { createdAt: new Date() }
+      }, { upsert: true });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: true }) };
+    }
+
     // Get single job by ID (for View from dashboard)
     if (action === 'getJob') {
       var { ObjectId } = require('mongodb');
