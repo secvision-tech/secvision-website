@@ -321,8 +321,8 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
               <div class="dash-chart-box"><div class="dash-chart-title">Scan Activity (Last 14 Days)</div><div id="chartScans" class="css-chart"></div></div>
             </div>
           </div>
-          <div class="dash-section" style="margin-top:.5rem;padding:.5rem .8rem;background:#fff;border:1px solid var(--bd);border-radius:8px">
-            <div style="font-size:.7rem;font-weight:600;color:var(--g5)">🔧 Data Maintenance</div>
+          <div class="dash-section" data-role="super_admin" style="margin-top:.5rem;padding:.5rem .8rem;background:#fff;border:1px solid var(--bd);border-radius:8px">
+            <div style="font-size:.7rem;font-weight:600;color:var(--g5)">🔧 Data Maintenance <span style="background:#7C3AED;color:#fff;font-size:.45rem;padding:.05rem .2rem;border-radius:2px;margin-left:.3rem;vertical-align:middle">SUPER ADMIN</span></div>
             <div style="display:flex;gap:.5rem;margin-top:.3rem;flex-wrap:wrap">
               <button onclick="fixCountries()" style="padding:.2rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⚡ Fix Countries</button>
               <button onclick="fixCompanyTypes()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏷️ Fix Company Types</button>
@@ -491,22 +491,53 @@ async function provisionUser(){
     if(d.user){
       curUserRole=d.user.role||'analyst';
       curUserData=d.user;
+      // Load user preferences from MongoDB
+      if(d.user.preferences&&Object.keys(d.user.preferences).length>0){
+        Object.assign(USER_PREFS,d.user.preferences);
+        localStorage.setItem('huntUserPrefs',JSON.stringify(USER_PREFS));
+        applySettings();
+      }
       applyRoleVisibility();
     }
+    // Fetch global settings from MongoDB
+    fetchGlobalSettings();
   }catch(e){console.error('User provision error:',e)}
 }
 
 var curUserRole='analyst',curUserData=null;
 function applyRoleVisibility(){
-  // Settings tab: only super_admin and admin
+  var r=curUserRole;
+  var isSuper=r==='super_admin';
+  var isAdmin=r==='admin';
+  var isManager=r==='manager';
+  var isAnalyst=r==='analyst';
+  var isViewer=r==='viewer';
+
+  // Settings tab: super_admin and admin only
   var settingsBtn=document.getElementById('modeSettings');
-  if(settingsBtn){
-    if(curUserRole==='super_admin'||curUserRole==='admin')settingsBtn.style.display='';
-    else settingsBtn.style.display='none';
+  if(settingsBtn)settingsBtn.style.display=(isSuper||isAdmin)?'':'none';
+
+  // Search Web tab: not for viewers
+  var webBtn=document.getElementById('modeWeb');
+  if(webBtn)webBtn.style.display=isViewer?'none':'';
+
+  // Data maintenance section: super_admin only
+  var maintSections=document.querySelectorAll('[data-role="super_admin"]');
+  maintSections.forEach(function(el){el.style.display=isSuper?'':'none'});
+
+  // Export buttons: manager and above
+  var exportEl=document.getElementById('exportBtns');
+  if(exportEl&&isViewer)exportEl.style.display='none';
+
+  // Contact-related elements: hide for external viewers
+  if(isViewer&&curUserData&&curUserData.userType==='external'){
+    document.querySelectorAll('[data-hide-external]').forEach(function(el){el.style.display='none'});
   }
-  // Data maintenance buttons: only super_admin
-  var maintBtns=document.querySelectorAll('[data-role="super_admin"]');
-  maintBtns.forEach(function(b){b.style.display=curUserRole==='super_admin'?'':'none'});
+
+  // User role indicator in header
+  var roleColors={'super_admin':'#7C3AED','admin':'#2563EB','manager':'#059669','analyst':'#D97706','viewer':'#6B7280','pending':'#DC2626'};
+  var avatarEl=document.getElementById('userAvatar');
+  if(avatarEl&&roleColors[r])avatarEl.style.background=roleColors[r];
 }
 document.addEventListener('click',function(){document.getElementById('userDropdown')?.classList.remove('open')});
 
@@ -2419,16 +2450,26 @@ function populateTimezoneDropdowns(){
 
 function initSettingsPage(){
   populateTimezoneDropdowns();
-  // Populate global settings
-  document.getElementById('setAutoEnrich').value=GLOBAL_SETTINGS.autoEnrich;
-  document.getElementById('setDefaultCompanyType').value=GLOBAL_SETTINGS.defaultCompanyType;
-  document.getElementById('setNonCyberFilter').value=GLOBAL_SETTINGS.nonCyberFilter;
-  document.getElementById('setMaxQueries').value=GLOBAL_SETTINGS.maxQueries;
-  document.getElementById('setGlobalDateFormat').value=GLOBAL_SETTINGS.dateFormat;
-  document.getElementById('setGlobalTimeZone').value=GLOBAL_SETTINGS.timeZone;
-  document.getElementById('setGlobalPerPage').value=GLOBAL_SETTINGS.perPage;
-  document.getElementById('setGlobalDefaultTab').value=GLOBAL_SETTINGS.defaultTab;
-  // Populate user prefs
+  // Role-based section visibility
+  var isSuper=curUserRole==='super_admin';
+  var isAdmin=curUserRole==='admin';
+  var globalNav=document.getElementById('setNav-global');
+  if(globalNav)globalNav.style.display=isSuper?'':'none';
+  // If not super_admin, default to user prefs tab
+  if(!isSuper)setSettingsSection('user');
+  else setSettingsSection('global');
+  // Populate global settings (super_admin only)
+  if(isSuper){
+    document.getElementById('setAutoEnrich').value=GLOBAL_SETTINGS.autoEnrich;
+    document.getElementById('setDefaultCompanyType').value=GLOBAL_SETTINGS.defaultCompanyType;
+    document.getElementById('setNonCyberFilter').value=GLOBAL_SETTINGS.nonCyberFilter;
+    document.getElementById('setMaxQueries').value=GLOBAL_SETTINGS.maxQueries;
+    document.getElementById('setGlobalDateFormat').value=GLOBAL_SETTINGS.dateFormat;
+    document.getElementById('setGlobalTimeZone').value=GLOBAL_SETTINGS.timeZone;
+    document.getElementById('setGlobalPerPage').value=GLOBAL_SETTINGS.perPage;
+    document.getElementById('setGlobalDefaultTab').value=GLOBAL_SETTINGS.defaultTab;
+  }
+  // Populate user prefs (all roles)
   document.getElementById('setUserDateFormat').value=USER_PREFS.dateFormat||'';
   document.getElementById('setUserTimeZone').value=USER_PREFS.timeZone||'';
   document.getElementById('setUserTimeFormat').value=USER_PREFS.timeFormat||'';
@@ -2438,7 +2479,17 @@ function initSettingsPage(){
   var det=detectUserLocale();
   document.getElementById('setUserAutoDetected').textContent='Browser: '+det.locale+' | TZ: '+det.timeZone+' | Suggested: '+det.dateFormat;
   updateSettingsPreview();
-  setSettingsSection('global');
+  // Show user profile info
+  var profileEl=document.getElementById('setUserProfile');
+  if(profileEl&&curUserData){
+    var roleBadge={'super_admin':'🟣 Super Admin','admin':'🔵 Admin','manager':'🟢 Manager','analyst':'🟡 Analyst','viewer':'⚪ Viewer','pending':'🔴 Pending'};
+    profileEl.innerHTML='<div style="display:flex;align-items:center;gap:.6rem;padding:.5rem;background:var(--g1);border-radius:6px;margin-bottom:.6rem">'
+      +'<div style="width:36px;height:36px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700">'
+      +(curUserData.name||'U').split(' ').map(function(x){return x[0]}).join('').toUpperCase().slice(0,2)+'</div>'
+      +'<div><div style="font-size:.75rem;font-weight:600;color:var(--g5)">'+(curUserData.name||'User')+'</div>'
+      +'<div style="font-size:.6rem;color:var(--g4)">'+(curUserData.email||'')+'</div>'
+      +'<div style="font-size:.55rem;margin-top:.1rem">'+(roleBadge[curUserRole]||curUserRole)+' • '+(curUserData.userType||'internal')+'</div></div></div>';
+  }
 }
 
 function setSettingsSection(section){
@@ -2457,6 +2508,7 @@ function updateSettingsPreview(){
 }
 
 async function saveGlobalSettings(){
+  if(curUserRole!=='super_admin'){alert('Only Super Admin can modify global settings.');return}
   GLOBAL_SETTINGS.autoEnrich=document.getElementById('setAutoEnrich').value;
   GLOBAL_SETTINGS.defaultCompanyType=document.getElementById('setDefaultCompanyType').value;
   GLOBAL_SETTINGS.nonCyberFilter=document.getElementById('setNonCyberFilter').value;
@@ -2466,11 +2518,10 @@ async function saveGlobalSettings(){
   GLOBAL_SETTINGS.perPage=parseInt(document.getElementById('setGlobalPerPage').value);
   GLOBAL_SETTINGS.defaultTab=document.getElementById('setGlobalDefaultTab').value;
   localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS));
-  // Save to MongoDB
   try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    await authFetch('/.netlify/functions/job-db',{method:'POST',
       body:JSON.stringify({action:'saveSettings',scope:'global',settings:GLOBAL_SETTINGS})});
-  }catch(e){}
+  }catch(e){console.error('Save settings error:',e)}
   applySettings();
   var st=document.getElementById('settingsSaveStatus');
   st.textContent='✅ Global settings saved!';setTimeout(function(){st.textContent=''},4000);
@@ -2483,11 +2534,19 @@ async function saveUserSettings(){
   USER_PREFS.perPage=document.getElementById('setUserPerPage').value?parseInt(document.getElementById('setUserPerPage').value):'';
   USER_PREFS.defaultTab=document.getElementById('setUserDefaultTab').value;
   localStorage.setItem('huntUserPrefs',JSON.stringify(USER_PREFS));
-  // Save to MongoDB
+  // Save to MongoDB (per-user)
+  var userId=curUser?curUser.username:'default';
   try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'saveSettings',scope:'user',userId:'default',settings:USER_PREFS})});
-  }catch(e){}
+    await authFetch('/.netlify/functions/job-db',{method:'POST',
+      body:JSON.stringify({action:'saveSettings',scope:'user',userId:userId,settings:USER_PREFS})});
+  }catch(e){console.error('Save prefs error:',e)}
+  // Also update user preferences in users collection
+  if(curUserData&&curUserData.email){
+    try{
+      await authFetch('/.netlify/functions/job-db',{method:'POST',
+        body:JSON.stringify({action:'updateUserPreferences',email:curUserData.email,preferences:USER_PREFS})});
+    }catch(e){}
+  }
   applySettings();
   var st=document.getElementById('settingsSaveStatus');
   st.textContent='✅ User preferences saved!';setTimeout(function(){st.textContent=''},4000);
@@ -2933,6 +2992,7 @@ function downloadFile(content,name,type){
 
   <!-- USER PREFERENCES -->
   <div id="setSection-user" style="display:none">
+    <div id="setUserProfile"></div>
     <div style="display:flex;gap:.2rem;align-items:center;margin-bottom:.6rem">
       <span style="background:#059669;color:#fff;font-size:.5rem;padding:.1rem .3rem;border-radius:3px;font-weight:700">ALL USERS</span>
       <span style="font-size:.6rem;color:var(--g4)">Personal preferences — override global defaults</span>

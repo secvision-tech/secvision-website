@@ -689,12 +689,34 @@ exports.handler = async (event) => {
       var settingsCol2 = db.collection('settings');
       var scope2 = body.scope || 'global';
       var userId2 = body.userId || 'default';
+      // Role check: only super_admin can save global settings
+      if (scope2 === 'global' && authUser) {
+        var reqUser = await db.collection('users').findOne({ email: authUser.email });
+        if (!reqUser || reqUser.role !== 'super_admin') {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Only Super Admin can modify global settings' }) };
+        }
+      }
       var filter2 = scope2 === 'global' ? { scope: 'global' } : { scope: 'user', userId: userId2 };
       await settingsCol2.updateOne(filter2, {
         $set: { scope: scope2, userId: scope2 === 'user' ? userId2 : null, settings: body.settings, updatedAt: new Date() },
         $setOnInsert: { createdAt: new Date() }
       }, { upsert: true });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: true }) };
+    }
+
+    // ACTION: updateUserPreferences - save preferences to users collection
+    if (action === 'updateUserPreferences') {
+      var email = body.email;
+      if (!email) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Email required' }) };
+      // Users can only update their own preferences
+      if (authUser && authUser.email !== email) {
+        var reqUser2 = await db.collection('users').findOne({ email: authUser.email });
+        if (!reqUser2 || (reqUser2.role !== 'super_admin' && reqUser2.role !== 'admin')) {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Cannot update other user preferences' }) };
+        }
+      }
+      await db.collection('users').updateOne({ email: email }, { $set: { preferences: body.preferences, updatedAt: new Date() } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true }) };
     }
 
     // Get single job by ID (for View from dashboard)
