@@ -2454,9 +2454,12 @@ function initSettingsPage(){
   var isSuper=curUserRole==='super_admin';
   var isAdmin=curUserRole==='admin';
   var globalNav=document.getElementById('setNav-global');
+  var usersNav=document.getElementById('setNav-users');
   if(globalNav)globalNav.style.display=isSuper?'':'none';
-  // If not super_admin, default to user prefs tab
-  if(!isSuper)setSettingsSection('user');
+  if(usersNav)usersNav.style.display=(isSuper||isAdmin)?'':'none';
+  // Default tab based on role
+  if(!isSuper&&!isAdmin)setSettingsSection('user');
+  else if(!isSuper)setSettingsSection('user');
   else setSettingsSection('global');
   // Populate global settings (super_admin only)
   if(isSuper){
@@ -2493,10 +2496,13 @@ function initSettingsPage(){
 }
 
 function setSettingsSection(section){
-  ['global','user'].forEach(function(s){
-    document.getElementById('setSection-'+s).style.display=s===section?'block':'none';
-    document.getElementById('setNav-'+s).classList.toggle('active',s===section);
+  ['global','user','users'].forEach(function(s){
+    var el=document.getElementById('setSection-'+s);
+    var btn=document.getElementById('setNav-'+s);
+    if(el)el.style.display=s===section?'block':'none';
+    if(btn)btn.classList.toggle('active',s===section);
   });
+  if(section==='users')loadUserList();
 }
 
 function updateSettingsPreview(){
@@ -2567,6 +2573,166 @@ function applySettings(){
   cjPerPage=perPage;
   dashLoaded=false;contractLoaded=false;
   if(filtered.length)renderTable();
+}
+
+// ========== USER MANAGEMENT ==========
+async function loadUserList(){
+  var tbody=document.getElementById('usersTableBody');
+  if(!tbody)return;
+  tbody.innerHTML='<tr><td colspan="6" style="padding:.8rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'listUsers'})});
+    var d=await r.json();
+    var users=d.users||[];
+    if(!users.length){tbody.innerHTML='<tr><td colspan="6" style="padding:.8rem;text-align:center;color:var(--g3)">No users found.</td></tr>';return}
+    var roleColors={'super_admin':'#7C3AED','admin':'#2563EB','manager':'#059669','analyst':'#D97706','viewer':'#6B7280','pending':'#DC2626'};
+    var roleLabels={'super_admin':'Super Admin','admin':'Admin','manager':'Manager','analyst':'Analyst','viewer':'Viewer','pending':'Pending'};
+    var statusColors={'active':'#059669','suspended':'#DC2626','pending':'#D97706'};
+    var roleOpts=['super_admin','admin','manager','analyst','viewer'];
+    // Only super_admin can assign super_admin role
+    var canAssignSuper=curUserRole==='super_admin';
+
+    tbody.innerHTML=users.map(function(u){
+      var initials=(u.name||'?').split(' ').map(function(x){return x[0]}).join('').toUpperCase().slice(0,2);
+      var isSelf=curUserData&&u.email===curUserData.email;
+      var roleSelect='<select onchange="updateUserRole(\''+u._id+'\',this.value)" style="font-size:.6rem;padding:.15rem .3rem;border:1px solid var(--g2);border-radius:3px;background:var(--bg)"'+(isSelf?' disabled title="Cannot change own role"':'')+'>';
+      roleOpts.forEach(function(ro){
+        if(ro==='super_admin'&&!canAssignSuper)return;
+        roleSelect+='<option value="'+ro+'"'+(u.role===ro?' selected':'')+'>'+roleLabels[ro]+'</option>';
+      });
+      roleSelect+='</select>';
+
+      var statusBadge='<span onclick="'+(isSelf?'':'toggleUserStatus(\''+u._id+'\',\''+u.status+'\')')+'" style="cursor:'+(isSelf?'default':'pointer')+';background:'+(statusColors[u.status]||'#6B7280')+';color:#fff;font-size:.5rem;padding:.1rem .3rem;border-radius:3px">'+(u.status||'active')+'</span>';
+
+      var lastLogin=u.lastLogin?fmtDate(u.lastLogin):'Never';
+      var actions=isSelf?'<span style="color:var(--g3);font-size:.55rem">You</span>':'<button onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.65rem" title="Remove user">🗑️</button>';
+
+      return '<tr style="border-bottom:1px solid var(--g1)">'
+        +'<td style="padding:.4rem .5rem"><div style="display:flex;align-items:center;gap:.3rem">'
+        +'<span style="width:24px;height:24px;border-radius:50%;background:'+(roleColors[u.role]||'#6B7280')+';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.5rem;font-weight:700;flex-shrink:0">'+initials+'</span>'
+        +'<div><div style="font-weight:600">'+(u.name||'Unknown')+'</div><div style="color:var(--g3);font-size:.55rem">'+(u.email||'')+'</div></div></div></td>'
+        +'<td style="padding:.4rem .5rem"><span style="font-size:.55rem;background:var(--g1);padding:.1rem .3rem;border-radius:3px">'+(u.userType||'internal')+(u.externalCompany?' · '+u.externalCompany:'')+'</span></td>'
+        +'<td style="padding:.4rem .5rem">'+roleSelect+'</td>'
+        +'<td style="padding:.4rem .5rem">'+statusBadge+'</td>'
+        +'<td style="padding:.4rem .5rem;font-size:.55rem;color:var(--g4)">'+lastLogin+'</td>'
+        +'<td style="padding:.4rem .5rem;text-align:center">'+actions+'</td></tr>';
+    }).join('');
+  }catch(e){tbody.innerHTML='<tr><td colspan="6" style="padding:.8rem;text-align:center;color:#DC2626">Error: '+e.message+'</td></tr>'}
+}
+
+function showAddInternalUser(){
+  document.getElementById('m365SearchPanel').style.display='block';
+  document.getElementById('inviteExternalPanel').style.display='none';
+  document.getElementById('m365Search').value='';
+  document.getElementById('m365Results').innerHTML='<div style="color:var(--g3);padding:.3rem">Type a name or email and click Search.</div>';
+  document.getElementById('m365Search').focus();
+}
+
+function showInviteExternal(){
+  document.getElementById('inviteExternalPanel').style.display='block';
+  document.getElementById('m365SearchPanel').style.display='none';
+  document.getElementById('extEmail').value='';
+  document.getElementById('extName').value='';
+  document.getElementById('extCompany').value='';
+  document.getElementById('extRole').value='viewer';
+  document.getElementById('extEmail').focus();
+}
+
+async function searchM365Directory(){
+  var query=document.getElementById('m365Search').value.trim();
+  if(!query||query.length<2){alert('Enter at least 2 characters.');return}
+  var resultsEl=document.getElementById('m365Results');
+  resultsEl.innerHTML='<div style="color:var(--g3);padding:.3rem">🔄 Searching M365 directory...</div>';
+  try{
+    // Get Graph API token with User.ReadBasic.All scope
+    var tokenResp=await msal_.acquireTokenSilent({scopes:['User.ReadBasic.All'],account:curUser}).catch(function(){
+      return msal_.acquireTokenPopup({scopes:['User.ReadBasic.All']});
+    });
+    var graphToken=tokenResp.accessToken;
+    // Search users via Microsoft Graph
+    var searchUrl='https://graph.microsoft.com/v1.0/users?$filter=startswith(displayName,\''+query.replace(/'/g,"\\'")+'\')+or+startswith(mail,\''+query.replace(/'/g,"\\'")+'\')+or+startswith(userPrincipalName,\''+query.replace(/'/g,"\\'")+'\')&$top=10&$select=id,displayName,mail,userPrincipalName,jobTitle,department';
+    var gr=await fetch(searchUrl,{headers:{'Authorization':'Bearer '+graphToken}});
+    var gd=await gr.json();
+    if(gd.error){resultsEl.innerHTML='<div style="color:#DC2626;padding:.3rem">Graph API error: '+(gd.error.message||'Access denied. Admin consent may be needed for User.ReadBasic.All.')+'</div>';return}
+    var users=gd.value||[];
+    if(!users.length){resultsEl.innerHTML='<div style="color:var(--g3);padding:.3rem">No users found matching "'+query+'".</div>';return}
+    resultsEl.innerHTML=users.map(function(u){
+      var email=u.mail||u.userPrincipalName||'';
+      return '<div style="display:flex;align-items:center;justify-content:space-between;padding:.3rem;border-bottom:1px solid var(--g1)">'
+        +'<div><strong>'+(u.displayName||'')+'</strong> <span style="color:var(--g3)">'+email+'</span>'
+        +(u.jobTitle?' · <span style="color:var(--g4)">'+u.jobTitle+'</span>':'')
+        +(u.department?' · <span style="color:var(--g4)">'+u.department+'</span>':'')+'</div>'
+        +'<button onclick="addM365User(\''+email.replace(/'/g,"\\'")+'\',\''+((u.displayName||'').replace(/'/g,"\\'")+'\',\''+(u.id||'')+'\',\''+(u.department||'').replace(/'/g,"\\'"))+'\')" style="padding:.15rem .4rem;background:#0078d4;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;white-space:nowrap">+ Add</button></div>';
+    }).join('');
+  }catch(e){
+    resultsEl.innerHTML='<div style="color:#DC2626;padding:.3rem">Error: '+e.message+'. You may need to grant admin consent for User.ReadBasic.All in Azure Portal.</div>';
+  }
+}
+
+async function addM365User(email,name,entraId,department){
+  if(!email){alert('No email found for this user.');return}
+  var role=prompt('Assign role for '+name+':\n\nOptions: admin, manager, analyst, viewer\n\n(Default: analyst)','analyst');
+  if(role===null)return;
+  if(['super_admin','admin','manager','analyst','viewer'].indexOf(role)===-1)role='analyst';
+  if(role==='super_admin'&&curUserRole!=='super_admin'){alert('Only Super Admin can assign Super Admin role.');return}
+  var st=document.getElementById('userMgmtStatus');
+  st.textContent='Adding '+name+'...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({
+      action:'addUser',email:email.toLowerCase(),name:name,entraId:entraId,
+      userType:'internal',department:department,role:role,status:'active'})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}
+    st.textContent='✅ Added '+name+' as '+role;
+    loadUserList();
+    setTimeout(function(){st.textContent=''},5000);
+  }catch(e){st.textContent='⚠️ Error: '+e.message}
+}
+
+async function inviteExternalUser(){
+  var email=document.getElementById('extEmail').value.trim().toLowerCase();
+  var name=document.getElementById('extName').value.trim();
+  var company=document.getElementById('extCompany').value.trim();
+  var role=document.getElementById('extRole').value;
+  if(!email||!name||!company){alert('Email, name, and company are required.');return}
+  var st=document.getElementById('userMgmtStatus');
+  st.textContent='Inviting '+name+'...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({
+      action:'addUser',email:email,name:name,entraId:'',
+      userType:'external',externalCompany:company,role:role,status:'active'})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}
+    st.textContent='✅ Invited '+name+' ('+company+') as '+role;
+    document.getElementById('inviteExternalPanel').style.display='none';
+    loadUserList();
+    setTimeout(function(){st.textContent=''},5000);
+  }catch(e){st.textContent='⚠️ Error: '+e.message}
+}
+
+async function updateUserRole(userId,newRole){
+  try{
+    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateUser',userId:userId,updates:{role:newRole}})});
+    document.getElementById('userMgmtStatus').textContent='✅ Role updated to '+newRole;
+    setTimeout(function(){document.getElementById('userMgmtStatus').textContent=''},3000);
+  }catch(e){alert('Error: '+e.message)}
+}
+
+async function toggleUserStatus(userId,currentStatus){
+  var newStatus=currentStatus==='active'?'suspended':'active';
+  if(!confirm('Change status to '+newStatus+'?'))return;
+  try{
+    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateUser',userId:userId,updates:{status:newStatus}})});
+    loadUserList();
+  }catch(e){alert('Error: '+e.message)}
+}
+
+async function deleteUser(userId,email){
+  if(!confirm('Remove user '+email+'?\n\nThis will revoke their access.'))return;
+  try{
+    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteUser',userId:userId})});
+    loadUserList();
+  }catch(e){alert('Error: '+e.message)}
 }
 
 // Format date using effective settings
@@ -2938,6 +3104,7 @@ function downloadFile(content,name,type){
   <div style="display:flex;gap:.3rem;margin-bottom:1rem;border-bottom:2px solid var(--g2);padding-bottom:.4rem">
     <button class="mode-btn active" id="setNav-global" onclick="setSettingsSection('global')" style="font-size:.65rem;padding:.25rem .6rem">🏢 Global Settings</button>
     <button class="mode-btn" id="setNav-user" onclick="setSettingsSection('user')" style="font-size:.65rem;padding:.25rem .6rem">👤 User Preferences</button>
+    <button class="mode-btn" id="setNav-users" onclick="setSettingsSection('users')" style="font-size:.65rem;padding:.25rem .6rem">👥 User Management</button>
   </div>
 
   <!-- GLOBAL SETTINGS (Super Admin) -->
@@ -3033,6 +3200,64 @@ function downloadFile(content,name,type){
     <div style="display:flex;gap:.4rem;justify-content:flex-end">
       <button onclick="resetUserSettings()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif">Reset to Global Defaults</button>
       <button onclick="saveUserSettings()" style="padding:.35rem .8rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">💾 Save Preferences</button>
+    </div>
+  </div>
+
+  <!-- USER MANAGEMENT (super_admin / admin only) -->
+  <div id="setSection-users" style="display:none">
+    <div style="display:flex;gap:.2rem;align-items:center;margin-bottom:.6rem">
+      <span style="background:#2563EB;color:#fff;font-size:.5rem;padding:.1rem .3rem;border-radius:3px;font-weight:700">ADMIN</span>
+      <span style="font-size:.6rem;color:var(--g4)">Manage platform users, roles, and access</span>
+    </div>
+
+    <!-- Action buttons -->
+    <div style="display:flex;gap:.4rem;margin-bottom:.8rem;flex-wrap:wrap">
+      <button onclick="showAddInternalUser()" style="padding:.3rem .7rem;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">➕ Add Internal User (M365)</button>
+      <button onclick="showInviteExternal()" style="padding:.3rem .7rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">✉️ Invite External User</button>
+      <button onclick="loadUserList()" style="padding:.3rem .7rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif">🔄 Refresh</button>
+      <span id="userMgmtStatus" style="font-size:.6rem;color:var(--ac);align-self:center"></span>
+    </div>
+
+    <!-- M365 Directory Search (hidden by default) -->
+    <div id="m365SearchPanel" style="display:none;background:var(--card);border:1px solid #0078d4;border-radius:8px;padding:.8rem;margin-bottom:.8rem">
+      <h3 style="font-size:.75rem;color:#0078d4;margin-bottom:.4rem">🔍 Search M365 Directory</h3>
+      <div style="display:flex;gap:.4rem;margin-bottom:.4rem">
+        <input id="m365Search" type="text" placeholder="Search by name or email..." style="flex:1;padding:.3rem .5rem;font-size:.7rem;border:1px solid var(--g2);border-radius:4px;font-family:'DM Sans',sans-serif">
+        <button onclick="searchM365Directory()" style="padding:.3rem .6rem;background:#0078d4;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif">Search</button>
+        <button onclick="document.getElementById('m365SearchPanel').style.display='none'" style="padding:.3rem .5rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer">✕</button>
+      </div>
+      <div id="m365Results" style="max-height:200px;overflow-y:auto;font-size:.65rem"></div>
+    </div>
+
+    <!-- Invite External Panel (hidden by default) -->
+    <div id="inviteExternalPanel" style="display:none;background:var(--card);border:1px solid #059669;border-radius:8px;padding:.8rem;margin-bottom:.8rem">
+      <h3 style="font-size:.75rem;color:#059669;margin-bottom:.4rem">✉️ Invite External User</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.4rem">
+        <div><label class="set-label">Email *</label><input id="extEmail" type="email" placeholder="john@clientcorp.com" class="set-input"></div>
+        <div><label class="set-label">Full Name *</label><input id="extName" type="text" placeholder="John Smith" class="set-input"></div>
+        <div><label class="set-label">Company *</label><input id="extCompany" type="text" placeholder="ClientCorp Inc" class="set-input"></div>
+        <div><label class="set-label">Role</label>
+          <select id="extRole" class="set-input"><option value="viewer">Viewer</option><option value="analyst">Analyst</option></select></div>
+      </div>
+      <div style="display:flex;gap:.4rem;justify-content:flex-end">
+        <button onclick="document.getElementById('inviteExternalPanel').style.display='none'" style="padding:.3rem .5rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif">Cancel</button>
+        <button onclick="inviteExternalUser()" style="padding:.3rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">Send Invite</button>
+      </div>
+    </div>
+
+    <!-- Users Table -->
+    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;overflow:hidden">
+      <table style="width:100%;border-collapse:collapse;font-size:.65rem">
+        <thead><tr style="background:var(--g1);border-bottom:1px solid var(--g2)">
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">User</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Type</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Role</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Status</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Last Login</th>
+          <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4)">Actions</th>
+        </tr></thead>
+        <tbody id="usersTableBody"><tr><td colspan="6" style="padding:1rem;text-align:center;color:var(--g3)">Loading users...</td></tr></tbody>
+      </table>
     </div>
   </div>
 

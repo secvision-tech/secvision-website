@@ -674,6 +674,102 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true, company: company }) };
     }
 
+    // ===== USER MANAGEMENT ACTIONS =====
+
+    // ACTION: listUsers - get all users (admin/super_admin only)
+    if (action === 'listUsers') {
+      if (authUser) {
+        var reqUser = await db.collection('users').findOne({ email: authUser.email });
+        if (!reqUser || (reqUser.role !== 'super_admin' && reqUser.role !== 'admin')) {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Admin access required' }) };
+        }
+      }
+      var users = await db.collection('users').find({}).sort({ createdAt: 1 }).toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ users: users }) };
+    }
+
+    // ACTION: addUser - create a new user (admin/super_admin only)
+    if (action === 'addUser') {
+      if (authUser) {
+        var reqUser = await db.collection('users').findOne({ email: authUser.email });
+        if (!reqUser || (reqUser.role !== 'super_admin' && reqUser.role !== 'admin')) {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Admin access required' }) };
+        }
+        // Only super_admin can create super_admin users
+        if (body.role === 'super_admin' && reqUser.role !== 'super_admin') {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Only Super Admin can assign Super Admin role' }) };
+        }
+      }
+      var email = (body.email || '').toLowerCase().trim();
+      if (!email) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Email is required' }) };
+      // Check if user already exists
+      var existing = await db.collection('users').findOne({ email: email });
+      if (existing) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'User ' + email + ' already exists', user: existing }) };
+      var newUser = {
+        email: email,
+        name: body.name || '',
+        entraId: body.entraId || '',
+        userType: body.userType || 'internal',
+        externalCompany: body.externalCompany || null,
+        department: body.department || '',
+        groups: body.groups || [],
+        role: body.role || 'analyst',
+        status: body.status || 'active',
+        preferences: {},
+        invitedBy: authUser ? authUser.email : null,
+        lastLogin: null,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+      var result = await db.collection('users').insertOne(newUser);
+      newUser._id = result.insertedId;
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ user: newUser, created: true }) };
+    }
+
+    // ACTION: updateUser - update role/status/groups (admin/super_admin only)
+    if (action === 'updateUser') {
+      if (authUser) {
+        var reqUser = await db.collection('users').findOne({ email: authUser.email });
+        if (!reqUser || (reqUser.role !== 'super_admin' && reqUser.role !== 'admin')) {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Admin access required' }) };
+        }
+        if (body.updates && body.updates.role === 'super_admin' && reqUser.role !== 'super_admin') {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Only Super Admin can assign Super Admin role' }) };
+        }
+      }
+      var ObjectId = require('mongodb').ObjectId;
+      var userId = body.userId;
+      var updates = body.updates || {};
+      updates.updatedAt = new Date();
+      await db.collection('users').updateOne({ _id: new ObjectId(userId) }, { $set: updates });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true }) };
+    }
+
+    // ACTION: deleteUser - remove a user (admin/super_admin only)
+    if (action === 'deleteUser') {
+      if (authUser) {
+        var reqUser = await db.collection('users').findOne({ email: authUser.email });
+        if (!reqUser || (reqUser.role !== 'super_admin' && reqUser.role !== 'admin')) {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Admin access required' }) };
+        }
+      }
+      var ObjectId2 = require('mongodb').ObjectId;
+      // Prevent deleting yourself
+      var targetUser = await db.collection('users').findOne({ _id: new ObjectId2(body.userId) });
+      if (targetUser && authUser && targetUser.email === authUser.email) {
+        return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Cannot delete your own account' }) };
+      }
+      // Prevent non-super deleting super_admin
+      if (targetUser && targetUser.role === 'super_admin') {
+        var delReqUser = await db.collection('users').findOne({ email: authUser.email });
+        if (!delReqUser || delReqUser.role !== 'super_admin') {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Only Super Admin can remove Super Admin users' }) };
+        }
+      }
+      await db.collection('users').deleteOne({ _id: new ObjectId2(body.userId) });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: true }) };
+    }
+
     // ACTION: getSettings - fetch settings from MongoDB
     if (action === 'getSettings') {
       var settingsCol = db.collection('settings');
