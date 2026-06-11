@@ -88,8 +88,95 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ user: newUser, isNew: true }) };
     }
 
-    // For all other actions: require valid auth (but don't block if header missing during migration)
-    // TODO Phase 4: enforce role-based access per action
+    // ===== RBAC PERMISSION MATRIX =====
+    var ACTION_PERMISSIONS = {
+      // Data Maintenance: super_admin only
+      reExtract: ['super_admin'], fixCountries: ['super_admin'], fixCompanyTypes: ['super_admin'],
+      fixCompanyUrls: ['super_admin'], fixDescriptions: ['super_admin'], cleanNonCyber: ['super_admin'],
+      // Settings: global = super_admin, user = all
+      // User Management: admin+
+      listUsers: ['super_admin', 'admin'], addUser: ['super_admin', 'admin'],
+      updateUser: ['super_admin', 'admin'], deleteUser: ['super_admin', 'admin'],
+      // Enrichment: manager+
+      enrichCompany: ['super_admin', 'admin', 'manager'],
+      getCompaniesNeedingEnrichment: ['super_admin', 'admin', 'manager'],
+      updateCompanyIfEmpty: ['super_admin', 'admin', 'manager'],
+      // Edit: analyst+
+      updateField: ['super_admin', 'admin', 'manager', 'analyst'],
+      updateStatus: ['super_admin', 'admin', 'manager', 'analyst'],
+      // Read: all authenticated
+      search: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      dashboard: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      getJob: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      getRecentContracts: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      getEnrichmentStatus: ['super_admin', 'admin', 'manager', 'analyst'],
+      // Pie chart searches: all
+      searchDashPie: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      searchContractByCountry: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      searchContractBySkill: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      // Contacts: analyst+ (not viewer)
+      findContacts: ['super_admin', 'admin', 'manager', 'analyst'],
+      saveContacts: ['super_admin', 'admin', 'manager', 'analyst'],
+    };
+
+    // Check RBAC for protected actions (skip for provisionUser and settings)
+    if (action !== 'provisionUser' && action !== 'getSettings' && action !== 'saveSettings' && action !== 'updateUserPreferences') {
+      var allowedRoles = ACTION_PERMISSIONS[action];
+      if (allowedRoles && authUser) {
+        var actionUser = await db.collection('users').findOne({ email: authUser.email });
+        if (!actionUser || allowedRoles.indexOf(actionUser.role) === -1) {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Access denied. Required role: ' + allowedRoles.join(' or ') }) };
+        }
+        if (actionUser.status !== 'active') {
+          return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Account is ' + actionUser.status + '. Contact your administrator.' }) };
+        }
+      }
+    }
+
+    // ===== PHASE 4: RBAC ENFORCEMENT =====
+    // Get authenticated user's role from MongoDB
+    var authRole = null;
+    if (authUser && authUser.email) {
+      var authUserDoc = await db.collection('users').findOne({ email: authUser.email });
+      if (authUserDoc) authRole = authUserDoc.role;
+    }
+
+    // RBAC helper
+    function requireRole(allowedRoles) {
+      if (!authUser || !authRole) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Authentication required' }) };
+      if (authRole === 'pending') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Account pending approval' }) };
+      if (allowedRoles.indexOf(authRole) === -1) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Insufficient permissions. Required: ' + allowedRoles.join(' or ') }) };
+      return null;
+    }
+    var ALL_ACTIVE = ['super_admin', 'admin', 'manager', 'analyst', 'viewer'];
+    var WRITE_ROLES = ['super_admin', 'admin', 'manager', 'analyst'];
+    var MANAGER_UP = ['super_admin', 'admin', 'manager'];
+    var ADMIN_UP = ['super_admin', 'admin'];
+    var SUPER_ONLY = ['super_admin'];
+
+    // Define RBAC rules per action
+    var ACTION_ROLES = {
+      'search': ALL_ACTIVE, 'getDashboard': ALL_ACTIVE, 'getJob': ALL_ACTIVE,
+      'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE,
+      'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
+      'updateField': WRITE_ROLES, 'updateCompanyInfo': WRITE_ROLES,
+      'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': WRITE_ROLES,
+      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP,
+      'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
+      'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
+      'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY,
+      'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
+      'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
+      'saveSettings': null, 'getSettings': ALL_ACTIVE,
+      'updateUserPreferences': ALL_ACTIVE,
+      'provisionUser': null // handled separately above
+    };
+
+    // Enforce RBAC (skip if no auth header — migration grace period)
+    if (authUser && ACTION_ROLES[action] !== undefined && ACTION_ROLES[action] !== null) {
+      var roleCheck = requireRole(ACTION_ROLES[action]);
+      if (roleCheck) return roleCheck;
+    }
 
     // ACTION: search - query saved jobs from database
     if (action === 'search') {

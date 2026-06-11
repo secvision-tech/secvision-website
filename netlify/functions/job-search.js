@@ -754,10 +754,31 @@ function enrichLocation(job) {
 
 exports.handler = async (event) => {
   if (event.httpMethod === 'OPTIONS')
-    return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
+    return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Access-Control-Allow-Methods': 'POST, OPTIONS' }, body: '' };
   if (event.httpMethod !== 'POST')
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   var hdrs = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
+
+  // JWT auth validation
+  var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    try {
+      var token = authHeader.slice(7);
+      var payload = JSON.parse(Buffer.from(token.split('.')[1].replace(/-/g,'+').replace(/_/g,'/'), 'base64').toString());
+      var TENANT_ID = process.env.ENTRA_TENANT_ID || '';
+      var CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
+      if (payload.iss && TENANT_ID && !payload.iss.includes(TENANT_ID)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token issuer' }) };
+      if (payload.aud && CLIENT_ID && payload.aud !== CLIENT_ID) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token audience' }) };
+      if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Token expired' }) };
+      // Check role from users collection
+      var db = await getDb();
+      var email = (payload.preferred_username || payload.email || '').toLowerCase();
+      var userDoc = await db.collection('users').findOne({ email: email });
+      if (!userDoc || userDoc.status !== 'active') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'User not active or not found' }) };
+      if (userDoc.role === 'viewer' || userDoc.role === 'pending') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Insufficient permissions for web search' }) };
+    } catch (authErr) { /* allow if token parse fails during migration */ }
+  }
+
   try {
     var body = JSON.parse(event.body);
     var apiKey = process.env.JSEARCH_API_KEY;
