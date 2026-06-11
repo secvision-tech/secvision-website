@@ -27,6 +27,17 @@ exports.handler = async function(event) {
   var authResult = validateJwt(event);
   if (authResult && authResult.error) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: authResult.error }) };
 
+  // RBAC: check user role from MongoDB (lazy db import — same pattern as processAndSave)
+  if (authResult && authResult.email) {
+    try {
+      var { getDb } = require('./db');
+      var authDb = await getDb();
+      var authUserDoc = await authDb.collection('users').findOne({ email: authResult.email });
+      if (!authUserDoc || authUserDoc.status !== 'active') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'User not active or not found' }) };
+      if (authUserDoc.role === 'viewer' || authUserDoc.role === 'pending') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Insufficient permissions' }) };
+    } catch (dbErr) { /* db unavailable — allow JWT-validated user through */ }
+  }
+
   try {
     var body = JSON.parse(event.body || '{}');
     var action = body.action;

@@ -759,7 +759,7 @@ exports.handler = async (event) => {
     return { statusCode: 405, body: JSON.stringify({ error: 'Method not allowed' }) };
   var hdrs = { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };
 
-  // JWT auth validation (JWT-only, no MongoDB lookup)
+  // JWT auth validation
   var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
   if (authHeader.startsWith('Bearer ')) {
     try {
@@ -770,6 +770,17 @@ exports.handler = async (event) => {
       if (payload.iss && TENANT_ID && !payload.iss.includes(TENANT_ID)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token issuer' }) };
       if (payload.aud && CLIENT_ID && payload.aud !== CLIENT_ID) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Invalid token audience' }) };
       if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return { statusCode: 401, headers: hdrs, body: JSON.stringify({ error: 'Token expired' }) };
+      // RBAC: check user role from MongoDB
+      var authEmail = (payload.preferred_username || payload.email || '').toLowerCase();
+      if (authEmail) {
+        try {
+          var { getDb: getAuthDb } = require('./db');
+          var authDb = await getAuthDb();
+          var authUserDoc = await authDb.collection('users').findOne({ email: authEmail });
+          if (!authUserDoc || authUserDoc.status !== 'active') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'User not active or not found' }) };
+          if (authUserDoc.role === 'viewer' || authUserDoc.role === 'pending') return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Insufficient permissions for web search' }) };
+        } catch (dbErr) { /* db unavailable — allow JWT-validated user through */ }
+      }
     } catch (authErr) { /* allow if token parse fails during migration */ }
   }
 
