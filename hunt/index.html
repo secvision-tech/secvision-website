@@ -164,6 +164,9 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
 .set-label{font-size:.65rem;font-weight:600;color:var(--g4);display:block;margin-bottom:.15rem}
 .set-input{width:100%;padding:.3rem .4rem;font-size:.7rem;border:1px solid var(--g2);border-radius:4px;font-family:'DM Sans',sans-serif;background:var(--bg)}
 .set-hint{font-size:.55rem;color:var(--g3);display:block;margin-top:.1rem}
+/* Role-based visibility via body class */
+body.role-viewer #exportBtns,body.role-pending #exportBtns{display:none!important}
+body.role-viewer .edit-btn{display:none!important}
 .dm{background:#fff;border-radius:14px;max-width:720px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.25)}
 .dm-h{background:var(--pri);padding:1rem 1.2rem;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center}
 .dm-h h3{color:#fff;font-family:'Playfair Display',serif;font-size:1rem}
@@ -197,10 +200,11 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
     <div class="user-dropdown" id="userDropdown">
       <div class="ud-header"><div class="ud-header-name" id="udName">User</div><div class="ud-header-email" id="udEmail">-</div></div>
       <div class="ud-body">
-        <div class="ud-detail"><span class="ud-detail-label">Role</span><span class="ud-detail-value">SecVision Team</span></div>
+        <div class="ud-detail"><span class="ud-detail-label">Role</span><span class="ud-detail-value" id="udRole">-</span></div>
         <div class="ud-detail"><span class="ud-detail-label">Last sign-in</span><span class="ud-detail-value" id="udLogin">-</span></div>
         <div class="ud-detail"><span class="ud-detail-label">Session expires</span><span class="ud-detail-value" id="udExpiry">-</span></div>
         <div class="ud-divider"></div>
+        <div class="ud-item" id="udSettingsBtn" onclick="openSettingsPopup();document.getElementById('userDropdown').classList.remove('open')"><svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1115.6 12 3.6 3.6 0 0112 15.6z"/></svg>Settings</div>
         <div class="ud-item" onclick="logout()" style="color:#E24B4A"><svg viewBox="0 0 24 24" fill="#E24B4A"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>Sign Out</div>
       </div>
     </div>
@@ -228,12 +232,6 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
         <button class="mode-btn" id="modeContract" onclick="setMode('contract')">Contract Pipeline</button>
         <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
-        <button class="mode-btn" id="modeSettings" onclick="setMode('settings')" style="margin-left:auto">⚙️ Settings</button>
-        <div id="userInfo" style="display:flex;align-items:center;gap:.3rem;margin-left:.3rem;padding-left:.5rem;border-left:1px solid var(--g2)">
-          <span id="userAvatar" style="width:24px;height:24px;border-radius:50%;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.55rem;font-weight:700"></span>
-          <span id="userName" style="font-size:.6rem;color:var(--g4);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
-          <button onclick="logout()" style="background:none;border:none;color:var(--g3);cursor:pointer;font-size:.6rem;padding:.1rem .3rem" title="Sign out">↪</button>
-        </div>
       </div>
       <div id="webSearchPanel" style="display:none">
       <div class="sf">
@@ -440,6 +438,11 @@ async function authFetch(url,opts){
   if(!opts.headers['Content-Type'])opts.headers['Content-Type']='application/json';
   var r=await fetch(url,opts);
   if(r.status===401){login();throw new Error('Session expired')}
+  if(r.status===403){
+    var errBody;try{errBody=await r.json()}catch(e){errBody={error:'Access denied'}}
+    alert('⛔ '+(errBody.error||'Access denied. You do not have permission for this action.'));
+    throw new Error(errBody.error||'Access denied');
+  }
   return r;
 }
 function handleAnyToggle(sel){
@@ -510,12 +513,18 @@ function applyRoleVisibility(){
   var isSuper=r==='super_admin';
   var isAdmin=r==='admin';
   var isManager=r==='manager';
-  var isAnalyst=r==='analyst';
   var isViewer=r==='viewer';
+  var isPending=r==='pending';
 
-  // Settings tab: super_admin and admin only
-  var settingsBtn=document.getElementById('modeSettings');
-  if(settingsBtn)settingsBtn.style.display=(isSuper||isAdmin)?'':'none';
+  // Block pending users entirely
+  if(isPending){
+    document.getElementById('appPage').innerHTML='<div style="text-align:center;padding:3rem;color:var(--g4)"><h2>⏳ Account Pending</h2><p>Your account is awaiting admin approval.<br>Please contact your administrator.</p><button onclick="logout()" style="margin-top:1rem;padding:.4rem 1rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer">Sign Out</button></div>';
+    return;
+  }
+
+  // Settings in user dropdown: super_admin and admin only
+  var settingsDropdownBtn=document.getElementById('udSettingsBtn');
+  if(settingsDropdownBtn)settingsDropdownBtn.style.display=(isSuper||isAdmin)?'':'none';
 
   // Search Web tab: not for viewers
   var webBtn=document.getElementById('modeWeb');
@@ -527,18 +536,44 @@ function applyRoleVisibility(){
 
   // Export buttons: manager and above
   var exportEl=document.getElementById('exportBtns');
-  if(exportEl&&isViewer)exportEl.style.display='none';
+  if(exportEl)exportEl.setAttribute('data-min-role','manager');
 
-  // Contact-related elements: hide for external viewers
-  if(isViewer&&curUserData&&curUserData.userType==='external'){
-    document.querySelectorAll('[data-hide-external]').forEach(function(el){el.style.display='none'});
+  // Enrichment buttons in View: manager+
+  document.querySelectorAll('[data-action="enrich"]').forEach(function(el){
+    el.style.display=(isSuper||isAdmin||isManager)?'':'none';
+  });
+
+  // Contact-related: hide for viewers
+  if(isViewer){
+    document.querySelectorAll('[data-action="contacts"]').forEach(function(el){el.style.display='none'});
   }
 
-  // User role indicator in header
+  // Avatar color by role
   var roleColors={'super_admin':'#7C3AED','admin':'#2563EB','manager':'#059669','analyst':'#D97706','viewer':'#6B7280','pending':'#DC2626'};
   var avatarEl=document.getElementById('userAvatar');
   if(avatarEl&&roleColors[r])avatarEl.style.background=roleColors[r];
+
+  // Role label in dropdown and header
+  var roleLabels={'super_admin':'Super Admin','admin':'Admin','manager':'Manager','analyst':'Analyst','viewer':'Viewer'};
+  var udRoleEl=document.getElementById('udRole');
+  if(udRoleEl)udRoleEl.textContent=roleLabels[r]||r;
+  var nameEl=document.getElementById('userName');
+  if(nameEl)nameEl.title='Role: '+(roleLabels[r]||r);
+
+  // Add body class for CSS-based role hiding
+  document.body.className=document.body.className.replace(/\brole-\w+/g,'');
+  document.body.classList.add('role-'+r);
 }
+
+function openSettingsPopup(){
+  document.getElementById('settingsOverlay').classList.add('open');
+  initSettingsPage();
+}
+
+function closeSettingsPopup(){
+  document.getElementById('settingsOverlay').classList.remove('open');
+}
+
 document.addEventListener('click',function(){document.getElementById('userDropdown')?.classList.remove('open')});
 
 function buildTableHeader(){
@@ -613,19 +648,15 @@ function setMode(mode){
   document.getElementById('modeContract').classList.toggle('active',mode==='contract');
   document.getElementById('webSearchPanel').style.display=mode==='web'?'block':'none';
   document.getElementById('dbSearchPanel').style.display=mode==='db'?'block':'none';
-  document.getElementById('settingsPage').style.display=mode==='settings'?'block':'none';
   document.getElementById('dashPanel').classList.toggle('show',mode==='dash');
   document.getElementById('contractPanel').classList.toggle('show',mode==='contract');
   // Show/hide results panel for search modes vs dashboard/contract/settings
-  document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract'||mode==='settings')?'none':'flex';
+  document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract')?'none':'flex';
   if(mode==='dash'){
     if(!dashLoaded){loadDashboard();dashLoaded=true}return;
   }
   if(mode==='contract'){
     if(!contractLoaded){loadContractPipeline();contractLoaded=true}return;
-  }
-  if(mode==='settings'){
-    initSettingsPage();return;
   }
   // Restore previous results for the target mode
   var restore=mode==='web'?webResults:dbResults;
@@ -664,7 +695,7 @@ async function searchDb(){
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Searching database...';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,limit:500})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
@@ -706,11 +737,11 @@ async function cycleStatus(jobIdx,el){
   try{
     if(j._id){
       // DB record - update by _id
-      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateStatus',id:j._id,status:next})});
     }else if(j.id){
       // Web result - update by jobId (the job was auto-saved during search)
-      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateStatusByJobId',jobId:j.id,status:next})});
     }
   }catch(e){console.error('Status update failed:',e)}
@@ -755,7 +786,7 @@ async function applyCompanyType(jobIdx,type){
   allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=type});
   renderTable();
   // Persist to DB - bulkUpdate works by company name so works for both web and DB results
-  try{await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+  try{await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({action:'bulkUpdateCompanyType',company:j.company,companyType:type})})}catch(e){console.error(e)}
 }
 
@@ -779,7 +810,7 @@ async function searchJobs(){
     var countryCode=document.getElementById('sCountry').value||'us';
       var countryName=document.getElementById('sCountry').selectedOptions[0]?.textContent||'';
       var regionVal=document.getElementById('sRegion').value;
-      var r=await fetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
+      var r=await authFetch('/.netlify/functions/job-search',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({roles:searchRoles,pages:pages,datePosted:datePosted,employmentTypes:types.join(','),country:countryCode,countryName:regionVal!=='Any'&&countryCode!=='us'?countryName:'',userEmail:curUser?.username||'',searchRegion:regionVal})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
@@ -928,7 +959,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
       apSt.textContent='🔄 LinkedIn: "'+q.title+'" in '+q.location.split(',')[0]+'... ('+(qi+1)+'/'+totalQueries+')';
 
       // Start the Apify run
-      var sr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+      var sr=await authFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'startSearch',title:q.title,location:q.location,rows:25,
           datePosted:apifyDate,contractType:contractType})});
       var sd=await sr.json();
@@ -946,7 +977,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
         await new Promise(function(r){setTimeout(r,5000)});
         pollCount++;
         apSt.textContent='🔄 LinkedIn: "'+q.title+'" running... ('+Math.round(pollCount*5)+'s)';
-        var cr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+        var cr=await authFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({action:'checkRun',runId:runId})});
         var cd=await cr.json();
         status=cd.status;
@@ -961,7 +992,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
 
       // Fetch results
       apSt.textContent='🔄 LinkedIn: Fetching "'+q.title+'" results...';
-      var rr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+      var rr=await authFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'getResults',datasetId:datasetId})});
       var rd=await rr.json();
       if(rd.jobs){
@@ -992,7 +1023,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
       var batch=allApifyJobs.slice(bi,bi+BATCH_SIZE);
       apSt.textContent='🔄 LinkedIn: Saving batch '+(Math.floor(bi/BATCH_SIZE)+1)+'/'+Math.ceil(allApifyJobs.length/BATCH_SIZE)+' ('+batch.length+' jobs)...';
       try{
-        var pr=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
+        var pr=await authFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
           body:JSON.stringify({action:'processAndSave',jobs:batch})});
         var pd=await pr.json();
         totalSaved+=(pd.saved||0);
@@ -1056,7 +1087,7 @@ async function autoEnrichCompanies(){
     var ENRICH_BATCH=20;
     for(var ebi=0;ebi<companyList.length;ebi+=ENRICH_BATCH){
       var batch=companyList.slice(ebi,ebi+ENRICH_BATCH);
-      var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      var sr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'getEnrichmentStatus',companies:batch})});
       var sd=await sr.json();
       if(sd.needsEnrichment)toEnrich=toEnrich.concat(sd.needsEnrichment);
@@ -1084,7 +1115,7 @@ async function autoEnrichCompanies(){
             enSt.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies.';
             // Continue with LinkedIn scraper for remaining
           }else if(ed.size||ed.linkedin){
-            await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+            await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
               body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:{companySize:ed.size||0,companyLinkedin:ed.linkedin||'',companyUrl:ed.website||''}})});
             enriched++;
           }
@@ -1112,7 +1143,7 @@ async function autoEnrichCompanies(){
               if(lr.linkedin)updates.companyLinkedin=lr.linkedin;
               if(lr.website)updates.companyUrl=lr.website;
               if(Object.keys(updates).length){
-                await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+                await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:updates})});
                 enriched++;
               }
@@ -1124,7 +1155,7 @@ async function autoEnrichCompanies(){
       // Step 2: Discover contacts if missing
       if(!comp.hasContacts){
         try{
-          var cr=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+          var cr=await authFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
             body:JSON.stringify({action:'searchPeople',company:comp.company})});
           var cd=await cr.json();
           if(cd.error&&cd.error.indexOf('insufficient credits')>-1){
@@ -1138,7 +1169,7 @@ async function autoEnrichCompanies(){
             for(var ci=0;ci<enrichCount;ci++){
               var p=cd.people[ci];
               try{
-                var pr=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+                var pr=await authFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({action:'matchPerson',name:p.name,company:comp.company,personId:p.id||'',domain:cd.domain||''})});
                 var pd=await pr.json();
                 if(pd.error&&pd.error.indexOf('insufficient credits')>-1){
@@ -1152,7 +1183,7 @@ async function autoEnrichCompanies(){
               }catch(e){}
             }
             if(contacts.length){
-              await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+              await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({action:'saveContacts',company:comp.company,contacts:contacts})});
               contactsFound+=contacts.length;
             }
@@ -1279,7 +1310,12 @@ function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(
 var currentViewIdx=-1;
 // Safe JSON fetch - handles HTML error pages from Netlify
 async function safeApiFetch(url,opts){
+  opts=opts||{};opts.headers=opts.headers||{};
+  var token=await getAuthToken();
+  if(token)opts.headers['Authorization']='Bearer '+token;
+  if(!opts.headers['Content-Type'])opts.headers['Content-Type']='application/json';
   var r=await fetch(url,opts);
+  if(r.status===401){login();throw new Error('Session expired')}
   var txt=await r.text();
   try{return JSON.parse(txt)}catch(e){
     if(txt.charAt(0)==='<')throw new Error('Server returned an error page ('+r.status+'). Check function logs.');
@@ -1292,7 +1328,7 @@ async function viewDet(i){
   // If description missing (DB search excludes it), fetch full record
   if(!j.description&&j._id){
     try{
-      var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'get',id:j._id})});
       if(r.ok){var data=await r.json();if(data.job){
         j.description=data.job.description||'';
@@ -1331,15 +1367,24 @@ async function viewDet(i){
   var companyTypeHtml=(j.companyType||'Not classified')+' <span onclick="editCompanyTypeInView('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Change company type">✎</span>';
   var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status','<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)+'</span>'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links
-  h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
+  if(canContact){
+    h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
+  }else{
+    h+='<div class="dm-sec"><h4>Contacts</h4><div style="font-size:.7rem;color:var(--g3);padding:.3rem;background:var(--g1);border-radius:4px">🔒 Contact details are restricted for your role.</div>';
+  }
   h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
-  h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Find Contacts</button>';
-  h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
+  var canContact=curUserRole!=='viewer';
+  var canEnrich=curUserRole==='super_admin'||curUserRole==='admin'||curUserRole==='manager';
+  var canEdit=curUserRole!=='viewer';
+  var isExternalViewer=curUserRole==='viewer'&&curUserData&&curUserData.userType==='external';
+  if(canContact)h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Find Contacts</button>';
+  if(canEnrich)h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
   h+='</div></div>';
-  // Load contacts async after rendering
-  setTimeout(async function(){
+  // Load contacts async (hide for external viewers)
+  if(isExternalViewer){var cel2=document.getElementById('viewContacts');if(cel2)cel2.innerHTML='<div style="color:var(--g3);font-size:.6rem">Contact details hidden for external users.</div>'}
+  else setTimeout(async function(){
     try{
-      var cr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:j.company})});
+      var cr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:j.company})});
       var cd=await cr.json();
       var cel=document.getElementById('viewContacts');
       if(cd.contacts&&cd.contacts.length){
@@ -1422,7 +1467,7 @@ async function editCompanySize(idx){
   var sizeNum=parseInt(String(input).replace(/[^0-9]/g,''));
   if(isNaN(sizeNum)||sizeNum<1){alert('Please enter a valid number.');return}
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companySize:String(sizeNum)})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companySize:String(sizeNum)})});
     var d=await r.json();
     j.companySize=sizeNum;
     allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum});
@@ -1438,7 +1483,7 @@ async function cycleStatusInView(idx){
   j.status=next;viewDirty=true;
   if(j._id){
     try{
-      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateStatus',id:j._id,status:next})});
     }catch(e){}
   }
@@ -1462,7 +1507,7 @@ async function getCompanySizeFromView(idx){
     var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'enrichCompany',company:j.company,domain:domain})});
     if(d.size||d.linkedin){
-      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateCompanyIfEmpty',company:j.company,updates:{companySize:d.size||0,companyLinkedin:d.linkedin||'',companyUrl:d.website||''}})});
       var sizeNum=parseInt(String(d.size).replace(/[^0-9]/g,''));
       if(!isNaN(sizeNum)){viewDirty=true;j.companySize=sizeNum;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=sizeNum})}
@@ -1483,7 +1528,7 @@ async function getCompanySizeFromView(idx){
           if(lr.linkedin)updates.companyLinkedin=lr.linkedin;
           if(lr.website)updates.companyUrl=lr.website;
           if(Object.keys(updates).length){
-            await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+            await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
               body:JSON.stringify({action:'updateCompanyIfEmpty',company:j.company,updates:updates})});
             if(updates.companySize){viewDirty=true;j.companySize=updates.companySize;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companySize=updates.companySize})}
             if(updates.companyType){j.companyType=updates.companyType;allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=updates.companyType})}
@@ -1510,7 +1555,7 @@ async function editCompanyTypeInView(idx){
   else{types.forEach(function(t){if(t.toLowerCase()===input.toLowerCase())selected=t})}
   if(!selected){alert('Invalid selection. Please enter a number 1-'+types.length);return}
   try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'bulkUpdateCompanyType',company:j.company,companyType:selected})});
     j.companyType=selected;viewDirty=true;
     allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyType=selected});
@@ -1525,7 +1570,7 @@ async function editCompanyLinkedin(idx){
   if(!input||input===current)return;
   if(input.indexOf('linkedin.com')===-1){alert('Please enter a valid LinkedIn URL.');return}
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companyLinkedin:input})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:j.company,companyLinkedin:input})});
     var d=await r.json();
     j.companyLinkedin=input;
     allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyLinkedin=input});
@@ -1541,8 +1586,8 @@ async function editField(idx,field,label,optionsStr){
   if(!input||input===current)return;
   j[field]=input;viewDirty=true;
   try{
-    if(j._id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
-    else if(j.id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateFieldByJobId',jobId:j.id,field:field,value:input})});
+    if(j._id)await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
+    else if(j.id)await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateFieldByJobId',jobId:j.id,field:field,value:input})});
     viewDet(idx);
   }catch(e){console.error(e)}
 }
@@ -1554,8 +1599,8 @@ async function editFieldFree(idx,field,label){
   if(input===null||input===current)return;
   j[field]=input;viewDirty=true;
   try{
-    if(j._id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
-    else if(j.id)await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateFieldByJobId',jobId:j.id,field:field,value:input})});
+    if(j._id)await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
+    else if(j.id)await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateFieldByJobId',jobId:j.id,field:field,value:input})});
     viewDet(idx);
   }catch(e){console.error(e)}
 }
@@ -1570,10 +1615,10 @@ async function editCountry(idx){
   // Update in DB
   try{
     if(j._id){
-      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateCountry',id:j._id,country:input})});
     }else if(j.id){
-      await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'updateCountryByJobId',jobId:j.id,country:input})});
     }
     viewDet(idx);
@@ -1587,7 +1632,7 @@ async function editFieldInView(idx,field){
   var input=prompt('Edit '+(labels[field]||field)+':\n\nCurrent: '+current);
   if(input===null)return;
   try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'updateField',id:j._id,field:field,value:input})});
     j[field]=input;viewDirty=true;
     viewDet(idx);
@@ -1605,7 +1650,7 @@ async function editCompanyUrl(idx){
   allJobs.forEach(function(jj){if(jj.company===j.company)jj.companyUrl=newUrl});
   // Update in database
   try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'updateCompanyUrl',company:j.company,companyUrl:newUrl})});
     alert('Updated '+j.company+' URL for all records.');
     // Refresh detail view
@@ -1727,7 +1772,7 @@ async function loadDashboard(){
   document.getElementById('dashLoading').textContent='Loading dashboard...';
   document.getElementById('dashContent').style.display='none';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
     if(!r.ok)throw new Error('API returned '+r.status);
     var d=await r.json();
     document.getElementById('dTotal').textContent=d.totalJobs||0;
@@ -1829,7 +1874,7 @@ async function fixCompanyUrls(){
   var st=document.getElementById('fixCompanyTypeStatus');
   st.textContent='🔗 Moving LinkedIn URLs from Company URL to Company LinkedIn...';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixCompanyUrls'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixCompanyUrls'})});
     var d=await r.json();
     st.textContent='🔗 Fixed '+d.fixed+' records: LinkedIn URL moved to correct field. Company URL cleared for website discovery.';
     if(d.fixed>0){dashLoaded=false;contractLoaded=false;loadDashboard();dashLoaded=true;}
@@ -1841,7 +1886,7 @@ async function fixCompanyTypes(){
   var st=document.getElementById('fixCompanyTypeStatus');
   st.textContent='🏷️ Classifying empty company types...';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixCompanyTypes'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixCompanyTypes'})});
     var d=await r.json();
     var breakdown=(d.breakdown||[]).map(function(b){return b._id+': '+b.count}).join(', ');
     st.textContent='🏷️ Fixed '+d.fixed+' of '+d.total+' empty types → defaults applied. Breakdown: '+breakdown;
@@ -1854,7 +1899,7 @@ async function fixCountries(){
   var st=document.getElementById('fixCountryStatus');
   st.textContent='Fixing countries...';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixCountries'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixCountries'})});
     if(!r.ok)throw new Error('Failed');
     var d=await r.json();
     st.textContent='Checked '+d.total+' records. Fixed '+d.fixed+'. '+d.remaining+' still unknown.';
@@ -1866,7 +1911,7 @@ async function fixDescriptions(){
   var st=document.getElementById('fixDescStatus');
   st.textContent='Cleaning descriptions...';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixDescriptions'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'fixDescriptions'})});
     if(!r.ok)throw new Error('Failed');
     var d=await r.json();
     st.textContent='Found '+d.total+' dirty descriptions. Cleaned '+d.fixed+'.'+(d.urlsFixed?' Fixed '+d.urlsFixed+' URLs.':'')+(d.locsFixed?' Fixed '+d.locsFixed+' Remote locations.':'');
@@ -1880,7 +1925,7 @@ async function cleanNonCyberJobs(){
   btn.disabled=true;
   st.textContent='Cleaning non-cyber LinkedIn jobs...';
   try{
-    var r=await fetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cleanupNonCyber'})});
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'cleanupNonCyber'})});
     var d=await r.json();
     st.textContent='✅ Checked '+d.checked+' LinkedIn jobs: '+d.deleted+' non-cyber removed, '+d.kept+' kept.';
     if(d.deleted>0){dashLoaded=false;contractLoaded=false;loadDashboard();dashLoaded=true;}
@@ -1894,7 +1939,7 @@ async function enrichAllCompanies(){
   btn.disabled=true;
   st.textContent='Loading unique companies...';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getUniqueCompanies'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getUniqueCompanies'})});
     var d=await r.json();
     var companies=(d.companies||[]).filter(function(c){
       if(!c.company)return false;
@@ -1913,10 +1958,10 @@ async function enrichAllCompanies(){
       var c=companies[i];
       st.textContent='Enriching '+(i+1)+'/'+companies.length+': '+c.company+'...';
       try{
-        var er=await fetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:c.company,domain:''})});
+        var er=await authFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:c.company,domain:''})});
         var ed=await er.json();
         if(ed.size||ed.linkedin){
-          await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:c.company,companySize:ed.size||'',companyLinkedin:ed.linkedin||'',companyWebsite:ed.website||''})});
+          await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:c.company,companySize:ed.size||'',companyLinkedin:ed.linkedin||'',companyWebsite:ed.website||''})});
           enriched++;
         }else{failed++}
         if(ed.error&&ed.error.indexOf('insufficient credits')>-1){
@@ -1946,7 +1991,7 @@ async function enrichFromLinkedIn(){
     var batch=0,totalEnriched=0,totalCompanies=0;
     var BATCH=10;
     // First get total count
-    var cr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    var cr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'getCompaniesNeedingEnrichment',skip:0,limit:1})});
     var cd=await cr.json();
     totalCompanies=cd.total||0;
@@ -1955,7 +2000,7 @@ async function enrichFromLinkedIn(){
 
     while(batch*BATCH<totalCompanies&&batch<20){// Max 200 companies
       btn.textContent='🔗 Batch '+(batch+1)+': fetching companies...';
-      var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'getCompaniesNeedingEnrichment',skip:batch*BATCH,limit:BATCH})});
       var d=await r.json();
       var companies=d.companies||[];
@@ -1985,7 +2030,7 @@ async function enrichFromLinkedIn(){
             if(sr.linkedin&&!comp.companyLinkedin)updates.companyLinkedin=sr.linkedin;
             if(sr.website&&(!comp.companyUrl||comp.companyUrl.indexOf('google.com/search')>-1))updates.companyUrl=sr.website;
             if(Object.keys(updates).length){
-              await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+              await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
                 body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:updates})});
               totalEnriched++;
             }
@@ -2008,7 +2053,7 @@ async function reExtractFields(){
   var st=document.getElementById('reExtractStatus');
   st.textContent='Re-extracting fields from all descriptions...';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reExtract'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'reExtract'})});
     if(!r.ok)throw new Error('Failed');
     var d=await r.json();
     st.textContent='Processed '+d.total+' jobs. Updated '+d.updated+' records.';
@@ -2020,7 +2065,7 @@ async function loadContractPipeline(){
   document.getElementById('contractLoading').style.display='block';
   document.getElementById('contractContent').style.display='none';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
     if(!r.ok)throw new Error('API returned '+r.status);
     var d=await r.json();
     document.getElementById('dContract').textContent=d.contractTotal||0;
@@ -2056,7 +2101,7 @@ async function searchDbByCompany(company){
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading '+company+' openings...';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({action:'search',company:company,limit:500,sort:JSON.stringify({datePosted:-1})})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
@@ -2141,7 +2186,7 @@ async function fetchRecentContracts(){
   var el=document.getElementById('contractJobsList');if(!el)return;
   el.innerHTML='<div style="color:var(--g4);padding:.3rem">Loading latest contract jobs...</div>';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getRecentContracts'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getRecentContracts'})});
     var d=await r.json();
     cjData=(d.contracts||[]).map(function(j,i){
       j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';
@@ -2234,7 +2279,7 @@ function renderContractJobs(){
 
 async function viewContractJob(jobId){
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getJob',id:jobId})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getJob',id:jobId})});
     var d=await r.json();
     if(d.job){
       var j=d.job;
@@ -2291,7 +2336,7 @@ function searchDashPie(field,value){
   else if(field==='country')params.detectedCountry=value;
   else params.query=value;
 
-  fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)})
+  authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)})
   .then(function(r){return r.json()}).then(function(data){
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -2315,7 +2360,7 @@ function searchContractBySkill(skill){
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading contract jobs with '+skill+'...';
   document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
-  fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+  authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({action:'search',query:skill,jobType:'Contract',limit:500,sort:JSON.stringify({datePosted:-1})})})
   .then(function(r){return r.json()}).then(function(data){
     allJobs=data.jobs||[];
@@ -2344,7 +2389,7 @@ function searchContractByCountry(country){
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Loading contract jobs in '+country+'...';
   document.getElementById('rTable').style.display='none';document.getElementById('emptyState').style.display='none';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
-  fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+  authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({action:'search',jobType:'Contract',detectedCountry:country,limit:500,sort:JSON.stringify({datePosted:-1})})})
   .then(function(r){return r.json()}).then(function(data){
     allJobs=data.jobs||[];
@@ -2374,7 +2419,7 @@ async function searchDbByCompanyAndType(company,jobType){
   try{
     var body={action:'search',company:company,limit:500,sort:JSON.stringify({datePosted:-1})};
     if(jobType)body.jobType=jobType;
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -2428,7 +2473,7 @@ function loadSettings(){
 
 async function fetchGlobalSettings(){
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getSettings',scope:'global'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getSettings',scope:'global'})});
     var d=await r.json();
     if(d.settings){Object.assign(GLOBAL_SETTINGS,d.settings);localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS))}
   }catch(e){}
@@ -2778,7 +2823,7 @@ async function openContactFinder(company,domain){
   // Load existing saved contacts
   document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:var(--g5)">Loading saved contacts...</div>';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:company})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:company})});
     var d=await r.json();
     if(d.contacts&&d.contacts.length){
       // Sort by seniority
@@ -2865,7 +2910,7 @@ async function saveDiscovered(){
   checks.forEach(function(c){contacts.push({name:c.dataset.name,designation:c.dataset.desig||'N/A',email:c.dataset.email||'N/A',linkedin:c.dataset.linkedin||'',source:'Apollo.io'})});
   document.getElementById('cfStatus').textContent='Saving '+contacts.length+' contacts...';
   try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:contacts})});
+    await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:contacts})});
     document.getElementById('cfStatus').textContent='✅ Saved '+contacts.length+' contacts to all '+cfCompany+' jobs!';
     openContactFinder(cfCompany);
   }catch(e){document.getElementById('cfStatus').textContent='Error: '+e.message}
@@ -2904,7 +2949,7 @@ async function apolloEnrich(){
     // Save company size to DB
     if(d.size){
       try{
-        var sr=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:cfCompany,companySize:d.size,companyLinkedin:d.linkedin||'',companyWebsite:d.website||''})});
+        var sr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:cfCompany,companySize:d.size,companyLinkedin:d.linkedin||'',companyWebsite:d.website||''})});
         var sd=await sr.json();
         document.getElementById('cfStatus').textContent='✅ Company info saved ('+(sd.modified||0)+' jobs updated).';
       }catch(e){document.getElementById('cfStatus').textContent='Info displayed but failed to save: '+e.message}
@@ -2953,7 +2998,7 @@ async function addContact(){
   if(!name||!desig){document.getElementById('cfStatus').textContent='Name and designation are required.';return}
   document.getElementById('cfStatus').textContent='Saving...';
   try{
-    var r=await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:[{name:name,designation:desig,email:email||'N/A',linkedin:linkedin,source:source}]})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:[{name:name,designation:desig,email:email||'N/A',linkedin:linkedin,source:source}]})});
     var d=await r.json();
     document.getElementById('cfStatus').textContent='✅ Saved! Contact added to all '+cfCompany+' jobs.';
     document.getElementById('cfName').value='';document.getElementById('cfDesignation').value='';document.getElementById('cfEmail').value='';document.getElementById('cfLinkedin').value='';
@@ -2963,7 +3008,7 @@ async function addContact(){
 async function deleteContact(id){
   if(!confirm('Remove this contact?'))return;
   try{
-    await fetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'deleteContact',contactId:id})});
+    await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'deleteContact',contactId:id})});
     openContactFinder(cfCompany);
   }catch(e){alert('Error: '+e.message)}
 }
@@ -3096,9 +3141,12 @@ function downloadFile(content,name,type){
   var a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(u);
 }
 </script>
-<!-- Settings Page -->
-<div id="settingsPage" style="display:none;padding:1rem;max-width:900px;margin:0 auto">
-  <h2 style="font-size:1rem;color:var(--pri);margin-bottom:.8rem;display:flex;align-items:center;gap:.4rem">⚙️ Application Settings</h2>
+<!-- Settings Popup -->
+<div class="do" id="settingsOverlay" onclick="if(event.target===this)closeSettingsPopup()">
+<div class="dm" style="max-width:700px;max-height:90vh;overflow-y:auto">
+<div class="dm-h"><h3>⚙️ Application Settings</h3><button class="dm-close" onclick="closeSettingsPopup()">&times;</button></div>
+<div class="dm-body" style="padding:.8rem">
+<div id="settingsPage" style="max-width:700px;margin:0 auto">
 
   <!-- Settings Navigation -->
   <div style="display:flex;gap:.3rem;margin-bottom:1rem;border-bottom:2px solid var(--g2);padding-bottom:.4rem">
@@ -3263,5 +3311,6 @@ function downloadFile(content,name,type){
 
   <div id="settingsSaveStatus" style="font-size:.65rem;color:#059669;text-align:right;margin-top:.4rem"></div>
 </div>
+</div></div></div>
 </body>
 </html>
