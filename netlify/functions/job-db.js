@@ -12,9 +12,9 @@ function decodeJwt(token) {
 }
 
 // Validate JWT claims
-var TENANT_ID = '06f8ce50-3995-4966-9e25-7cfd7cd94a81';
-var CLIENT_ID = 'dc517c46-dcf0-4d38-80e0-3cda854a5d59';
-var BOOTSTRAP_ADMIN = 'sunil@secvisiontech.com';
+var TENANT_ID = process.env.ENTRA_TENANT_ID || '';
+var CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
+var BOOTSTRAP_ADMIN = (process.env.BOOTSTRAP_ADMIN_EMAIL || '').toLowerCase();
 
 function validateToken(event) {
   var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
