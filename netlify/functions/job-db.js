@@ -1285,20 +1285,26 @@ exports.handler = async (event) => {
       var STAFFING = /\b(?:robert\s*half|hays|adecco|randstad|manpower|kelly\s*services|kforce|insight\s*global|teksystems|apex\s*systems|modis|aston\s*carter|aerotek|beacon\s*hill|cybercoders|michael\s*page|page\s*group|harvey\s*nash|nigel\s*frank|brewer\s*morris|la\s*fosse|barclay\s*simpson|spencer\s*ogden|lorien|reed|huxley|sthree|talentworks|glocomms|akkodis|mondo|addison\s*group|vaco|judge\s*group|motionpoint|genesis10|artech|compuGain|aquent|mastech|net2source|softnice|synergy|hirekeyz|teksky|collabera|wipro)\b/i;
 
       var allRecs = await col.find({
-        $or: [{ companyType: null }, { companyType: '' }, { companyType: { $exists: false } }]
+        $or: [{ companyType: null }, { companyType: '' }, { companyType: { $exists: false } }, { companyType: 'IT Consulting' }]
       }).project({ _id: 1, company: 1, description: 1 }).toArray();
 
       var ops = [];
       allRecs.forEach(function(j) {
-        var name = (j.company || '').toLowerCase();
+        var name = (j.company || '');
+        var nameLower = name.toLowerCase();
         var desc = (j.description || '').slice(0, 2000).toLowerCase();
         var type = 'Enterprise'; // default
 
-        if (JOB_BOARDS.test(name)) type = 'Job Board';
-        else if (STAFFING.test(name)) type = 'Staffing/Recruiting';
+        // Check company NAME for classification (not description — too many false positives)
+        if (JOB_BOARDS.test(nameLower)) type = 'Job Board';
+        else if (STAFFING.test(nameLower)) type = 'Staffing/Recruiting';
+        // Consulting: check company NAME only (not description)
+        else if (/\bconsult(?:ing|ants?|ancy)\b|\badvisory\b|\bprofessional\s*services\b|\bsystem\s*integrat/i.test(nameLower)) type = 'IT Consulting';
+        // MSSP/MDR: description is OK (specific enough terms)
         else if (/\bmssp\b|\bmdr\b|managed\s*(?:security|detection|soc)|security\s*(?:operations\s*center|service\s*provider)/i.test(desc)) type = 'MSSP/MDR';
+        // Government: description is OK (specific terms)
         else if (/\bgovernment\b|\bfederal\b|\bdod\b|\bdefense\b|\bintelligence\s*community\b|\bclearance\b/i.test(desc)) type = 'Government';
-        else if (/\bconsulting\b|\badvisory\b|\bprofessional\s*services\b|\bsystem\s*integrator\b/i.test(desc)) type = 'IT Consulting';
+        // Startup: description is OK
         else if (/\bstartup\b|\bseries\s*[a-d]\b|\bfounded\s*in\s*20[12]\d\b/i.test(desc)) type = 'Startup';
 
         ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: { companyType: type } } } });
