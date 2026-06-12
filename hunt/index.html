@@ -2849,7 +2849,7 @@ async function openContactFinder(company,domain,linkedin){
         for(var si=0;si<senOrder.length;si++){if(senOrder[si].test(db)){sb=si;break}}
         return sa-sb;
       });
-      var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">📋 Saved Contacts ('+d.contacts.length+')</div><div style="display:flex;flex-direction:column;gap:.2rem">';
+      var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem"><div style="font-size:.65rem;color:var(--g5);font-weight:600">📋 Saved Contacts ('+d.contacts.length+')</div><button onclick="deleteAllContacts()" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All</button></div><div style="display:flex;flex-direction:column;gap:.2rem">';
       d.contacts.forEach(function(c){
         var linkedinHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-size:.55rem">LinkedIn ↗</a>':'';
         var emailHtml=(c.email&&c.email!=='N/A')?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'';
@@ -2857,10 +2857,8 @@ async function openContactFinder(company,domain,linkedin){
       });
       h+='</div>';
       document.getElementById('cfExisting').innerHTML=h;
-      document.getElementById('cfDeleteAllBtn').innerHTML='<button onclick="deleteAllContacts()" style="padding:.3rem .8rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All ('+d.contacts.length+')</button>';
     }else{
       document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts saved yet.</div>';
-      document.getElementById('cfDeleteAllBtn').innerHTML='';
     }
   }catch(e){document.getElementById('cfExisting').innerHTML=''}
 }
