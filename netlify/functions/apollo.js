@@ -1,9 +1,9 @@
 // Apollo.io API integration
 const APOLLO_KEY = process.env.APOLLO_API_KEY;
-const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' };
+const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
 
 async function apolloFetch(endpoint, body) {
-  body.api_key = APOLLO_KEY;
+
   var resp = await fetch('https://api.apollo.io/api/v1/' + endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'x-api-key': APOLLO_KEY },
