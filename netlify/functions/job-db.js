@@ -356,7 +356,7 @@ exports.handler = async (event) => {
         { $group: { _id: '$status', count: { $sum: 1 } } }
       ]).toArray();
       var typeCounts = await col.aggregate([
-        { $match: { companyType: { $ne: '' } } },
+        { $match: { companyType: { $nin: [null, ''] } } },
         { $group: { _id: '$companyType', count: { $sum: 1 } } },
         { $sort: { count: -1 } }
       ]).toArray();
