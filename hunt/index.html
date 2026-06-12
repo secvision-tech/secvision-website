@@ -1457,7 +1457,9 @@ function findContacts(idx){
   if(j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1){
     try{domain=new URL(j.companyUrl).hostname.replace(/^www\./,'')}catch(e){}
   }
-  openContactFinder(j.company,domain);
+  // Pass LinkedIn URL for enrichment
+  var linkedin=j.companyLinkedin||'';
+  openContactFinder(j.company,domain,linkedin);
 }
 
 async function editCompanySize(idx){
@@ -2437,7 +2439,7 @@ async function searchDbByCompanyAndType(company,jobType){
 }
 
 // #176: Contact Finder Popup
-var contactPopupHtml='<div id="contactPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1000;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:620px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="cfTitle">Find Contacts</h3><button onclick="closeContactPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.6rem"><button onclick="apolloSearch()" id="cfAutoBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Auto-Discover Contacts</button><button onclick="apolloEnrich()" id="cfEnrichBtn" style="padding:.3rem .8rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button></div><div id="cfCompanyInfo" style="font-size:.6rem;color:var(--g5);margin-bottom:.4rem"></div><div id="cfDiscovered" style="margin-bottom:.6rem"></div><div id="cfExisting" style="margin-bottom:.6rem"></div><div id="cfManualSearch" style="margin-bottom:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🔗 Manual LinkedIn Search:</div><div style="display:flex;flex-wrap:wrap;gap:.3rem" id="cfLinks"></div></div><div style="border-top:1px solid #e5e7eb;padding-top:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">✏️ Add Contact — Enter name &amp; click Enrich to auto-fill from Apollo</div><div style="display:grid;grid-template-columns:1fr auto;gap:.4rem"><input id="cfName" placeholder="Full Name (e.g. John Smith)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><button onclick="enrichPerson()" id="cfEnrichPersonBtn" style="padding:.3rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Enrich</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.4rem"><input id="cfDesignation" placeholder="Designation (e.g. CISO, HR Head)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfEmail" placeholder="Email" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfLinkedin" placeholder="LinkedIn URL (optional)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><select id="cfSource" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><option value="Apollo.io">Apollo.io</option><option value="LinkedIn">LinkedIn</option><option value="Company Website">Company Website</option><option value="Manual">Manual</option></select></div><button onclick="addContact()" style="margin-top:.4rem;padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Contact</button></div><div id="cfStatus" style="font-size:.6rem;color:var(--pri);margin-top:.3rem"></div></div></div>';
+var contactPopupHtml='<div id="contactPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1000;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:620px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="cfTitle">Find Contacts</h3><button onclick="closeContactPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.6rem"><button onclick="apolloSearch()" id="cfAutoBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Auto-Discover Contacts</button><button onclick="apolloEnrich()" id="cfEnrichBtn" style="padding:.3rem .8rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button><button onclick=\"deleteAllContacts()\" id=\"cfDeleteAllBtn\" style=\"padding:.3rem .8rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600\">🗑️ Delete All Contacts</button></div><div id="cfCompanyInfo" style="font-size:.6rem;color:var(--g5);margin-bottom:.4rem"></div><div id="cfDiscovered" style="margin-bottom:.6rem"></div><div id="cfExisting" style="margin-bottom:.6rem"></div><div id="cfManualSearch" style="margin-bottom:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🔗 Manual LinkedIn Search:</div><div style="display:flex;flex-wrap:wrap;gap:.3rem" id="cfLinks"></div></div><div style="border-top:1px solid #e5e7eb;padding-top:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">✏️ Add Contact — Enter name &amp; click Enrich to auto-fill from Apollo</div><div style="display:grid;grid-template-columns:1fr auto;gap:.4rem"><input id="cfName" placeholder="Full Name (e.g. John Smith)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><button onclick="enrichPerson()" id="cfEnrichPersonBtn" style="padding:.3rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Enrich</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.4rem"><input id="cfDesignation" placeholder="Designation (e.g. CISO, HR Head)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfEmail" placeholder="Email" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfLinkedin" placeholder="LinkedIn URL (optional)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><select id="cfSource" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><option value="Apollo.io">Apollo.io</option><option value="LinkedIn">LinkedIn</option><option value="Company Website">Company Website</option><option value="Manual">Manual</option></select></div><button onclick="addContact()" style="margin-top:.4rem;padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Contact</button></div><div id="cfStatus" style="font-size:.6rem;color:var(--pri);margin-top:.3rem"></div></div></div>';
 // ========== APPLICATION SETTINGS ==========
 var GLOBAL_SETTINGS={dateFormat:'DD/MM/YYYY',timeZone:'Asia/Kolkata',timeFormat:'24h',perPage:25,defaultTab:'dash',autoEnrich:'on',defaultCompanyType:'Enterprise',nonCyberFilter:'strict',maxQueries:30};
 var USER_PREFS={dateFormat:'',timeZone:'',timeFormat:'',perPage:'',defaultTab:''};
@@ -2808,15 +2810,26 @@ loadSettings();
 
 document.addEventListener('DOMContentLoaded',function(){document.body.insertAdjacentHTML('beforeend',contactPopupHtml)});
 
-var cfCompany='',cfDomain='';
-async function openContactFinder(company,domain){
+var cfCompany='',cfDomain='',cfLinkedin='';
+async function openContactFinder(company,domain,linkedin){
   cfCompany=company;
   cfDomain=domain||'';
+  cfLinkedin=linkedin||'';
+  var hasDomain=cfDomain&&cfDomain.length>3;
+  var hasLinkedin=cfLinkedin&&cfLinkedin.indexOf('linkedin.com')>-1;
   document.getElementById('cfTitle').textContent='Find Contacts — '+company+(cfDomain?' ('+cfDomain+')':'');
   document.getElementById('contactPopup').style.display='flex';
   document.getElementById('cfDiscovered').innerHTML='';
   document.getElementById('cfCompanyInfo').innerHTML='';
   document.getElementById('cfStatus').textContent='';
+  // Disable Auto-Discover if no domain and no LinkedIn
+  var autoBtn=document.getElementById('cfAutoBtn');
+  if(!hasDomain&&!hasLinkedin){
+    autoBtn.disabled=true;autoBtn.style.opacity='0.5';autoBtn.title='No company URL or LinkedIn page — cannot search Apollo';
+    document.getElementById('cfCompanyInfo').innerHTML='<div style="color:#D97706;font-size:.6rem;padding:.3rem;background:#FFFBEB;border-radius:4px">⚠️ No company website or LinkedIn page found. Add a Company URL or LinkedIn in the View to enable contact discovery.</div>';
+  }else{
+    autoBtn.disabled=false;autoBtn.style.opacity='1';autoBtn.title='';
+  }
   // LinkedIn search links
   var roles=['CISO','VP Security','Hiring Manager','HR Head','Recruiter','Talent Acquisition','SOC Manager','Security Director'];
   var linksHtml=roles.map(function(r){return '<a href="https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent(company+' AND '+r)+'" target="_blank" style="font-size:.6rem;padding:.2rem .5rem;background:var(--pri);color:#fff;border-radius:3px;text-decoration:none">'+r+'</a>'}).join('');
@@ -2858,12 +2871,15 @@ async function apolloSearch(){
     if(d.error){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">'+esc(d.error)+'</div>';return}
     if(!d.people||!d.people.length){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts found. Try LinkedIn search below.</div>';return}
 
+    // Cap at 20 contacts max per company
+    var MAX_CONTACTS=20;
+    var people=d.people.slice(0,MAX_CONTACTS);
     // Step 2: Auto-enrich top 5 for emails + LinkedIn + phone
-    var enrichCount=Math.min(5,d.people.length);
+    var enrichCount=Math.min(5,people.length);
     var companyDomain=d.domain||'';
     var enriched=[];
-    for(var i=0;i<d.people.length;i++){
-      var p=d.people[i];
+    for(var i=0;i<people.length;i++){
+      var p=people[i];
       if(i<enrichCount && p.name){
         document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#6C3FBF">Step 2: Enriching '+(i+1)+'/'+enrichCount+': '+p.name+'... (1 credit)</div>';
         try{
@@ -2966,6 +2982,19 @@ function closeContactPopup(){
     viewDirty=true;
     viewDet(currentViewIdx);
   }
+}
+
+async function deleteAllContacts(){
+  if(!cfCompany)return;
+  var count=document.querySelectorAll('#cfExisting .dm-sec, #cfExisting div[style*="f3f4f6"]').length||'all';
+  if(!confirm('Delete ALL contacts for "'+cfCompany+'"?\n\nThis cannot be undone.'))return;
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteCompanyContacts',company:cfCompany})});
+    var d=await r.json();
+    document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:#059669;padding:.3rem;background:#f0fdf4;border-radius:4px">✅ Deleted '+(d.deleted||0)+' contacts for '+cfCompany+'.</div>';
+    document.getElementById('cfDiscovered').innerHTML='';
+    document.getElementById('cfStatus').textContent='';
+  }catch(e){alert('Error: '+e.message)}
 }
 async function enrichPerson(){
   var name=document.getElementById('cfName').value.trim();

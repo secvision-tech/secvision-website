@@ -686,6 +686,12 @@ exports.handler = async (event) => {
       var contacts = body.contacts || [];
       var company = body.company || '';
       if (!company || !contacts.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company and contacts required' }) };
+      // Cap at 20 contacts per company
+      var MAX_CONTACTS = 20;
+      var existingCount = await contactsCol.countDocuments({ company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
+      var allowedNew = Math.max(0, MAX_CONTACTS - existingCount);
+      if (allowedNew === 0) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: 0, message: 'Contact limit (20) reached for ' + company }) };
+      contacts = contacts.slice(0, allowedNew);
       var ops = contacts.map(function(c) {
         return { updateOne: { filter: { company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }, email: c.email },
           update: { $set: { company: company, name: c.name, designation: c.designation, email: c.email, linkedin: c.linkedin || '', source: c.source || 'Manual', updatedAt: new Date() },
@@ -865,6 +871,15 @@ exports.handler = async (event) => {
       }
       await db.collection('users').deleteOne({ _id: new ObjectId2(body.userId) });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: true }) };
+    }
+
+    // ACTION: deleteCompanyContacts - delete all contacts for a company
+    if (action === 'deleteCompanyContacts') {
+      var company = body.company;
+      if (!company) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company name required' }) };
+      var contactsCol = db.collection('contacts');
+      var result = await contactsCol.deleteMany({ company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: result.deletedCount, company: company }) };
     }
 
     // ACTION: getSettings - fetch settings from MongoDB
