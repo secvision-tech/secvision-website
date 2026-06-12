@@ -2808,7 +2808,9 @@ function fmtDate(date){return formatDateWithSettings(date)}
 // Initialize settings on load
 loadSettings();
 
-document.addEventListener('DOMContentLoaded',function(){document.body.insertAdjacentHTML('beforeend',contactPopupHtml)});
+document.addEventListener('DOMContentLoaded',function(){document.body.insertAdjacentHTML('beforeend',contactPopupHtml);
+  document.getElementById('cfDeleteAllBtn').addEventListener('click',function(e){e.stopPropagation();deleteAllContacts()});
+});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
 async function openContactFinder(company,domain,linkedin){
@@ -2998,11 +3000,6 @@ async function deleteAllContacts(){
     var dab=document.getElementById('cfDeleteAllBtn');if(dab)dab.style.display='none';
   }catch(e){alert('Error: '+e.message)}
 }
-// Event delegation for Delete All button (backup if onclick doesn't fire)
-document.addEventListener('click',function(e){
-  var btn=e.target.closest('#cfDeleteAllBtn');
-  if(btn)deleteAllContacts();
-});
 async function enrichPerson(){
   var name=document.getElementById('cfName').value.trim();
   if(!name){document.getElementById('cfStatus').textContent='Enter a name first.';return}
