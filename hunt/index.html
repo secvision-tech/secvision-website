@@ -2988,7 +2988,6 @@ function closeContactPopup(){
 
 async function deleteAllContacts(){
   if(!cfCompany)return;
-  var count=document.querySelectorAll('#cfExisting .dm-sec, #cfExisting div[style*="f3f4f6"]').length||'all';
   if(!confirm('Delete ALL contacts for "'+cfCompany+'"?\n\nThis cannot be undone.'))return;
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteCompanyContacts',company:cfCompany})});
@@ -2996,8 +2995,14 @@ async function deleteAllContacts(){
     document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:#059669;padding:.3rem;background:#f0fdf4;border-radius:4px">✅ Deleted '+(d.deleted||0)+' contacts for '+cfCompany+'.</div>';
     document.getElementById('cfDiscovered').innerHTML='';
     document.getElementById('cfStatus').textContent='';
+    var dab=document.getElementById('cfDeleteAllBtn');if(dab)dab.style.display='none';
   }catch(e){alert('Error: '+e.message)}
 }
+// Event delegation for Delete All button (backup if onclick doesn't fire)
+document.addEventListener('click',function(e){
+  var btn=e.target.closest('#cfDeleteAllBtn');
+  if(btn)deleteAllContacts();
+});
 async function enrichPerson(){
   var name=document.getElementById('cfName').value.trim();
   if(!name){document.getElementById('cfStatus').textContent='Enter a name first.';return}
