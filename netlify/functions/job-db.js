@@ -491,6 +491,15 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 20 }
       ]).toArray();
+      var contractCerts = await col.aggregate([
+        { $match: { jobType: 'Contract', certifications: { $nin: [null, '', 'See details'] } } },
+        { $project: { items: { $split: ['$certifications', ', '] } } },
+        { $unwind: '$items' },
+        { $match: { items: { $ne: '' } } },
+        { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
+        { $sort: { count: -1 } },
+        { $limit: 15 }
+      ]).toArray();
       // Average hourly rate for contracts (convert all to hourly USD)
       var contractSalaries = await col.find({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } }).project({ salary: 1 }).limit(200).toArray();
       var avgRate = '-';
@@ -660,12 +669,13 @@ exports.handler = async (event) => {
       skillCounts = normList(skillCounts);
       roleCounts = normList(roleCounts);
       contractSkills = normList(contractSkills);
+      contractCerts = normList(contractCerts);
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
         certCounts, complianceCounts, toolsCounts, locationCounts, recentScans,
         partnerTargets, roleCounts, skillCounts, salaryJobs,
-        contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, avgRate
+        contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, contractCerts, avgRate
       })};
     }
 
@@ -915,10 +925,11 @@ exports.handler = async (event) => {
 
     // Get latest 100 contract jobs
     if (action === 'getRecentContracts') {
-      var contracts = await col.find({ jobType: 'Contract' })
+      var oneMonthAgo = new Date();
+      oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+      var contracts = await col.find({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] })
         .sort({ datePosted: -1, dateScanned: -1 })
-        .limit(100)
-        .project({ title: 1, company: 1, companyType: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1 })
+        .project({ title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
         .toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contracts: contracts }) };
     }

@@ -353,13 +353,14 @@ body.role-viewer .edit-btn{display:none!important}
         <div class="dash-section">
           <div class="dash-sec-title">🎯 Contract Pipeline — Immediate Revenue Opportunities</div>
           <div class="dash-sec-sub">Contract positions where you can place SOC/security consultants for immediate billing</div>
-          <div class="dash-charts">
+          <div class="dash-charts" style="grid-template-columns:1fr 1fr 1fr">
             <div class="dash-chart-box"><div class="dash-chart-title">Contract Jobs by Country</div><div id="chartContractCountry" class="css-chart"></div></div>
             <div class="dash-chart-box"><div class="dash-chart-title">Top Contract Skills in Demand</div><div id="chartContractSkills" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Certifications in Demand</div><div id="chartContractCerts" class="css-chart"></div></div>
           </div>
           <div id="contractTable" class="dash-table-wrap"></div>
           <div style="margin-top:1rem">
-            <div class="dash-chart-title">📋 Latest 100 Contract Jobs</div>
+            <div class="dash-chart-title">📋 Latest 1 Month Contract Jobs</div>
             <div id="contractJobsList" class="dash-table-wrap" style="font-size:.65rem"></div>
           </div>
         </div>
@@ -2076,6 +2077,7 @@ async function loadContractPipeline(){
     document.getElementById('contractContent').style.display='block';
     renderCSSPie('chartContractCountry',d.contractByCountry||[],function(country){return "searchContractByCountry('"+country.replace(/'/g,"\\'")+"')"});
     renderCSSPie('chartContractSkills',d.contractSkills||[],function(v){return "searchContractBySkill('"+v.replace(/'/g,"\\'")+"')"});
+    renderCSSPie('chartContractCerts',d.contractCerts||[],function(v){return "searchContractBySkill('"+v.replace(/'/g,"\\'")+"')"});
     renderContractTable(d.contractByCompany||[]);
     // Fetch latest 100 contract jobs
     fetchRecentContracts();
