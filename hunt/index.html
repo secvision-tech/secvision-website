@@ -1381,7 +1381,6 @@ async function viewDet(i){
   h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
   if(canContact)h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Manage Contacts</button>';
   if(canEnrich)h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
-  if(canContact)h+='<button onclick="delAllContacts()" style="padding:.25rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All Contacts</button>';
   h+='</div></div>';
   // Load contacts async (hide for external viewers)
   if(isExternalViewer){var cel2=document.getElementById('viewContacts');if(cel2)cel2.innerHTML='<div style="color:var(--g3);font-size:.6rem">Contact details hidden for external users.</div>'}
@@ -1401,12 +1400,20 @@ async function viewDet(i){
           return sa-sb;
         });
         var ch='';
-        cd.contacts.forEach(function(c){
+        var MAX_DISPLAY=20;
+        var displayContacts=cd.contacts.slice(0,MAX_DISPLAY);
+        displayContacts.forEach(function(c){
           var nameHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-weight:600">'+esc(c.name)+' ↗</a>':'<strong>'+esc(c.name)+'</strong>';
           var emailHtml=(c.email&&c.email!=='N/A')?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'';
           ch+='<div style="padding:.2rem 0;border-bottom:1px solid var(--g1)">'+nameHtml+' — '+esc(c.designation)+(emailHtml?' — '+emailHtml:'')+' <span style="color:var(--g4);font-size:.6rem">('+esc(c.source||'')+')</span></div>';
         });
+        if(cd.contacts.length>MAX_DISPLAY){
+          ch+='<div style="padding:.3rem;color:#DC2626;font-size:.6rem;font-weight:600;background:#FEF2F2;border-radius:4px;margin-top:.3rem">⚠️ Showing '+MAX_DISPLAY+' of '+cd.contacts.length+' contacts. Use "🗑️ Delete All Contacts" and re-discover to cap at 20.</div>';
+        }
         cel.innerHTML=ch;
+        // Update header with count
+        var hdr=cel.parentElement.querySelector('h4');
+        if(hdr)hdr.textContent='Contacts ('+cd.contacts.length+')';
       }else{
         cel.innerHTML='<span style="color:var(--g4)">No contacts saved. Use "Manage Contacts" button to find contacts.</span>';
       }
@@ -1454,13 +1461,13 @@ function closeDet(){
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()});
 
 async function delAllContacts(){
-  var j=allJobs[currentViewIdx];if(!j||!j.company)return;
-  if(!confirm('Delete ALL contacts for "'+j.company+'"?\n\nThis cannot be undone.'))return;
+  if(!cfCompany)return;
+  if(!confirm('Delete ALL contacts for "'+cfCompany+'"?\n\nThis cannot be undone.'))return;
   try{
-    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteCompanyContacts',company:j.company})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteCompanyContacts',company:cfCompany})});
     var d=await r.json();
-    var cel=document.getElementById('viewContacts');
-    if(cel)cel.innerHTML='<div style="font-size:.65rem;color:#059669;padding:.3rem;background:#f0fdf4;border-radius:4px">✅ Deleted '+(d.deleted||0)+' contacts for '+j.company+'.</div>';
+    document.getElementById('cfExisting').innerHTML='<div style="font-size:.65rem;color:#059669;padding:.3rem;background:#f0fdf4;border-radius:4px">✅ Deleted '+(d.deleted||0)+' contacts for '+cfCompany+'.</div>';
+    document.getElementById('cfTitle').textContent='Manage Contacts — '+cfCompany+' (0 contacts)';
     viewDirty=true;
   }catch(e){alert('Error: '+e.message)}
 }
@@ -2874,14 +2881,22 @@ async function openContactFinder(company,domain,linkedin){
         for(var si=0;si<senOrder.length;si++){if(senOrder[si].test(db)){sb=si;break}}
         return sa-sb;
       });
-      var h='<div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">📋 Saved Contacts ('+d.contacts.length+')</div><div style="display:flex;flex-direction:column;gap:.2rem">';
-      d.contacts.forEach(function(c){
+      var totalContacts=d.contacts.length;
+      var MAX_CF_DISPLAY=20;
+      var displayList=d.contacts.slice(0,MAX_CF_DISPLAY);
+      var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem"><div style="font-size:.65rem;color:var(--g5);font-weight:600">📋 Saved Contacts ('+totalContacts+')</div><button onclick="delAllContacts()" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All</button></div><div style="display:flex;flex-direction:column;gap:.2rem">';
+      displayList.forEach(function(c){
         var linkedinHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-size:.55rem">LinkedIn ↗</a>':'';
         var emailHtml=(c.email&&c.email!=='N/A')?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'';
         h+='<div style="display:flex;justify-content:space-between;align-items:center;background:#f3f4f6;padding:.3rem .5rem;border-radius:4px;font-size:.65rem"><span><strong>'+esc(c.name)+'</strong> — '+esc(c.designation)+(emailHtml?' — '+emailHtml:'')+(linkedinHtml?' '+linkedinHtml:'')+' <span style="color:#9ca3af;font-size:.55rem">('+esc(c.source||'')+')</span></span><button onclick="deleteContact(\''+c._id+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.7rem" title="Remove">✕</button></div>';
       });
+      if(totalContacts>MAX_CF_DISPLAY){
+        h+='<div style="padding:.3rem;color:#DC2626;font-size:.6rem;font-weight:600;background:#FEF2F2;border-radius:4px;margin-top:.3rem">⚠️ Showing '+MAX_CF_DISPLAY+' of '+totalContacts+'. Use Delete All and re-discover to cap at 20.</div>';
+      }
       h+='</div>';
       document.getElementById('cfExisting').innerHTML=h;
+      // Update popup title with count
+      document.getElementById('cfTitle').textContent='Manage Contacts — '+cfCompany+' ('+totalContacts+' contacts)';
     }else{
       document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts saved yet.</div>';
     }
