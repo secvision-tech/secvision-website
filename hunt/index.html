@@ -1347,7 +1347,7 @@ async function viewDet(i){
   var bens=Array.isArray(j.benefits)?j.benefits:[];
   var countryForSearch=j.detectedCountry&&j.detectedCountry!=='Unknown'?' '+j.detectedCountry:'';
   var companyLink=j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1?j.companyUrl:'https://www.google.com/search?q='+encodeURIComponent(j.company+countryForSearch+' official website');
-  var companyHtml='<a href="'+companyLink+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
+  var companyHtml='<a href="'+companyLink+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyName('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company name">✎</span> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
   var mapQuery=j.location||'';
   if(j.detectedCountry&&j.detectedCountry!=='Unknown'&&mapQuery.indexOf(j.detectedCountry)===-1)mapQuery+=', '+j.detectedCountry;
   if(/^Remote$/i.test(j.location))mapQuery=j.company+(j.detectedCountry&&j.detectedCountry!=='Unknown'?', '+j.detectedCountry:'');
@@ -1661,6 +1661,25 @@ async function editFieldInView(idx,field){
     j[field]=input;viewDirty=true;
     viewDet(idx);
   }catch(e){alert('Error: '+e.message)}
+}
+
+async function editCompanyName(idx){
+  var j=allJobs[idx];if(!j)return;
+  var newName=prompt('Edit company name:',j.company||'');
+  if(newName===null||newName===j.company)return;
+  newName=newName.trim();
+  if(!newName){alert('Company name cannot be empty.');return}
+  var oldName=j.company;
+  // Update all jobs with same company locally
+  allJobs.forEach(function(jj){if(jj.company===oldName)jj.company=newName});
+  // Also update cjData
+  if(typeof cjData!=='undefined'&&cjData.length){cjData.forEach(function(jj){if(jj.company===oldName)jj.company=newName})}
+  // Update in database
+  try{
+    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateCompanyName',oldName:oldName,newName:newName})});
+    viewDirty=true;
+    viewDet(idx);
+  }catch(e){console.error(e);alert('Failed to update company name.')}
 }
 
 async function editCompanyUrl(idx){
