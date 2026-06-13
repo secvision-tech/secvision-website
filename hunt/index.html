@@ -1381,7 +1381,7 @@ async function viewDet(i){
   h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
   if(canContact)h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Manage Contacts</button>';
   if(canEnrich)h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
-  if(canContact)h+='<button id="viewDeleteContacts'+i+'" onclick="deleteAllContactsView('+i+')" style="display:none;padding:.25rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All Contacts</button>';
+  if(canContact)h+='<button onclick="delAllContacts()" style="padding:.25rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All Contacts</button>';
   h+='</div></div>';
   // Load contacts async (hide for external viewers)
   if(isExternalViewer){var cel2=document.getElementById('viewContacts');if(cel2)cel2.innerHTML='<div style="color:var(--g3);font-size:.6rem">Contact details hidden for external users.</div>'}
@@ -1407,10 +1407,8 @@ async function viewDet(i){
           ch+='<div style="padding:.2rem 0;border-bottom:1px solid var(--g1)">'+nameHtml+' — '+esc(c.designation)+(emailHtml?' — '+emailHtml:'')+' <span style="color:var(--g4);font-size:.6rem">('+esc(c.source||'')+')</span></div>';
         });
         cel.innerHTML=ch;
-        var vdb=document.getElementById('viewDeleteContacts'+currentViewIdx);if(vdb){vdb.style.display='';vdb.textContent='🗑️ Delete All Contacts ('+cd.contacts.length+')'}
       }else{
         cel.innerHTML='<span style="color:var(--g4)">No contacts saved. Use "Manage Contacts" button to find contacts.</span>';
-        var vdb2=document.getElementById('viewDeleteContacts'+currentViewIdx);if(vdb2)vdb2.style.display='none';
       }
     }catch(e){document.getElementById('viewContacts').innerHTML=j.contact||'N/A'}
   },100);
@@ -1455,19 +1453,16 @@ function closeDet(){
 }
 document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()});
 
-async function deleteAllContactsView(idx){
-  var j=allJobs[idx];if(!j||!j.company)return;
+async function delAllContacts(){
+  var j=allJobs[currentViewIdx];if(!j||!j.company)return;
   if(!confirm('Delete ALL contacts for "'+j.company+'"?\n\nThis cannot be undone.'))return;
-  var btn=document.getElementById('viewDeleteContacts'+idx);
-  if(btn){btn.textContent='Deleting...';btn.disabled=true}
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteCompanyContacts',company:j.company})});
     var d=await r.json();
     var cel=document.getElementById('viewContacts');
     if(cel)cel.innerHTML='<div style="font-size:.65rem;color:#059669;padding:.3rem;background:#f0fdf4;border-radius:4px">✅ Deleted '+(d.deleted||0)+' contacts for '+j.company+'.</div>';
-    if(btn){btn.style.display='none'}
     viewDirty=true;
-  }catch(e){if(btn){btn.textContent='⚠️ Error';btn.disabled=false}}
+  }catch(e){alert('Error: '+e.message)}
 }
 
 function findContacts(idx){
