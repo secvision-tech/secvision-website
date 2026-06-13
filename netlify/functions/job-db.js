@@ -164,7 +164,7 @@ exports.handler = async (event) => {
       'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP,
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
-      'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY,
+      'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -880,6 +880,28 @@ exports.handler = async (event) => {
       var contactsCol = db.collection('contacts');
       var result = await contactsCol.deleteMany({ company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: result.deletedCount, company: company }) };
+    }
+
+    // ACTION: fixExcessContacts - cap contacts at N per company (default 20)
+    if (action === 'fixExcessContacts') {
+      var maxPerCompany = body.maxPerCompany || 20;
+      var contactsCol = db.collection('contacts');
+      // Find companies with more than maxPerCompany contacts
+      var companies = await contactsCol.aggregate([
+        { $group: { _id: '$company', count: { $sum: 1 } } },
+        { $match: { count: { $gt: maxPerCompany } } }
+      ]).toArray();
+      var totalDeleted = 0;
+      for (var ci = 0; ci < companies.length; ci++) {
+        var comp = companies[ci]._id;
+        var excess = companies[ci].count - maxPerCompany;
+        // Keep the first N (oldest), delete the rest
+        var toKeep = await contactsCol.find({ company: comp }).sort({ _id: 1 }).limit(maxPerCompany).project({ _id: 1 }).toArray();
+        var keepIds = toKeep.map(function(c) { return c._id; });
+        var delResult = await contactsCol.deleteMany({ company: comp, _id: { $nin: keepIds } });
+        totalDeleted += delResult.deletedCount;
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companiesFixed: companies.length, totalDeleted: totalDeleted }) };
     }
 
     // ACTION: getSettings - fetch settings from MongoDB
