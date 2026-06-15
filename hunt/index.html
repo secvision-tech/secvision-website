@@ -328,6 +328,7 @@ body.role-viewer .edit-btn{display:none!important}
               <button onclick="fixExcessContacts()" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">👥 Fix Contacts (Cap 20)</button>
               <button onclick="fixOrphanedContacts()" style="padding:.2rem .6rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Orphaned Contacts (Email Match)</button>
               <button onclick="fixContaminatedUrls()" style="padding:.2rem .6rem;background:#B45309;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🧹 Clear ideaHelix URLs from Jobs</button>
+              <button onclick="fixContactsViaLinkedin()" style="padding:.2rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Contacts via LinkedIn Scrape</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
@@ -1936,6 +1937,67 @@ async function fixExcessContacts(){
     st.textContent='👥 Done! '+d.companiesFixed+' companies had excess contacts. '+d.totalDeleted+' contacts removed.';
     setTimeout(function(){st.textContent=''},12000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
+}
+
+async function fixContactsViaLinkedin(){
+  var wrongCompany=prompt('Enter the wrong company name to fix via LinkedIn scraping:','ideaHelix');
+  if(!wrongCompany)return;
+  var batchSize=parseInt(prompt('Contacts per batch? (5-10 recommended, scraping is slow):','10'))||10;
+  if(batchSize>25)batchSize=25;
+
+  var st=document.getElementById('fixCompanyTypeStatus');
+  var totalFixed=0,allCompanies={},batchNum=0,keepGoing=true;
+
+  try{
+    while(keepGoing&&batchNum<50){
+      batchNum++;
+      // Step 1: Get a batch of contacts with LinkedIn URLs
+      st.textContent='🔗 Batch '+batchNum+' — Step 1: Fetching contacts with LinkedIn URLs...';
+      var r1=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getContactsForLinkedinScrape',wrongCompany:wrongCompany,batchSize:batchSize})});
+      var d1=await r1.json();
+      if(!d1.contacts||!d1.contacts.length){keepGoing=false;break}
+
+      var urls=d1.contacts.map(function(c){return c.linkedin}).filter(function(u){return u&&u.indexOf('linkedin.com')>-1});
+      if(!urls.length){keepGoing=false;break}
+
+      // Step 2: Scrape via Apify
+      st.textContent='🔗 Batch '+batchNum+' — Step 2: Scraping '+urls.length+' LinkedIn profiles (1-4 min)...';
+      var d2=await safeApiFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'scrapeProfiles',urls:urls})});
+      if(d2.error){st.textContent='⚠️ Scraper error: '+d2.error;return}
+      var profiles=d2.profiles||[];
+
+      // Step 3: Match profiles to contacts and update
+      st.textContent='🔗 Batch '+batchNum+' — Step 3: Matching '+profiles.length+' profiles...';
+      var updates=[];
+      d1.contacts.forEach(function(contact){
+        var cUrl=(contact.linkedin||'').replace(/\/$/,'').toLowerCase().split('?')[0];
+        var profile=profiles.find(function(p){
+          var pUrl=(p.url||'').replace(/\/$/,'').toLowerCase().split('?')[0];
+          return pUrl&&cUrl&&(pUrl===cUrl||pUrl.indexOf(cUrl)>-1||cUrl.indexOf(pUrl)>-1);
+        });
+        if(profile&&profile.company&&profile.company.trim()&&profile.company.toLowerCase()!==wrongCompany.toLowerCase()){
+          updates.push({contactId:contact._id,newCompany:profile.company.trim()});
+        }
+      });
+
+      if(updates.length){
+        await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'bulkUpdateContactCompanies',updates:updates})});
+        totalFixed+=updates.length;
+        updates.forEach(function(u){allCompanies[u.newCompany]=(allCompanies[u.newCompany]||0)+1});
+      }
+
+      // If nothing got fixed this batch, the remaining likely can't be matched — stop to avoid infinite loop
+      if(updates.length===0)keepGoing=false;
+
+      var summarySoFar=Object.keys(allCompanies).sort(function(a,b){return allCompanies[b]-allCompanies[a]}).slice(0,8).map(function(k){return k+' ('+allCompanies[k]+')'}).join(', ');
+      st.innerHTML='🔗 Batch '+batchNum+' done. Total fixed: <b>'+totalFixed+'</b>. Remaining: '+(d1.totalRemaining-updates.length)+'.'+(summarySoFar?'<br>'+summarySoFar:'');
+    }
+
+    var summaryText=Object.keys(allCompanies).sort(function(a,b){return allCompanies[b]-allCompanies[a]}).map(function(k){return k+' ('+allCompanies[k]+')'}).join(', ');
+    st.innerHTML='✅ Complete! Fixed <b>'+totalFixed+'</b> contacts via LinkedIn in '+batchNum+' batches.'+(summaryText?'<br>Companies: '+summaryText:'');
+    setTimeout(function(){st.textContent=''},60000);
+
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},15000)}
 }
 
 async function fixContaminatedUrls(){

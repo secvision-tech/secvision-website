@@ -165,7 +165,7 @@ exports.handler = async (event) => {
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
-      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY,
+      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -938,18 +938,49 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ cleared: ops.length, totalRemaining: totalRemaining - ops.length }) };
     }
 
+    // ACTION: getContactsForLinkedinScrape - get orphaned contacts with LinkedIn but no email
+    if (action === 'getContactsForLinkedinScrape') {
+      var wrongCompany = body.wrongCompany || 'ideaHelix';
+      var batchSize = Math.min(body.batchSize || 10, 25);
+      var contactsCol = db.collection('contacts');
+      var escWrong = '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
+      var contacts = await contactsCol.find({
+        company: { $regex: escWrong, $options: 'i' },
+        linkedin: { $nin: [null, '', 'N/A'] }
+      }).limit(batchSize).project({ _id: 1, name: 1, linkedin: 1 }).toArray();
+      var totalRemaining = await contactsCol.countDocuments({
+        company: { $regex: escWrong, $options: 'i' },
+        linkedin: { $nin: [null, '', 'N/A'] }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: contacts, totalRemaining: totalRemaining }) };
+    }
+
     // ACTION: getOrphanedContacts - get contacts with wrong company
     if (action === 'getOrphanedContacts') {
       var wrongCompany = body.wrongCompany || 'ideaHelix';
       var contactsCol = db.collection('contacts');
+      var escWrong = '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
       var totalRemaining = await contactsCol.countDocuments({
-        company: { $regex: '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' }
+        company: { $regex: escWrong, $options: 'i' }
       });
       var withEmail = await contactsCol.countDocuments({
-        company: { $regex: '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' },
+        company: { $regex: escWrong, $options: 'i' },
         email: { $nin: [null, '', 'N/A'] }
       });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ totalRemaining: totalRemaining, withEmail: withEmail }) };
+      var noEmailWithLinkedin = await contactsCol.countDocuments({
+        company: { $regex: escWrong, $options: 'i' },
+        email: { $in: [null, '', 'N/A'] },
+        linkedin: { $nin: [null, '', 'N/A'] }
+      });
+      var noEmailNoLinkedin = await contactsCol.countDocuments({
+        company: { $regex: escWrong, $options: 'i' },
+        email: { $in: [null, '', 'N/A'] },
+        linkedin: { $in: [null, '', 'N/A'] }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        totalRemaining: totalRemaining, withEmail: withEmail,
+        noEmailWithLinkedin: noEmailWithLinkedin, noEmailNoLinkedin: noEmailNoLinkedin
+      })};
     }
 
     // ACTION: fixOrphanedByEmail - match contacts to companies via email domain
