@@ -969,9 +969,8 @@ exports.handler = async (event) => {
         if (job && job.company) {
           companyName = job.company;
         } else {
-          // Use domain name as fallback: "akkodis.com" → "Akkodis"
-          var domName = domain.split('.')[0];
-          companyName = domName.charAt(0).toUpperCase() + domName.slice(1);
+          // No job match — skip this domain, leave for manual fix
+          continue;
         }
 
         // Update all contacts with this domain
