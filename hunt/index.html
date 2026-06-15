@@ -327,6 +327,7 @@ body.role-viewer .edit-btn{display:none!important}
               <button onclick="fixCompanyUrls()" style="padding:.2rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Company URLs</button>
               <button onclick="fixExcessContacts()" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">👥 Fix Contacts (Cap 20)</button>
               <button onclick="fixOrphanedContacts()" style="padding:.2rem .6rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Orphaned Contacts (Email Match)</button>
+              <button onclick="fixContaminatedUrls()" style="padding:.2rem .6rem;background:#B45309;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🧹 Clear ideaHelix URLs from Jobs</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
@@ -1935,6 +1936,20 @@ async function fixExcessContacts(){
     st.textContent='👥 Done! '+d.companiesFixed+' companies had excess contacts. '+d.totalDeleted+' contacts removed.';
     setTimeout(function(){st.textContent=''},12000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
+}
+
+async function fixContaminatedUrls(){
+  var badDomain=prompt('Enter the bad domain to clear from jobs (companyUrl/LinkedIn that shouldn\'t be there):','ideahelix');
+  if(!badDomain)return;
+  var st=document.getElementById('fixCompanyTypeStatus');
+  st.textContent='🧹 Finding jobs with wrong "'+badDomain+'" URLs...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'fixContaminatedUrls',badDomain:badDomain})});
+    var d=await r.json();
+    st.textContent='🧹 Done! Cleared wrong URLs from '+d.cleared+' jobs (found '+d.found+'). Now company URL/LinkedIn fields are empty for those jobs.';
+    if(d.cleared>0){dashLoaded=false}
+    setTimeout(function(){st.textContent=''},15000);
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},10000)}
 }
 
 async function fixOrphanedContacts(){

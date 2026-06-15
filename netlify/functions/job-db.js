@@ -165,7 +165,7 @@ exports.handler = async (event) => {
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
-      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY,
+      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -902,6 +902,32 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: result.deletedCount, company: company }) };
     }
 
+    // ACTION: fixContaminatedUrls - clear wrong URLs (e.g. ideahelix) from jobs where company differs
+    if (action === 'fixContaminatedUrls') {
+      var badDomain = body.badDomain || 'ideahelix';
+      var escBad = badDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Find jobs where URL contains badDomain but company name does NOT
+      var contaminated = await col.find({
+        $or: [
+          { companyUrl: { $regex: escBad, $options: 'i' } },
+          { companyLinkedin: { $regex: escBad, $options: 'i' } }
+        ],
+        company: { $not: { $regex: escBad, $options: 'i' } }
+      }).toArray();
+      var cleared = 0;
+      for (var ci = 0; ci < contaminated.length; ci++) {
+        var j = contaminated[ci];
+        var upd = {};
+        if (j.companyUrl && new RegExp(escBad, 'i').test(j.companyUrl)) upd.companyUrl = '';
+        if (j.companyLinkedin && new RegExp(escBad, 'i').test(j.companyLinkedin)) upd.companyLinkedin = '';
+        if (Object.keys(upd).length) {
+          await col.updateOne({ _id: j._id }, { $set: upd });
+          cleared++;
+        }
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ cleared: cleared, found: contaminated.length }) };
+    }
+
     // ACTION: getOrphanedContacts - get contacts with wrong company
     if (action === 'getOrphanedContacts') {
       var wrongCompany = body.wrongCompany || 'ideaHelix';
@@ -970,13 +996,23 @@ exports.handler = async (event) => {
         // Match 1: exact match (stripped) — "apexsystems" matches "Apex Systems"
         var companyName = companyMap[domainPrefix] || '';
 
-        // Match 2: try domain prefix as substring of company name
-        if (!companyName) {
+        // Match 2: try domain prefix as substring of company name (min 4 chars to avoid false matches)
+        if (!companyName && domainPrefix.length >= 4) {
           var keys = Object.keys(companyMap);
+          // First pass: company name STARTS WITH domain prefix (most reliable)
           for (var ki = 0; ki < keys.length; ki++) {
-            if (keys[ki].indexOf(domainPrefix) > -1 || domainPrefix.indexOf(keys[ki]) > -1) {
+            if (keys[ki].indexOf(domainPrefix) === 0) {
               companyName = companyMap[keys[ki]];
               break;
+            }
+          }
+          // Second pass: domain prefix appears anywhere in company name
+          if (!companyName) {
+            for (var kj = 0; kj < keys.length; kj++) {
+              if (keys[kj].indexOf(domainPrefix) > -1) {
+                companyName = companyMap[keys[kj]];
+                break;
+              }
             }
           }
         }
