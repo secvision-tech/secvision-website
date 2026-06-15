@@ -954,6 +954,31 @@ exports.handler = async (event) => {
 
     // ACTION: fixOrphanedByEmail - match contacts to companies via email domain
     if (action === 'fixOrphanedByEmail') {
+      // Helper: turn a domain prefix into a presentable company name
+      // "akkodis" → "Akkodis", "apexsystems" → "Apex Systems", "boozallen" → "Booz Allen"
+      function prettifyDomain(prefix) {
+        if (!prefix) return '';
+        var s = prefix.replace(/[^a-z0-9]/gi, '');
+        // Common company-name word boundaries to split on
+        var words = ['systems', 'solutions', 'technologies', 'technology', 'consulting', 'consultants',
+          'services', 'group', 'global', 'partners', 'staffing', 'recruiting', 'recruitment', 'software',
+          'security', 'cyber', 'tech', 'labs', 'digital', 'data', 'health', 'capital', 'financial',
+          'allen', 'systems', 'networks', 'network', 'corp', 'inc', 'llc', 'international', 'worldwide'];
+        var lower = s.toLowerCase();
+        // Try to split off a trailing known word
+        for (var wi = 0; wi < words.length; wi++) {
+          var w = words[wi];
+          if (lower.length > w.length && lower.slice(-w.length) === w) {
+            var head = lower.slice(0, lower.length - w.length);
+            if (head.length >= 2) {
+              return cap(head) + ' ' + cap(w);
+            }
+          }
+        }
+        return cap(lower);
+      }
+      function cap(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
+
       var wrongCompany = body.wrongCompany || 'ideaHelix';
       var batchSize = Math.min(body.batchSize || 50, 100);
       var contactsCol = db.collection('contacts');
@@ -985,6 +1010,7 @@ exports.handler = async (event) => {
       var domains = Object.keys(domainMap);
       var fixed = 0;
       var companiesFound = {};
+      var unmatchedDomains = [];
 
       // Build company lookup map from jobs (strip spaces for fuzzy matching)
       var allCompanyNames = await col.distinct('company');
@@ -1039,13 +1065,16 @@ exports.handler = async (event) => {
           if (job && job.company) companyName = job.company;
         }
 
-        if (!companyName) continue; // no match — skip for manual fix
+        // Match 4: derive from domain itself (their true employer — agency or end client)
+        if (!companyName) {
+          companyName = prettifyDomain(domainPrefix);
+        }
 
-        // Update all contacts with this domain
+        if (!companyName) { unmatchedDomains.push(domain); continue; } // no match
+
+        // Update all contacts with this domain (contactIds already ObjectIds from toArray)
         var contactIds = domainMap[domain];
-        var ObjectId = require('mongodb').ObjectId;
-        var oids = contactIds.map(function(id) { return new ObjectId(id); });
-        await contactsCol.updateMany({ _id: { $in: oids } }, { $set: { company: companyName } });
+        await contactsCol.updateMany({ _id: { $in: contactIds } }, { $set: { company: companyName } });
         fixed += contactIds.length;
         companiesFound[companyName] = (companiesFound[companyName] || 0) + contactIds.length;
       }
@@ -1056,7 +1085,9 @@ exports.handler = async (event) => {
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         fixed: fixed, totalRemaining: totalRemaining, companiesFound: companiesFound,
-        domainsProcessed: domains.length
+        domainsProcessed: domains.length,
+        unmatchedDomains: unmatchedDomains.slice(0, 15),
+        sampleCompanyKeys: Object.keys(companyMap).slice(0, 10)
       })};
     }
 
