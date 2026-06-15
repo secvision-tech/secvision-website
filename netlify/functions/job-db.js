@@ -950,28 +950,50 @@ exports.handler = async (event) => {
       var fixed = 0;
       var companiesFound = {};
 
+      // Build company lookup map from jobs (strip spaces for fuzzy matching)
+      var allCompanyNames = await col.distinct('company');
+      var companyMap = {};
+      allCompanyNames.forEach(function(c) {
+        if (c && c.trim()) {
+          var key = c.toLowerCase().replace(/[\s\-_\.,']+/g, '');
+          if (!companyMap[key]) companyMap[key] = c; // keep first occurrence
+        }
+      });
+
       for (var di = 0; di < domains.length; di++) {
         var domain = domains[di];
         // Skip generic email providers
         if (/^(gmail|yahoo|hotmail|outlook|aol|icloud|protonmail|mail|live|msn|ymail)\./i.test(domain)) continue;
 
-        // Search jobs for company with matching URL
-        var job = await col.findOne({
-          $or: [
-            { companyUrl: { $regex: domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
-            { companyLinkedin: { $regex: domain.split('.')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
-          ],
-          company: { $nin: [null, ''] }
-        });
+        var domainPrefix = domain.split('.')[0].toLowerCase();
 
-        // If no job match, use domain as company name (capitalize)
-        var companyName = '';
-        if (job && job.company) {
-          companyName = job.company;
-        } else {
-          // No job match — skip this domain, leave for manual fix
-          continue;
+        // Match 1: exact match (stripped) — "apexsystems" matches "Apex Systems"
+        var companyName = companyMap[domainPrefix] || '';
+
+        // Match 2: try domain prefix as substring of company name
+        if (!companyName) {
+          var keys = Object.keys(companyMap);
+          for (var ki = 0; ki < keys.length; ki++) {
+            if (keys[ki].indexOf(domainPrefix) > -1 || domainPrefix.indexOf(keys[ki]) > -1) {
+              companyName = companyMap[keys[ki]];
+              break;
+            }
+          }
         }
+
+        // Match 3: try companyUrl or companyLinkedin in jobs
+        if (!companyName) {
+          var job = await col.findOne({
+            $or: [
+              { companyUrl: { $regex: domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+              { companyLinkedin: { $regex: domainPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
+            ],
+            company: { $nin: [null, ''] }
+          });
+          if (job && job.company) companyName = job.company;
+        }
+
+        if (!companyName) continue; // no match — skip for manual fix
 
         // Update all contacts with this domain
         var contactIds = domainMap[domain];
