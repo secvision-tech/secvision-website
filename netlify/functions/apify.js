@@ -252,6 +252,65 @@ exports.handler = async function(event) {
       }
     }
 
+    // ACTION: startProfileScrape - kick off scrape, return runId immediately (no wait)
+    if (action === 'startProfileScrape') {
+      var profileUrls = body.urls || [];
+      if (!profileUrls.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No profile URLs provided' }) };
+      try {
+        var resp = await fetch('https://api.apify.com/v2/acts/' + PROFILE_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'get-profiles',
+            keywords: profileUrls,
+            profileFields: ['about', 'experience', 'organizations']
+          })
+        });
+        var run = await resp.json();
+        if (!run.data || !run.data.id) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start profile scraper' }) };
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ runId: run.data.id, datasetId: run.data.defaultDatasetId }) };
+      } catch (e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Start error: ' + e.message }) };
+      }
+    }
+
+    // ACTION: checkProfileScrape - poll status once, return results if done
+    if (action === 'checkProfileScrape') {
+      var runId = body.runId;
+      var datasetId = body.datasetId;
+      if (!runId) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No runId' }) };
+      try {
+        var statusResp = await fetch('https://api.apify.com/v2/actor-runs/' + runId + '?token=' + APIFY_TOKEN);
+        var statusData = await statusResp.json();
+        var status = statusData.data ? statusData.data.status : 'UNKNOWN';
+        if (status === 'RUNNING' || status === 'READY') {
+          return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: status, done: false }) };
+        }
+        if (status !== 'SUCCEEDED') {
+          return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: status, done: true, error: 'Scraper ' + status }) };
+        }
+        // Succeeded — fetch results
+        var resultsResp = await fetch('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN + '&format=json');
+        var profiles = await resultsResp.json();
+        var results = (profiles || []).map(function(p) {
+          var company = '';
+          var title = p.headline || '';
+          if (p.experience && p.experience.length > 0) {
+            company = p.experience[0].companyName || '';
+            if (p.experience[0].title) title = p.experience[0].title;
+          }
+          return {
+            url: p.linkedinUrl || p.url || '',
+            name: ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || p.vanityName || '',
+            company: company, title: title, status: p.status || ''
+          };
+        });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: status, done: true, profiles: results }) };
+      } catch (e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Check error: ' + e.message }) };
+      }
+    }
+
     // ACTION: scrapeProfiles - Scrape LinkedIn person profiles to get current company
     if (action === 'scrapeProfiles') {
       var profileUrls = body.urls || [];
