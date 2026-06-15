@@ -905,7 +905,9 @@ exports.handler = async (event) => {
     // ACTION: fixContaminatedUrls - clear wrong URLs (e.g. ideahelix) from jobs where company differs
     if (action === 'fixContaminatedUrls') {
       var badDomain = body.badDomain || 'ideahelix';
+      var batchLimit = Math.min(body.batchSize || 200, 500);
       var escBad = badDomain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var badRe = new RegExp(escBad, 'i');
       // Find jobs where URL contains badDomain but company name does NOT
       var contaminated = await col.find({
         $or: [
@@ -913,19 +915,27 @@ exports.handler = async (event) => {
           { companyLinkedin: { $regex: escBad, $options: 'i' } }
         ],
         company: { $not: { $regex: escBad, $options: 'i' } }
-      }).toArray();
-      var cleared = 0;
-      for (var ci = 0; ci < contaminated.length; ci++) {
-        var j = contaminated[ci];
+      }).limit(batchLimit).toArray();
+
+      var totalRemaining = await col.countDocuments({
+        $or: [
+          { companyUrl: { $regex: escBad, $options: 'i' } },
+          { companyLinkedin: { $regex: escBad, $options: 'i' } }
+        ],
+        company: { $not: { $regex: escBad, $options: 'i' } }
+      });
+
+      // Use bulkWrite for speed
+      var ops = [];
+      contaminated.forEach(function(j) {
         var upd = {};
-        if (j.companyUrl && new RegExp(escBad, 'i').test(j.companyUrl)) upd.companyUrl = '';
-        if (j.companyLinkedin && new RegExp(escBad, 'i').test(j.companyLinkedin)) upd.companyLinkedin = '';
-        if (Object.keys(upd).length) {
-          await col.updateOne({ _id: j._id }, { $set: upd });
-          cleared++;
-        }
-      }
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ cleared: cleared, found: contaminated.length }) };
+        if (j.companyUrl && badRe.test(j.companyUrl)) upd.companyUrl = '';
+        if (j.companyLinkedin && badRe.test(j.companyLinkedin)) upd.companyLinkedin = '';
+        if (Object.keys(upd).length) ops.push({ updateOne: { filter: { _id: j._id }, update: { $set: upd } } });
+      });
+      if (ops.length) await col.bulkWrite(ops);
+
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ cleared: ops.length, totalRemaining: totalRemaining - ops.length }) };
     }
 
     // ACTION: getOrphanedContacts - get contacts with wrong company

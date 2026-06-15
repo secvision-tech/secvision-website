@@ -1942,12 +1942,20 @@ async function fixContaminatedUrls(){
   var badDomain=prompt('Enter the bad domain to clear from jobs (companyUrl/LinkedIn that shouldn\'t be there):','ideahelix');
   if(!badDomain)return;
   var st=document.getElementById('fixCompanyTypeStatus');
-  st.textContent='🧹 Finding jobs with wrong "'+badDomain+'" URLs...';
+  var totalCleared=0,remaining=1,batch=0;
   try{
-    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'fixContaminatedUrls',badDomain:badDomain})});
-    var d=await r.json();
-    st.textContent='🧹 Done! Cleared wrong URLs from '+d.cleared+' jobs (found '+d.found+'). Now company URL/LinkedIn fields are empty for those jobs.';
-    if(d.cleared>0){dashLoaded=false}
+    while(remaining>0&&batch<30){
+      batch++;
+      st.textContent='🧹 Batch '+batch+': Clearing wrong "'+badDomain+'" URLs...';
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'fixContaminatedUrls',badDomain:badDomain,batchSize:200})});
+      var d=await r.json();
+      if(d.error){st.textContent='⚠️ Error: '+d.error;return}
+      totalCleared+=d.cleared;
+      remaining=d.totalRemaining;
+      if(d.cleared===0)break;
+    }
+    st.textContent='🧹 Done! Cleared wrong URLs from '+totalCleared+' jobs in '+batch+' batches. Remaining: '+remaining+'.';
+    if(totalCleared>0){dashLoaded=false}
     setTimeout(function(){st.textContent=''},15000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},10000)}
 }
