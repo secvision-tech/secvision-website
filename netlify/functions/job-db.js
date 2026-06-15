@@ -165,7 +165,7 @@ exports.handler = async (event) => {
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
-      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP,
+      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -902,19 +902,95 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: result.deletedCount, company: company }) };
     }
 
-    // ACTION: getOrphanedContacts - get contacts with wrong company that have LinkedIn URLs
+    // ACTION: getOrphanedContacts - get contacts with wrong company
     if (action === 'getOrphanedContacts') {
       var wrongCompany = body.wrongCompany || 'ideaHelix';
-      var batchSize = body.batchSize || 10;
       var contactsCol = db.collection('contacts');
-      var contacts = await contactsCol.find({
-        company: { $regex: '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' },
-        linkedin: { $nin: [null, '', 'N/A'] }
-      }).limit(batchSize).toArray();
       var totalRemaining = await contactsCol.countDocuments({
         company: { $regex: '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' }
       });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: contacts, totalRemaining: totalRemaining }) };
+      var withEmail = await contactsCol.countDocuments({
+        company: { $regex: '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' },
+        email: { $nin: [null, '', 'N/A'] }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ totalRemaining: totalRemaining, withEmail: withEmail }) };
+    }
+
+    // ACTION: fixOrphanedByEmail - match contacts to companies via email domain
+    if (action === 'fixOrphanedByEmail') {
+      var wrongCompany = body.wrongCompany || 'ideaHelix';
+      var batchSize = Math.min(body.batchSize || 100, 500);
+      var contactsCol = db.collection('contacts');
+      var escapedWrong = wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+      // Get contacts with emails
+      var contacts = await contactsCol.find({
+        company: { $regex: '^' + escapedWrong + '$', $options: 'i' },
+        email: { $nin: [null, '', 'N/A'] }
+      }).limit(batchSize).toArray();
+
+      if (!contacts.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ fixed: 0, noEmail: 0, message: 'No contacts with emails found' }) };
+
+      // Extract unique email domains
+      var domainMap = {};
+      contacts.forEach(function(c) {
+        var email = (c.email || '').toLowerCase();
+        var atIdx = email.indexOf('@');
+        if (atIdx > 0) {
+          var domain = email.slice(atIdx + 1).trim();
+          if (domain && domain.indexOf('.') > 0) {
+            if (!domainMap[domain]) domainMap[domain] = [];
+            domainMap[domain].push(c._id);
+          }
+        }
+      });
+
+      // For each domain, find matching company in jobs collection
+      var domains = Object.keys(domainMap);
+      var fixed = 0;
+      var companiesFound = {};
+
+      for (var di = 0; di < domains.length; di++) {
+        var domain = domains[di];
+        // Skip generic email providers
+        if (/^(gmail|yahoo|hotmail|outlook|aol|icloud|protonmail|mail|live|msn|ymail)\./i.test(domain)) continue;
+
+        // Search jobs for company with matching URL
+        var job = await col.findOne({
+          $or: [
+            { companyUrl: { $regex: domain.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
+            { companyLinkedin: { $regex: domain.split('.')[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } }
+          ],
+          company: { $nin: [null, ''] }
+        });
+
+        // If no job match, use domain as company name (capitalize)
+        var companyName = '';
+        if (job && job.company) {
+          companyName = job.company;
+        } else {
+          // Use domain name as fallback: "akkodis.com" → "Akkodis"
+          var domName = domain.split('.')[0];
+          companyName = domName.charAt(0).toUpperCase() + domName.slice(1);
+        }
+
+        // Update all contacts with this domain
+        var contactIds = domainMap[domain];
+        var ObjectId = require('mongodb').ObjectId;
+        var oids = contactIds.map(function(id) { return new ObjectId(id); });
+        await contactsCol.updateMany({ _id: { $in: oids } }, { $set: { company: companyName } });
+        fixed += contactIds.length;
+        companiesFound[companyName] = (companiesFound[companyName] || 0) + contactIds.length;
+      }
+
+      var totalRemaining = await contactsCol.countDocuments({
+        company: { $regex: '^' + escapedWrong + '$', $options: 'i' }
+      });
+
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        fixed: fixed, totalRemaining: totalRemaining, companiesFound: companiesFound,
+        domainsProcessed: domains.length
+      })};
     }
 
     // ACTION: bulkUpdateContactCompanies - update company name for multiple contacts by ID
