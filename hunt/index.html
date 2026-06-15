@@ -1954,19 +1954,26 @@ async function fixOrphanedContacts(){
       setTimeout(function(){st.textContent=''},8000);return;
     }
 
-    if(!confirm('Found '+d1.totalRemaining+' contacts with company "'+wrongCompany+'" ('+d1.withEmail+' have emails).\n\nFix by matching email domains to companies in your jobs database?'))return;
+    if(!confirm('Found '+d1.totalRemaining+' contacts with company "'+wrongCompany+'" ('+d1.withEmail+' have emails).\n\nFix by matching email domains to companies in your jobs database?\n(Processes 50 at a time)'))return;
 
-    st.textContent='🔗 Step 2/2: Matching email domains to companies ('+d1.withEmail+' contacts)...';
+    // Step 2: Fix in batches of 50
+    var totalFixed=0,allCompanies={},remaining=d1.totalRemaining,batch=0;
+    while(remaining>0&&batch<20){
+      batch++;
+      st.textContent='🔗 Batch '+batch+': Matching email domains ('+remaining+' remaining)...';
+      var r2=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'fixOrphanedByEmail',wrongCompany:wrongCompany,batchSize:50})});
+      var d2=await r2.json();
+      if(d2.error){st.textContent='⚠️ Error: '+d2.error;return}
+      totalFixed+=d2.fixed;
+      remaining=d2.totalRemaining;
+      var cf=d2.companiesFound||{};
+      Object.keys(cf).forEach(function(k){allCompanies[k]=(allCompanies[k]||0)+cf[k]});
+      // Stop if no progress (all remaining have no email or no job match)
+      if(d2.fixed===0)break;
+    }
 
-    // Step 2: Fix by email domain
-    var r2=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'fixOrphanedByEmail',wrongCompany:wrongCompany,batchSize:500})});
-    var d2=await r2.json();
-
-    // Build summary
-    var cf=d2.companiesFound||{};
-    var summaryText=Object.keys(cf).sort(function(a,b){return cf[b]-cf[a]}).map(function(k){return k+' ('+cf[k]+')'}).join(', ');
-
-    st.innerHTML='🔗 Done! Fixed <b>'+d2.fixed+'</b> contacts via email domain matching. Remaining: '+d2.totalRemaining+'.'
+    var summaryText=Object.keys(allCompanies).sort(function(a,b){return allCompanies[b]-allCompanies[a]}).map(function(k){return k+' ('+allCompanies[k]+')'}).join(', ');
+    st.innerHTML='🔗 Done! Fixed <b>'+totalFixed+'</b> contacts in '+batch+' batches. Remaining: '+remaining+'.'
       +(summaryText?'<br>Companies found: '+summaryText:'');
     setTimeout(function(){st.textContent=''},30000);
 

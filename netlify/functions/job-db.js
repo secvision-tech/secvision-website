@@ -919,7 +919,7 @@ exports.handler = async (event) => {
     // ACTION: fixOrphanedByEmail - match contacts to companies via email domain
     if (action === 'fixOrphanedByEmail') {
       var wrongCompany = body.wrongCompany || 'ideaHelix';
-      var batchSize = Math.min(body.batchSize || 100, 500);
+      var batchSize = Math.min(body.batchSize || 50, 100);
       var contactsCol = db.collection('contacts');
       var escapedWrong = wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
