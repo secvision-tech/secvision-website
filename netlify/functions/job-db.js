@@ -165,7 +165,7 @@ exports.handler = async (event) => {
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
-      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP,
+      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP, 'tagScrapeFailed': ADMIN_UP,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -938,6 +938,17 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ cleared: ops.length, totalRemaining: totalRemaining - ops.length }) };
     }
 
+    // ACTION: tagScrapeFailed - mark contacts that LinkedIn scraper couldn't resolve
+    if (action === 'tagScrapeFailed') {
+      var contactIds = body.contactIds || [];
+      if (!contactIds.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ tagged: 0 }) };
+      var ObjectId = require('mongodb').ObjectId;
+      var contactsCol = db.collection('contacts');
+      var oids = contactIds.map(function(id) { try { return new ObjectId(id); } catch (e) { return null; } }).filter(Boolean);
+      var result = await contactsCol.updateMany({ _id: { $in: oids } }, { $set: { scrapeFailed: true } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ tagged: result.modifiedCount }) };
+    }
+
     // ACTION: getContactsForLinkedinScrape - get orphaned contacts with LinkedIn but no email
     if (action === 'getContactsForLinkedinScrape') {
       var wrongCompany = body.wrongCompany || 'ideaHelix';
@@ -946,11 +957,13 @@ exports.handler = async (event) => {
       var escWrong = '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
       var contacts = await contactsCol.find({
         company: { $regex: escWrong, $options: 'i' },
-        linkedin: { $nin: [null, '', 'N/A'] }
+        linkedin: { $nin: [null, '', 'N/A'] },
+        scrapeFailed: { $ne: true }
       }).limit(batchSize).project({ _id: 1, name: 1, linkedin: 1 }).toArray();
       var totalRemaining = await contactsCol.countDocuments({
         company: { $regex: escWrong, $options: 'i' },
-        linkedin: { $nin: [null, '', 'N/A'] }
+        linkedin: { $nin: [null, '', 'N/A'] },
+        scrapeFailed: { $ne: true }
       });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: contacts, totalRemaining: totalRemaining }) };
     }

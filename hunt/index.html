@@ -1981,6 +1981,7 @@ async function fixContactsViaLinkedin(){
       // Step 3: Match profiles to contacts and update
       st.textContent='🔗 Batch '+batchNum+' — Step 3: Matching '+profiles.length+' profiles...';
       var updates=[];
+      var notFoundIds=[];
       d1.contacts.forEach(function(contact){
         var cUrl=(contact.linkedin||'').replace(/\/$/,'').toLowerCase().split('?')[0];
         var profile=profiles.find(function(p){
@@ -1989,6 +1990,9 @@ async function fixContactsViaLinkedin(){
         });
         if(profile&&profile.company&&profile.company.trim()&&profile.company.toLowerCase()!==wrongCompany.toLowerCase()){
           updates.push({contactId:contact._id,newCompany:profile.company.trim()});
+        }else{
+          // NOT_FOUND or no company — mark so we don't retry same failing profile every batch
+          notFoundIds.push(contact._id);
         }
       });
 
@@ -1997,12 +2001,24 @@ async function fixContactsViaLinkedin(){
         totalFixed+=updates.length;
         updates.forEach(function(u){allCompanies[u.newCompany]=(allCompanies[u.newCompany]||0)+1});
       }
+      // Tag NOT_FOUND contacts to skip in subsequent fetches
+      if(notFoundIds.length){
+        await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'tagScrapeFailed',contactIds:notFoundIds})});
+      }
 
       // If nothing got fixed this batch, the remaining likely can't be matched — stop to avoid infinite loop
       if(updates.length===0)keepGoing=false;
 
       var summarySoFar=Object.keys(allCompanies).sort(function(a,b){return allCompanies[b]-allCompanies[a]}).slice(0,8).map(function(k){return k+' ('+allCompanies[k]+')'}).join(', ');
       st.innerHTML='🔗 Batch '+batchNum+' done. Total fixed: <b>'+totalFixed+'</b>. Remaining: '+(d1.totalRemaining-updates.length)+'.'+(summarySoFar?'<br>'+summarySoFar:'');
+
+      // Delay between batches to reduce LinkedIn rate-limiting (12 seconds)
+      if(keepGoing){
+        for(var ds=12;ds>0;ds--){
+          st.innerHTML='🔗 Batch '+batchNum+' done. Total fixed: <b>'+totalFixed+'</b>. Remaining: '+(d1.totalRemaining-updates.length)+'.<br>⏳ Cooling down '+ds+'s before next batch (reduces blocks)...'+(summarySoFar?'<br>'+summarySoFar:'');
+          await new Promise(function(r){setTimeout(r,1000)});
+        }
+      }
     }
 
     var summaryText=Object.keys(allCompanies).sort(function(a,b){return allCompanies[b]-allCompanies[a]}).map(function(k){return k+' ('+allCompanies[k]+')'}).join(', ');
