@@ -326,6 +326,7 @@ body.role-viewer .edit-btn{display:none!important}
               <button onclick="fixCompanyTypes()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏷️ Fix Company Types</button>
               <button onclick="fixCompanyUrls()" style="padding:.2rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Company URLs</button>
               <button onclick="fixExcessContacts()" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">👥 Fix Contacts (Cap 20)</button>
+              <button onclick="fixOrphanedContacts()" style="padding:.2rem .6rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Orphaned Contacts (LinkedIn)</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
@@ -1934,6 +1935,81 @@ async function fixExcessContacts(){
     st.textContent='👥 Done! '+d.companiesFixed+' companies had excess contacts. '+d.totalDeleted+' contacts removed.';
     setTimeout(function(){st.textContent=''},12000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
+}
+
+async function fixOrphanedContacts(){
+  var wrongCompany=prompt('Enter the wrong company name to fix (contacts will be scraped from LinkedIn):','ideaHelix');
+  if(!wrongCompany)return;
+  var batchSize=parseInt(prompt('How many contacts to process in this batch? (max 10 recommended):','10'))||10;
+  if(batchSize>20)batchSize=20;
+
+  var st=document.getElementById('fixCompanyTypeStatus');
+  st.textContent='🔗 Step 1/3: Fetching orphaned contacts with LinkedIn URLs...';
+
+  try{
+    // Step 1: Get orphaned contacts
+    var r1=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getOrphanedContacts',wrongCompany:wrongCompany,batchSize:batchSize})});
+    var d1=await r1.json();
+    if(!d1.contacts||!d1.contacts.length){
+      st.textContent='✅ No orphaned contacts with LinkedIn URLs found for "'+wrongCompany+'". '+d1.totalRemaining+' remaining without LinkedIn.';
+      setTimeout(function(){st.textContent=''},12000);return;
+    }
+
+    var urls=d1.contacts.map(function(c){return c.linkedin}).filter(function(u){return u&&u.indexOf('linkedin.com')>-1});
+    if(!urls.length){
+      st.textContent='⚠️ Found '+d1.contacts.length+' contacts but none have valid LinkedIn URLs. '+d1.totalRemaining+' total remaining.';
+      setTimeout(function(){st.textContent=''},12000);return;
+    }
+
+    st.textContent='🔗 Step 2/3: Scraping '+urls.length+' LinkedIn profiles via Apify (may take 1-3 min)...';
+
+    // Step 2: Scrape LinkedIn profiles
+    var r2=await safeApiFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'scrapeProfiles',urls:urls})});
+    var d2=await r2.json();
+    if(d2.error){
+      st.textContent='⚠️ Scraper error: '+d2.error;
+      setTimeout(function(){st.textContent=''},12000);return;
+    }
+
+    var profiles=d2.profiles||[];
+    if(!profiles.length){
+      st.textContent='⚠️ Scraper returned no profiles. Apify actor may need checking.';
+      setTimeout(function(){st.textContent=''},12000);return;
+    }
+
+    // Step 3: Match profiles to contacts and update
+    st.textContent='🔗 Step 3/3: Matching '+profiles.length+' profiles to contacts...';
+
+    var updates=[];
+    var matched=0,unmatched=0;
+    d1.contacts.forEach(function(contact){
+      var contactUrl=(contact.linkedin||'').replace(/\/$/,'').toLowerCase();
+      var profile=profiles.find(function(p){
+        var pUrl=(p.url||'').replace(/\/$/,'').toLowerCase();
+        return pUrl&&contactUrl&&(pUrl.indexOf(contactUrl)>-1||contactUrl.indexOf(pUrl)>-1);
+      });
+      if(profile&&profile.company&&profile.company.trim()&&profile.company.toLowerCase()!==wrongCompany.toLowerCase()){
+        updates.push({contactId:contact._id,newCompany:profile.company.trim()});
+        matched++;
+      }else{
+        unmatched++;
+      }
+    });
+
+    if(updates.length){
+      await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'bulkUpdateContactCompanies',updates:updates})});
+    }
+
+    // Build summary
+    var companySummary={};
+    updates.forEach(function(u){companySummary[u.newCompany]=(companySummary[u.newCompany]||0)+1});
+    var summaryText=Object.keys(companySummary).map(function(k){return k+' ('+companySummary[k]+')'}).join(', ');
+
+    st.innerHTML='🔗 Done! Fixed <b>'+matched+'</b> contacts. Unmatched: '+unmatched+'. Remaining: '+(d1.totalRemaining-matched)+'.'
+      +(summaryText?'<br>Companies found: '+summaryText:'');
+    setTimeout(function(){st.textContent=''},30000);
+
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},12000)}
 }
 
 async function fixCompanyTypes(){

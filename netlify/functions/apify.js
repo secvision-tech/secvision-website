@@ -2,6 +2,7 @@
 const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 const ACTOR_ID = 'bebity~linkedin-jobs-scraper';
 const COMPANY_ACTOR_ID = 'bebity~linkedin-company-scraper';
+const PROFILE_ACTOR_ID = 'bebity~linkedin-profile-scraper';
 const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
 
 // Lightweight JWT decode + validate (no MongoDB dependency)
@@ -248,6 +249,65 @@ exports.handler = async function(event) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify(result) };
       } catch (e) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Company scraper error: ' + e.message }) };
+      }
+    }
+
+    // ACTION: scrapeProfiles - Scrape LinkedIn person profiles to get current company
+    if (action === 'scrapeProfiles') {
+      var profileUrls = body.urls || [];
+      if (!profileUrls.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No profile URLs provided' }) };
+      try {
+        // Start Bebity LinkedIn Profile Scraper
+        var resp = await fetch('https://api.apify.com/v2/acts/' + PROFILE_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            urls: profileUrls,
+            proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] }
+          })
+        });
+        var run = await resp.json();
+        if (!run.data || !run.data.id) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start profile scraper' }) };
+        var runId = run.data.id;
+
+        // Poll for completion (max 3 minutes)
+        var maxPolls = 36;
+        for (var p = 0; p < maxPolls; p++) {
+          await new Promise(function(r) { setTimeout(r, 5000) });
+          var statusResp = await fetch('https://api.apify.com/v2/actor-runs/' + runId + '?token=' + APIFY_TOKEN);
+          var statusData = await statusResp.json();
+          if (statusData.data && (statusData.data.status === 'SUCCEEDED' || statusData.data.status === 'FAILED' || statusData.data.status === 'ABORTED')) {
+            if (statusData.data.status !== 'SUCCEEDED') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Profile scraper ' + statusData.data.status }) };
+            break;
+          }
+        }
+
+        // Fetch results
+        var datasetId = run.data.defaultDatasetId;
+        var resultsResp = await fetch('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN + '&format=json');
+        var profiles = await resultsResp.json();
+
+        // Extract company info from profiles
+        var results = (profiles || []).map(function(p) {
+          var company = p.company || p.currentCompany || p.companyName || '';
+          // Try to get from experience if top-level field is empty
+          if (!company && p.experience && p.experience.length > 0) {
+            company = p.experience[0].company || p.experience[0].companyName || '';
+          }
+          if (!company && p.positions && p.positions.length > 0) {
+            company = p.positions[0].companyName || p.positions[0].company || '';
+          }
+          return {
+            url: p.url || p.profileUrl || p.linkedinUrl || '',
+            name: p.fullName || p.name || p.firstName + ' ' + (p.lastName || '') || '',
+            company: company,
+            title: p.headline || p.title || (p.positions && p.positions[0] ? p.positions[0].title : '') || ''
+          };
+        });
+
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ profiles: results, total: results.length }) };
+      } catch (e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Profile scraper error: ' + e.message }) };
       }
     }
 

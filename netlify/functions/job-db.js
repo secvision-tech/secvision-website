@@ -165,6 +165,7 @@ exports.handler = async (event) => {
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
+      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -319,11 +320,13 @@ exports.handler = async (event) => {
         { company: oldName },
         { $set: { company: newName } }
       );
-      // Also update contacts collection
-      await db.collection('contacts').updateMany(
-        { company: { $regex: (oldName || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } },
-        { $set: { company: newName } }
-      );
+      // Also update contacts collection (only if oldName is not empty)
+      if (oldName && oldName.trim()) {
+        await db.collection('contacts').updateMany(
+          { company: { $regex: '^' + oldName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } },
+          { $set: { company: newName } }
+        );
+      }
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: result.modifiedCount }) };
     }
 
@@ -892,11 +895,43 @@ exports.handler = async (event) => {
 
     // ACTION: deleteCompanyContacts - delete all contacts for a company
     if (action === 'deleteCompanyContacts') {
-      var company = body.company;
+      var company = (body.company || '').trim();
       if (!company) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company name required' }) };
       var contactsCol = db.collection('contacts');
-      var result = await contactsCol.deleteMany({ company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
+      var result = await contactsCol.deleteMany({ company: { $regex: '^' + company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: result.deletedCount, company: company }) };
+    }
+
+    // ACTION: getOrphanedContacts - get contacts with wrong company that have LinkedIn URLs
+    if (action === 'getOrphanedContacts') {
+      var wrongCompany = body.wrongCompany || 'ideaHelix';
+      var batchSize = body.batchSize || 10;
+      var contactsCol = db.collection('contacts');
+      var contacts = await contactsCol.find({
+        company: { $regex: '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' },
+        linkedin: { $nin: [null, '', 'N/A'] }
+      }).limit(batchSize).toArray();
+      var totalRemaining = await contactsCol.countDocuments({
+        company: { $regex: '^' + wrongCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: contacts, totalRemaining: totalRemaining }) };
+    }
+
+    // ACTION: bulkUpdateContactCompanies - update company name for multiple contacts by ID
+    if (action === 'bulkUpdateContactCompanies') {
+      var updates = body.updates || [];
+      if (!updates.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: 0 }) };
+      var ObjectId = require('mongodb').ObjectId;
+      var contactsCol = db.collection('contacts');
+      var updated = 0;
+      for (var ui = 0; ui < updates.length; ui++) {
+        var u = updates[ui];
+        if (u.contactId && u.newCompany && u.newCompany.trim()) {
+          await contactsCol.updateOne({ _id: new ObjectId(u.contactId) }, { $set: { company: u.newCompany.trim() } });
+          updated++;
+        }
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: updated }) };
     }
 
     // ACTION: fixExcessContacts - cap contacts at N per company (default 20)
@@ -1022,7 +1057,7 @@ exports.handler = async (event) => {
       var contactsCol = db.collection('contacts');
       var compRaw = (body.company || '').replace(/[®™©]/g, '').trim();
       if (!compRaw) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: [] }) };
-      var compPattern = compRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var compPattern = '^' + compRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
       var contacts = await contactsCol.find({ company: { $regex: compPattern, $options: 'i' } }).limit(20).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: contacts }) };
     }
