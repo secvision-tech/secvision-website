@@ -1982,11 +1982,15 @@ async function fixContactsViaLinkedin(){
       st.textContent='🔗 Batch '+batchNum+' — Step 3: Matching '+profiles.length+' profiles...';
       var updates=[];
       var notFoundIds=[];
+      function liSlug(url){
+        var m=(url||'').toLowerCase().match(/\/in\/([^/?#]+)/);
+        return m?m[1].replace(/\/$/,''):'';
+      }
       d1.contacts.forEach(function(contact){
-        var cUrl=(contact.linkedin||'').replace(/\/$/,'').toLowerCase().split('?')[0];
+        var cSlug=liSlug(contact.linkedin);
         var profile=profiles.find(function(p){
-          var pUrl=(p.url||'').replace(/\/$/,'').toLowerCase().split('?')[0];
-          return pUrl&&cUrl&&(pUrl===cUrl||pUrl.indexOf(cUrl)>-1||cUrl.indexOf(pUrl)>-1);
+          var pSlug=liSlug(p.url);
+          return pSlug&&cSlug&&pSlug===cSlug;
         });
         if(profile&&profile.company&&profile.company.trim()&&profile.company.toLowerCase()!==wrongCompany.toLowerCase()){
           updates.push({contactId:contact._id,newCompany:profile.company.trim()});
