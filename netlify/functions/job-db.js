@@ -503,7 +503,7 @@ exports.handler = async (event) => {
         if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
       });
       var contractSkills = await col.aggregate([
-        { $match: { jobType: 'Contract', tools: { $ne: 'See details' } } },
+        { $match: { jobType: 'Contract', tools: { $type: 'string', $nin: ['', 'See details'] } } },
         { $project: { items: { $split: ['$tools', ', '] } } },
         { $unwind: '$items' },
         { $match: { items: { $ne: '' } } },
@@ -512,7 +512,7 @@ exports.handler = async (event) => {
         { $limit: 20 }
       ]).toArray();
       var contractCerts = await col.aggregate([
-        { $match: { jobType: 'Contract', certifications: { $nin: [null, '', 'See details'] } } },
+        { $match: { jobType: 'Contract', certifications: { $type: 'string', $nin: ['', 'See details'] } } },
         { $project: { items: { $split: ['$certifications', ', '] } } },
         { $unwind: '$items' },
         { $match: { items: { $ne: '' } } },
