@@ -5,6 +5,25 @@ const COMPANY_ACTOR_ID = 'bebity~linkedin-company-scraper';
 const PROFILE_ACTOR_ID = 'bebity~linkedin-premium-actor';
 const hdrs = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' };
 
+// Extract company from LinkedIn headline e.g. "Talent Acquisition at Peraton" -> "Peraton"
+function extractCompanyFromHeadline(headline) {
+  if (!headline) return '';
+  var h = headline.trim();
+  var atMatch = h.match(/\bat\s+([A-Z][\w&.,'\- ]+?)(?:\s*[|.\-]|$)/);
+  if (atMatch) {
+    var c = atMatch[1].trim().replace(/[,.|]+$/, '').trim();
+    if (c.length >= 2 && c.length <= 60) return c;
+  }
+  if (h.indexOf('|') > -1) {
+    var parts = h.split('|');
+    var last = parts[parts.length - 1].trim();
+    if (last.length >= 2 && last.length <= 40 && /^[A-Z]/.test(last) && !/recruiter|engineer|manager|analyst|developer|specialist|consultant|lead|director|officer/i.test(last)) {
+      return last;
+    }
+  }
+  return '';
+}
+
 // Lightweight JWT decode + validate (no MongoDB dependency)
 function validateJwt(event) {
   var authHeader = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
@@ -295,9 +314,14 @@ exports.handler = async function(event) {
         var results = (profiles || []).map(function(p) {
           var company = '';
           var title = p.headline || '';
+          // Priority 1: experience array (when available)
           if (p.experience && p.experience.length > 0) {
             company = p.experience[0].companyName || '';
             if (p.experience[0].title) title = p.experience[0].title;
+          }
+          // Priority 2: extract from headline "Title at Company" or "Title | ... at Company"
+          if (!company && p.headline) {
+            company = extractCompanyFromHeadline(p.headline);
           }
           return {
             url: p.linkedinUrl || p.url || '',
