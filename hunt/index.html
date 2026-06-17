@@ -1949,7 +1949,7 @@ async function fixContactsViaLinkedin(){
   var totalFixed=0,allCompanies={},batchNum=0,keepGoing=true;
 
   try{
-    while(keepGoing&&batchNum<50){
+    while(keepGoing&&batchNum<100){
       batchNum++;
       // Step 1: Get a batch of contacts with LinkedIn URLs
       st.textContent='🔗 Batch '+batchNum+' — Step 1: Fetching contacts with LinkedIn URLs...';
@@ -2010,8 +2010,9 @@ async function fixContactsViaLinkedin(){
         await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'tagScrapeFailed',contactIds:notFoundIds})});
       }
 
-      // If nothing got fixed this batch, the remaining likely can't be matched — stop to avoid infinite loop
-      if(updates.length===0)keepGoing=false;
+      // Safety: if a batch neither fixed NOR tagged anything, stop (would loop forever).
+      // Otherwise keep going — tagged failures leave the pool, so next fetch returns fresh contacts.
+      if(updates.length===0&&notFoundIds.length===0)keepGoing=false;
 
       var summarySoFar=Object.keys(allCompanies).sort(function(a,b){return allCompanies[b]-allCompanies[a]}).slice(0,8).map(function(k){return k+' ('+allCompanies[k]+')'}).join(', ');
       st.innerHTML='🔗 Batch '+batchNum+' done. Total fixed: <b>'+totalFixed+'</b>. Remaining: '+(d1.totalRemaining-updates.length)+'.'+(summarySoFar?'<br>'+summarySoFar:'');
