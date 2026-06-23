@@ -161,7 +161,7 @@ exports.handler = async (event) => {
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       'updateField': WRITE_ROLES, 'updateCompanyInfo': WRITE_ROLES, 'updateCompanyName': WRITE_ROLES,
       'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': WRITE_ROLES,
-      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP,
+      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY,
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
@@ -757,6 +757,68 @@ exports.handler = async (event) => {
         { $count: 'total' }
       ]).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: totalCount[0] ? totalCount[0].total : 0 }) };
+    }
+
+    // ACTION: propagateCompanyData - copy known-good URL/LinkedIn/size/type across all jobs of same company
+    if (action === 'propagateCompanyData') {
+      // Group by company, find the best (non-empty, non-google) values, apply to all jobs of that company
+      var groups = await col.aggregate([
+        { $match: { company: { $nin: [null, ''] } } },
+        { $group: {
+          _id: '$company',
+          bestUrl: { $max: { $cond: [{ $and: [
+            { $ne: ['$companyUrl', ''] }, { $ne: ['$companyUrl', null] },
+            { $not: { $regexMatch: { input: { $ifNull: ['$companyUrl', ''] }, regex: /google\.com\/search/ } } }
+          ] }, '$companyUrl', null] } },
+          bestLinkedin: { $max: { $cond: [{ $and: [{ $ne: ['$companyLinkedin', ''] }, { $ne: ['$companyLinkedin', null] }] }, '$companyLinkedin', null] } },
+          bestSize: { $max: '$companySize' },
+          bestType: { $max: { $cond: [{ $and: [{ $ne: ['$companyType', ''] }, { $ne: ['$companyType', null] }] }, '$companyType', null] } },
+          jobCount: { $sum: 1 }
+        } },
+        { $match: { $or: [
+          { bestUrl: { $ne: null } }, { bestLinkedin: { $ne: null } },
+          { bestSize: { $gt: 0 } }, { bestType: { $ne: null } }
+        ] } }
+      ]).toArray();
+
+      var companiesUpdated = 0, jobsUpdated = 0;
+      for (var gi = 0; gi < groups.length; gi++) {
+        var g = groups[gi];
+        var escName = g._id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        var nameFilter = { company: g._id };
+
+        // Fill URL where empty or google-search
+        if (g.bestUrl) {
+          var r1 = await col.updateMany(
+            { company: g._id, $or: [{ companyUrl: { $in: [null, ''] } }, { companyUrl: { $exists: false } }, { companyUrl: { $regex: /google\.com\/search/ } }] },
+            { $set: { companyUrl: g.bestUrl } }
+          );
+          jobsUpdated += r1.modifiedCount;
+        }
+        // Fill LinkedIn where empty
+        if (g.bestLinkedin) {
+          await col.updateMany(
+            { company: g._id, $or: [{ companyLinkedin: { $in: [null, ''] } }, { companyLinkedin: { $exists: false } }] },
+            { $set: { companyLinkedin: g.bestLinkedin } }
+          );
+        }
+        // Fill size where 0/empty
+        if (g.bestSize && g.bestSize > 0) {
+          await col.updateMany(
+            { company: g._id, $or: [{ companySize: { $in: [null, 0, ''] } }, { companySize: { $exists: false } }] },
+            { $set: { companySize: g.bestSize } }
+          );
+        }
+        // Fill type where empty
+        if (g.bestType) {
+          await col.updateMany(
+            { company: g._id, $or: [{ companyType: { $in: [null, ''] } }, { companyType: { $exists: false } }] },
+            { $set: { companyType: g.bestType } }
+          );
+        }
+        companiesUpdated++;
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companiesUpdated: companiesUpdated, jobsUpdated: jobsUpdated }) };
     }
 
     // Update company fields ONLY if currently empty (safe — never overwrites)

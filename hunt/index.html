@@ -329,6 +329,7 @@ body.role-viewer .edit-btn{display:none!important}
               <button onclick="fixOrphanedContacts()" style="padding:.2rem .6rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Orphaned Contacts (Email Match)</button>
               <button onclick="fixContaminatedUrls()" style="padding:.2rem .6rem;background:#B45309;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🧹 Clear ideaHelix URLs from Jobs</button>
               <button onclick="fixContactsViaLinkedin()" style="padding:.2rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Contacts via LinkedIn Scrape</button>
+              <button onclick="propagateCompanyData()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Propagate Company URLs</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
@@ -1128,7 +1129,7 @@ async function autoEnrichCompanies(){
       }
 
       // Step 1b: If still no size, try LinkedIn Company Scraper
-      if(!comp.hasSize&&!comp.hasContacts){
+      if(!comp.hasSize){
         try{
           // Find LinkedIn URL from jobs
           var linkedinUrl='';
@@ -1138,7 +1139,7 @@ async function autoEnrichCompanies(){
               else if(j.companyUrl&&j.companyUrl.indexOf('linkedin.com/company')>-1)linkedinUrl=j.companyUrl;
             }
           });
-          if(linkedinUrl||comp.company){
+          if(linkedinUrl){
             var lr=await safeApiFetch('/.netlify/functions/apify',{method:'POST',headers:{'Content-Type':'application/json'},
               body:JSON.stringify({action:'scrapeCompany',linkedinUrl:linkedinUrl,company:comp.company})});
             if(lr.found){
@@ -1944,6 +1945,19 @@ async function fixExcessContacts(){
     st.textContent='👥 Done! '+d.companiesFixed+' companies had excess contacts. '+d.totalDeleted+' contacts removed.';
     setTimeout(function(){st.textContent=''},12000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
+}
+
+async function propagateCompanyData(){
+  if(!confirm('Propagate known-good company URL, LinkedIn, size, and type across all jobs of the same company?\n\nThis fills empty/Google-search fields using data already present on other jobs of that company. Existing real data is never overwritten.'))return;
+  var st=document.getElementById('fixCompanyTypeStatus');
+  st.textContent='🔄 Propagating company data across same-company jobs...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'propagateCompanyData'})});
+    var d=await r.json();
+    st.textContent='🔄 Done! Updated '+d.jobsUpdated+' job records across '+d.companiesUpdated+' companies using known-good URLs/LinkedIn.';
+    dashLoaded=false;
+    setTimeout(function(){st.textContent=''},15000);
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},10000)}
 }
 
 async function fixContactsViaLinkedin(){
