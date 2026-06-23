@@ -1984,7 +1984,9 @@ async function fixContactsViaLinkedin(){
       // Step 2: Start scrape (returns immediately), then poll
       st.textContent='🔗 Batch '+batchNum+' — Step 2: Starting scrape of '+urls.length+' profiles...';
       var startResp=await safeApiFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startProfileScrape',urls:urls})});
-      if(startResp.error){st.textContent='⚠️ Start error: '+startResp.error;return}
+      if(startResp.error){
+        var detail=startResp.apifyResponse?(' — Apify said: '+startResp.apifyResponse+' (HTTP '+startResp.apifyStatus+', '+startResp.urlCount+' URLs)'):'';
+        st.textContent='⚠️ Start error: '+startResp.error+detail;return}
       var runId=startResp.runId,datasetId=startResp.datasetId;
 
       // Poll every 8 seconds (up to 5 min) from the frontend

@@ -286,7 +286,14 @@ exports.handler = async function(event) {
           })
         });
         var run = await resp.json();
-        if (!run.data || !run.data.id) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start profile scraper' }) };
+        if (!run.data || !run.data.id) {
+          return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+            error: 'Failed to start profile scraper',
+            apifyStatus: resp.status,
+            apifyResponse: run && run.error ? (run.error.message || run.error.type || JSON.stringify(run.error)) : JSON.stringify(run).slice(0, 300),
+            urlCount: profileUrls.length
+          }) };
+        }
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ runId: run.data.id, datasetId: run.data.defaultDatasetId }) };
       } catch (e) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Start error: ' + e.message }) };
