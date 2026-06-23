@@ -66,8 +66,15 @@ exports.handler = async function(event) {
       for (var s = 0; s < strategies.length; s++) {
         try {
           data = await apolloFetch('mixed_people/api_search', strategies[s]);
-          if (data.people && data.people.length > 0) break;
+          if (data && data.people && data.people.length > 0) break;
         } catch(e) { data = null; }
+      }
+      // All strategies failed or returned nothing (often Apollo credits exhausted, or no matches)
+      if (!data) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+          people: [], total: 0,
+          warning: 'Apollo returned no data. This usually means Apollo API credits are exhausted, or no contacts matched. Try "Enrich from LinkedIn" or add contacts manually.'
+        })};
       }
       var people = (data.people || []).map(function(p) {
         return {

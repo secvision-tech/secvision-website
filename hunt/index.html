@@ -3111,7 +3111,9 @@ async function apolloSearch(){
   try{
     var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'searchPeople',company:cfCompany,domain:cfDomain})});
     if(d.error){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#DC2626">'+esc(d.error)+'</div>';return}
-    if(!d.people||!d.people.length){document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts found. Try LinkedIn search below.</div>';return}
+    if(!d.people||!d.people.length){
+      var msg=d.warning||'No contacts found. Try LinkedIn search below.';
+      document.getElementById('cfDiscovered').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">'+esc(msg)+'</div>';return}
 
     // Cap at 20 contacts max per company
     var MAX_CONTACTS=20;
