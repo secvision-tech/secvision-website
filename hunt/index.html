@@ -1255,6 +1255,13 @@ function formatDesc(text){
     .replace(/([\w.+-]+@[\w-]+\.[\w.]+)/gi,'<a href="mailto:$1" style="color:var(--ac)">$1</a>')
     // Handle inline bullets (• or special chars mid-text without preceding newline)
     .replace(/([^\n])\s*[•\u2022\u2023\u2043\u25CF\u25CB\u25AA\u25AB]\s*/g,'$1\n\u2022 ')
+    // #317: Inline asterisk bullets "* item * item * item" → one per line.
+    // Prefix a space so a leading "*" is also caught, only fire when 2+ markers present.
+    .replace(/^([\s\S]*)$/, function(m){
+      var probe=' '+m;
+      var cnt=(probe.match(/\s\*\s+[A-Z]/g)||[]).length;
+      return cnt>=2 ? probe.replace(/\s\*\s+(?=[A-Z])/g,'\n\u2022 ') : m;
+    })
     // Handle dash/asterisk bullets at line start
     .replace(/^\s*[\-\*]\s+/gm,'\u2022 ')
     // Handle numbered items at line start
@@ -2675,8 +2682,8 @@ function loadSettings(){
   // Load user prefs
   var up=localStorage.getItem('huntUserPrefs');
   if(up){try{Object.assign(USER_PREFS,JSON.parse(up))}catch(e){}}
-  // Auto-detect on first visit
-  if(!localStorage.getItem('huntSettingsInit')){
+  // Auto-detect on first visit (only if no saved global settings exist)
+  if(!localStorage.getItem('huntSettingsInit')&&!gs){
     var det=detectUserLocale();
     GLOBAL_SETTINGS.dateFormat=det.dateFormat;
     GLOBAL_SETTINGS.timeZone=det.timeZone;
