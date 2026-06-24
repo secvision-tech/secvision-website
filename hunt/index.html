@@ -165,7 +165,7 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
 .set-input{width:100%;padding:.3rem .4rem;font-size:.7rem;border:1px solid var(--g2);border-radius:4px;font-family:'DM Sans',sans-serif;background:var(--bg)}
 .set-hint{font-size:.55rem;color:var(--g3);display:block;margin-top:.1rem}
 /* Role-based visibility via body class */
-body.role-viewer #exportBtns,body.role-pending #exportBtns{display:none!important}
+body.role-viewer #exportBtns,body.role-pending #exportBtns,body.role-viewer #dbExportBtns,body.role-pending #dbExportBtns{display:none!important}
 body.role-viewer .edit-btn{display:none!important}
 .dm{background:#fff;border-radius:14px;max-width:720px;width:100%;max-height:85vh;overflow-y:auto;box-shadow:0 30px 80px rgba(0,0,0,.25)}
 .dm-h{background:var(--pri);padding:1rem 1.2rem;border-radius:14px 14px 0 0;display:flex;justify-content:space-between;align-items:center}
@@ -266,6 +266,7 @@ body.role-viewer .edit-btn{display:none!important}
           <div class="sg"><label>To</label><input type="date" id="dbDateTo"></div>
         </div>
         <div class="db-info" id="dbInfo"></div>
+        <div class="export-btns" id="dbExportBtns" style="display:none;margin-top:.4rem"><button class="export-btn" onclick="exportCSV()">CSV</button><button class="export-btn" onclick="exportXLSX()">Excel</button><button class="export-btn" onclick="exportPDF()">PDF</button></div>
       </div>
       <div id="dashPanel" class="dash-panel show">
         <div class="dash-loading" id="dashLoading">Loading dashboard...</div>
@@ -528,9 +529,10 @@ function applyRoleVisibility(){
     return;
   }
 
-  // Settings in user dropdown: super_admin and admin only
+  // #320: Settings visible to ALL active roles — every user gets User Preferences.
+  // Global Settings (super) and User Management (admin+) are gated inside the settings popup.
   var settingsDropdownBtn=document.getElementById('udSettingsBtn');
-  if(settingsDropdownBtn)settingsDropdownBtn.style.display=(isSuper||isAdmin)?'':'none';
+  if(settingsDropdownBtn)settingsDropdownBtn.style.display='';
 
   // Search Web tab: not for viewers
   var webBtn=document.getElementById('modeWeb');
@@ -1213,6 +1215,9 @@ async function autoEnrichCompanies(){
 function renderTable(){
   document.getElementById('loadState').style.display='none';document.getElementById('emptyState').style.display='none';
   document.getElementById('rTable').style.display='table';document.getElementById('pag').classList.add('show');
+  // #323: Show DB export buttons when in DB mode with results (manager+ via role CSS)
+  var dbExp=document.getElementById('dbExportBtns');
+  if(dbExp)dbExp.style.display=(searchMode==='db'&&filtered.length>0)?'flex':'none';
   var tot=filtered.length,tp=Math.ceil(tot/perPage);if(curPage>tp)curPage=tp||1;
   var s=(curPage-1)*perPage,e=Math.min(s+perPage,tot),pg=filtered.slice(s,e);
   document.getElementById('rCount').innerHTML='Showing <strong>'+(s+1)+'-'+e+'</strong> of <strong>'+tot+'</strong>'+(tot!==allJobs.length?' (filtered from '+allJobs.length+')':'');
@@ -1381,21 +1386,17 @@ async function viewDet(i){
   var canContact=curUserRole!=='viewer';
   var canEnrich=curUserRole==='super_admin'||curUserRole==='admin'||curUserRole==='manager';
   var canEdit=curUserRole!=='viewer';
-  var isExternalViewer=curUserRole==='viewer'&&curUserData&&curUserData.userType==='external';
   var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status','<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)+'</span>'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
-  // Fetch contacts from DB with LinkedIn links
+  // Fetch contacts from DB with LinkedIn links (only show section if user has access)
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
-  }else{
-    h+='<div class="dm-sec"><h4>Contacts</h4><div style="font-size:.7rem;color:var(--g3);padding:.3rem;background:var(--g1);border-radius:4px">🔒 Contact details are restricted for your role.</div>';
+    h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
+    h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Manage Contacts</button>';
+    if(canEnrich)h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
+    h+='</div></div>';
   }
-  h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
-  if(canContact)h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Manage Contacts</button>';
-  if(canEnrich)h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
-  h+='</div></div>';
-  // Load contacts async (hide for external viewers)
-  if(isExternalViewer){var cel2=document.getElementById('viewContacts');if(cel2)cel2.innerHTML='<div style="color:var(--g3);font-size:.6rem">Contact details hidden for external users.</div>'}
-  else setTimeout(async function(){
+  // Load contacts async
+  if(canContact)setTimeout(async function(){
     try{
       var cr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:j.company})});
       var cd=await cr.json();
@@ -3066,6 +3067,10 @@ async function openContactFinder(company,domain,linkedin){
   }else{
     autoBtn.disabled=false;autoBtn.style.opacity='1';autoBtn.title='';
   }
+  // #319: Gate "Get Company Size" in popup by same role as View (canEnrich = manager+)
+  var popupCanEnrich=curUserRole==='super_admin'||curUserRole==='admin'||curUserRole==='manager';
+  var cfEnrichBtn=document.getElementById('cfEnrichBtn');
+  if(cfEnrichBtn)cfEnrichBtn.style.display=popupCanEnrich?'':'none';
   // LinkedIn search links
   var roles=['CISO','VP Security','Hiring Manager','HR Head','Recruiter','Talent Acquisition','SOC Manager','Security Director'];
   var linksHtml=roles.map(function(r){return '<a href="https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent(company+' AND '+r)+'" target="_blank" style="font-size:.6rem;padding:.2rem .5rem;background:var(--pri);color:#fff;border-radius:3px;text-decoration:none">'+r+'</a>'}).join('');
@@ -3088,7 +3093,9 @@ async function openContactFinder(company,domain,linkedin){
       var totalContacts=d.contacts.length;
       var MAX_CF_DISPLAY=20;
       var displayList=d.contacts.slice(0,MAX_CF_DISPLAY);
-      var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem"><div style="font-size:.65rem;color:var(--g5);font-weight:600">📋 Saved Contacts ('+totalContacts+')</div><button onclick="delAllContacts()" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All</button></div><div style="display:flex;flex-direction:column;gap:.2rem">';
+      var canDeleteAll=curUserRole==='super_admin'||curUserRole==='admin';
+      var delAllBtn=canDeleteAll?'<button onclick="delAllContacts()" style="padding:.2rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🗑️ Delete All</button>':'';
+      var h='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.3rem"><div style="font-size:.65rem;color:var(--g5);font-weight:600">📋 Saved Contacts ('+totalContacts+')</div>'+delAllBtn+'</div><div style="display:flex;flex-direction:column;gap:.2rem">';
       displayList.forEach(function(c){
         var linkedinHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-size:.55rem">LinkedIn ↗</a>':'';
         var emailHtml=(c.email&&c.email!=='N/A')?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'';
@@ -3287,7 +3294,8 @@ function renderSkillsInsight(certs,tools,skills,roles){
     var maxR=roles[0]?.count||1;
     roles.slice(0,8).forEach(function(r){
       var pct=Math.round(r.count/maxR*100);
-      html+='<div class="dash-insight-row"><span class="dash-insight-label">'+(r._id||'Unknown').slice(0,35)+'</span><div class="dash-insight-bar" style="width:'+pct+'%;background:'+PIE_COLORS[0]+'"></div><span class="dash-insight-pct">'+r.count+' jobs</span></div>';
+      var expLabel=(r.avgExp&&r.avgExp>0)?' · ~'+Math.round(r.avgExp)+'y exp':'';
+      html+='<div class="dash-insight-row"><span class="dash-insight-label">'+(r._id||'Unknown').slice(0,35)+'</span><div class="dash-insight-bar" style="width:'+pct+'%;background:'+PIE_COLORS[0]+'"></div><span class="dash-insight-pct">'+r.count+' jobs'+expLabel+'</span></div>';
     });
   }
   // Top skills

@@ -165,7 +165,7 @@ exports.handler = async (event) => {
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
-      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP, 'tagScrapeFailed': ADMIN_UP,
+      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP, 'tagScrapeFailed': ADMIN_UP, 'deleteCompanyContacts': ADMIN_UP,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -456,9 +456,24 @@ exports.handler = async (event) => {
       });
 
       // Role distribution - case insensitive, normalize variants
+      // #322: also compute average required experience (years) per role
       var roleCounts = await col.aggregate([
         { $match: { titleClean: { $ne: null } } },
-        { $group: { _id: { $toLower: '$titleClean' }, count: { $sum: 1 } } },
+        { $project: {
+          role: { $toLower: '$titleClean' },
+          // Extract first number from experience text (e.g. "Minimum 8 years..." -> 8)
+          expYears: {
+            $let: {
+              vars: { m: { $regexFind: { input: { $ifNull: ['$experience', ''] }, regex: /(\d+)/ } } },
+              in: { $cond: [{ $ne: ['$$m', null] }, { $toInt: { $arrayElemAt: ['$$m.captures', 0] } }, null] }
+            }
+          }
+        } },
+        { $group: {
+          _id: '$role',
+          count: { $sum: 1 },
+          avgExp: { $avg: '$expYears' }
+        } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]).toArray();
