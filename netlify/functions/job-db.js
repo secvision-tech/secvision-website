@@ -161,7 +161,7 @@ exports.handler = async (event) => {
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       'updateField': WRITE_ROLES, 'updateCompanyInfo': WRITE_ROLES, 'updateCompanyName': WRITE_ROLES,
       'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': WRITE_ROLES,
-      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY, 'clearContaminatedSize': SUPER_ONLY, 'getCompaniesBySize': ADMIN_UP,
+      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY, 'clearContaminatedSize': SUPER_ONLY, 'getCompaniesBySize': ADMIN_UP, 'getTopCompaniesNeedingSize': ADMIN_UP,
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
@@ -795,6 +795,27 @@ exports.handler = async (event) => {
         { $count: 'total' }
       ]).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: totalCount[0] ? totalCount[0].total : 0 }) };
+    }
+
+    // ACTION: getTopCompaniesNeedingSize - top-N companies by job count that lack size
+    if (action === 'getTopCompaniesNeedingSize') {
+      var topN = Math.min(body.topN || 100, 200);
+      var companies = await col.aggregate([
+        { $match: { company: { $nin: [null, ''] } } },
+        { $group: {
+          _id: '$company',
+          jobCount: { $sum: 1 },
+          maxSize: { $max: '$companySize' },
+          companyLinkedin: { $first: { $cond: [{ $and: [{ $ne: ['$companyLinkedin', ''] }, { $ne: ['$companyLinkedin', null] }] }, '$companyLinkedin', null] } },
+          companyUrl: { $first: { $cond: [{ $and: [{ $ne: ['$companyUrl', ''] }, { $ne: ['$companyUrl', null] }, { $not: { $regexMatch: { input: { $ifNull: ['$companyUrl', ''] }, regex: /google\.com\/search/ } } }] }, '$companyUrl', null] } }
+        } },
+        // Only companies that still lack a real size
+        { $match: { $or: [{ maxSize: { $in: [null, 0] } }, { maxSize: { $exists: false } }] } },
+        { $sort: { jobCount: -1 } },
+        { $limit: topN }
+      ]).toArray();
+      var withLinkedin = companies.filter(function(c){ return c.companyLinkedin; }).length;
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: companies.length, withLinkedin: withLinkedin }) };
     }
 
     // ACTION: getCompaniesBySize - list companies whose jobs have a specific size (for targeted re-enrichment)

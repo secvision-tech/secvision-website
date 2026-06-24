@@ -333,6 +333,7 @@ body.role-viewer .edit-btn{display:none!important}
               <button onclick="propagateCompanyData()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Propagate Company URLs</button>
               <button onclick="clearContaminatedSize()" style="padding:.2rem .6rem;background:#B45309;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📏 Clear Wrong Size (220)</button>
               <button onclick="enrichBySize()" style="padding:.2rem .6rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich Companies by Size</button>
+              <button onclick="enrichTopCompanies()" style="padding:.2rem .6rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⭐ Enrich Top Companies by Job Count</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
@@ -1948,6 +1949,71 @@ async function fixExcessContacts(){
     st.textContent='👥 Done! '+d.companiesFixed+' companies had excess contacts. '+d.totalDeleted+' contacts removed.';
     setTimeout(function(){st.textContent=''},12000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
+}
+
+async function enrichTopCompanies(){
+  var topN=parseInt(prompt('Enrich the top N companies by job-opening count (that lack size):','100'))||100;
+  if(topN>200)topN=200;
+
+  var st=document.getElementById('fixCompanyTypeStatus');
+  st.textContent='⭐ Finding top '+topN+' companies needing size...';
+
+  try{
+    var r1=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getTopCompaniesNeedingSize',topN:topN})});
+    var d1=await r1.json();
+    if(!d1.companies||!d1.companies.length){
+      st.textContent='✅ No top companies need size enrichment.';
+      setTimeout(function(){st.textContent=''},8000);return;
+    }
+
+    if(!confirm('Found top '+d1.total+' companies by job count needing size.\n'+d1.withLinkedin+' already have a LinkedIn URL; the rest will first try Apollo to find one.\n\nProceed? This scrapes LinkedIn for each (may take several minutes).'))return;
+
+    var fixed=0,noData=0;
+    for(var i=0;i<d1.companies.length;i++){
+      var comp=d1.companies[i];
+      st.textContent='⭐ '+(i+1)+'/'+d1.companies.length+': '+comp._id+' ('+comp.jobCount+' jobs)...';
+
+      var linkedinUrl=comp.companyLinkedin||'';
+
+      // If no LinkedIn, try Apollo enrichCompany to discover it
+      if(!linkedinUrl){
+        try{
+          var ce=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',body:JSON.stringify({action:'enrichCompany',company:comp._id,domain:''})});
+          if(ce&&ce.linkedin)linkedinUrl=ce.linkedin;
+          // Apollo may directly return size too
+          if(ce&&ce.size&&ce.size>0){
+            await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp._id,updates:{companySize:ce.size,companyType:ce.type||'',companyLinkedin:ce.linkedin||'',companyUrl:ce.website||''}})});
+            fixed++;
+            await new Promise(function(r){setTimeout(r,1200)});
+            continue;
+          }
+        }catch(e){}
+      }
+
+      // Scrape LinkedIn company page if we have a URL
+      if(linkedinUrl){
+        try{
+          var lr=await safeApiFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'scrapeCompany',linkedinUrl:linkedinUrl,company:comp._id})});
+          if(lr.found){
+            var updates={};
+            if(lr.size&&lr.size>0)updates.companySize=lr.size;
+            if(lr.type)updates.companyType=lr.type;
+            if(lr.website)updates.companyUrl=lr.website;
+            if(Object.keys(updates).length){
+              await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp._id,updates:updates})});
+              fixed++;
+            }else{noData++}
+          }else{noData++}
+        }catch(e){noData++}
+      }else{noData++}
+
+      await new Promise(function(r){setTimeout(r,1500)});
+    }
+    st.textContent='⭐ Done! Enriched '+fixed+' of '+d1.companies.length+' top companies. '+noData+' had no data/LinkedIn.';
+    dashLoaded=false;
+    setTimeout(function(){st.textContent=''},20000);
+
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},12000)}
 }
 
 async function enrichBySize(){
