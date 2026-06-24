@@ -761,7 +761,7 @@ exports.handler = async (event) => {
 
     // ACTION: propagateCompanyData - copy known-good URL/LinkedIn/size/type across all jobs of same company
     if (action === 'propagateCompanyData') {
-      // Group by company, find the best (non-empty, non-google) values, apply to all jobs of that company
+      // Group by company, find the best (non-empty, non-google) values
       var groups = await col.aggregate([
         { $match: { company: { $nin: [null, ''] } } },
         { $group: {
@@ -775,50 +775,53 @@ exports.handler = async (event) => {
           bestType: { $max: { $cond: [{ $and: [{ $ne: ['$companyType', ''] }, { $ne: ['$companyType', null] }] }, '$companyType', null] } },
           jobCount: { $sum: 1 }
         } },
-        { $match: { $or: [
+        // Only companies with 2+ jobs AND some good data to propagate (single-job companies have nothing to propagate to)
+        { $match: { jobCount: { $gt: 1 }, $or: [
           { bestUrl: { $ne: null } }, { bestLinkedin: { $ne: null } },
           { bestSize: { $gt: 0 } }, { bestType: { $ne: null } }
         ] } }
       ]).toArray();
 
-      var companiesUpdated = 0, jobsUpdated = 0;
+      // Build bulk operations (one updateMany per fill-type per company, batched)
+      var ops = [];
       for (var gi = 0; gi < groups.length; gi++) {
         var g = groups[gi];
-        var escName = g._id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        var nameFilter = { company: g._id };
-
-        // Fill URL where empty or google-search
         if (g.bestUrl) {
-          var r1 = await col.updateMany(
-            { company: g._id, $or: [{ companyUrl: { $in: [null, ''] } }, { companyUrl: { $exists: false } }, { companyUrl: { $regex: /google\.com\/search/ } }] },
-            { $set: { companyUrl: g.bestUrl } }
-          );
-          jobsUpdated += r1.modifiedCount;
+          ops.push({ updateMany: {
+            filter: { company: g._id, $or: [{ companyUrl: { $in: [null, ''] } }, { companyUrl: { $exists: false } }, { companyUrl: { $regex: /google\.com\/search/ } }] },
+            update: { $set: { companyUrl: g.bestUrl } }
+          }});
         }
-        // Fill LinkedIn where empty
         if (g.bestLinkedin) {
-          await col.updateMany(
-            { company: g._id, $or: [{ companyLinkedin: { $in: [null, ''] } }, { companyLinkedin: { $exists: false } }] },
-            { $set: { companyLinkedin: g.bestLinkedin } }
-          );
+          ops.push({ updateMany: {
+            filter: { company: g._id, $or: [{ companyLinkedin: { $in: [null, ''] } }, { companyLinkedin: { $exists: false } }] },
+            update: { $set: { companyLinkedin: g.bestLinkedin } }
+          }});
         }
-        // Fill size where 0/empty
         if (g.bestSize && g.bestSize > 0) {
-          await col.updateMany(
-            { company: g._id, $or: [{ companySize: { $in: [null, 0, ''] } }, { companySize: { $exists: false } }] },
-            { $set: { companySize: g.bestSize } }
-          );
+          ops.push({ updateMany: {
+            filter: { company: g._id, $or: [{ companySize: { $in: [null, 0, ''] } }, { companySize: { $exists: false } }] },
+            update: { $set: { companySize: g.bestSize } }
+          }});
         }
-        // Fill type where empty
         if (g.bestType) {
-          await col.updateMany(
-            { company: g._id, $or: [{ companyType: { $in: [null, ''] } }, { companyType: { $exists: false } }] },
-            { $set: { companyType: g.bestType } }
-          );
+          ops.push({ updateMany: {
+            filter: { company: g._id, $or: [{ companyType: { $in: [null, ''] } }, { companyType: { $exists: false } }] },
+            update: { $set: { companyType: g.bestType } }
+          }});
         }
-        companiesUpdated++;
       }
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companiesUpdated: companiesUpdated, jobsUpdated: jobsUpdated }) };
+
+      var jobsUpdated = 0;
+      if (ops.length) {
+        // Execute in chunks of 500 ops to stay within limits
+        for (var ci = 0; ci < ops.length; ci += 500) {
+          var chunk = ops.slice(ci, ci + 500);
+          var res = await col.bulkWrite(chunk, { ordered: false });
+          jobsUpdated += (res.modifiedCount || 0);
+        }
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companiesUpdated: groups.length, jobsUpdated: jobsUpdated }) };
     }
 
     // Update company fields ONLY if currently empty (safe — never overwrites)
