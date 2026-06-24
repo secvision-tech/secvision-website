@@ -161,7 +161,7 @@ exports.handler = async (event) => {
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       'updateField': WRITE_ROLES, 'updateCompanyInfo': WRITE_ROLES, 'updateCompanyName': WRITE_ROLES,
       'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': WRITE_ROLES,
-      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY,
+      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY, 'clearContaminatedSize': SUPER_ONLY,
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
@@ -196,7 +196,12 @@ exports.handler = async (event) => {
       if (body.status && body.status !== 'all') filter.status = body.status;
       if (body.company) {
         var compSearch = body.company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        filter.company = { $regex: compSearch, $options: 'i' };
+        // #328: exactCompany flag for dashboard drill-down (clicking a company name) → exact match
+        if (body.exactCompany) {
+          filter.company = { $regex: '^' + compSearch + '$', $options: 'i' };
+        } else {
+          filter.company = { $regex: compSearch, $options: 'i' };
+        }
       }
       if (body.companyType && body.companyType !== 'all') filter.companyType = body.companyType;
       if (body.jobType && body.jobType !== 'all') filter.jobType = body.jobType;
@@ -702,7 +707,25 @@ exports.handler = async (event) => {
       complianceCounts = normList(complianceCounts);
       toolsCounts = normList(toolsCounts);
       skillCounts = normList(skillCounts);
-      roleCounts = normList(roleCounts);
+      // #327: normalize roles but preserve weighted-average experience
+      (function normRolesWithExp() {
+        var merged = {};
+        roleCounts.forEach(function(item) {
+          var key = (item._id || '').toLowerCase().trim();
+          var display = VARIANTS[key] || titleCase(item._id || '');
+          if (!merged[display]) merged[display] = { count: 0, expSum: 0, expCount: 0 };
+          merged[display].count += item.count;
+          if (item.avgExp && item.avgExp > 0) {
+            // weight by job count to get a true average across merged variants
+            merged[display].expSum += item.avgExp * item.count;
+            merged[display].expCount += item.count;
+          }
+        });
+        roleCounts = Object.keys(merged).map(function(k) {
+          var m = merged[k];
+          return { _id: k, count: m.count, avgExp: m.expCount > 0 ? (m.expSum / m.expCount) : null };
+        }).sort(function(a, b) { return b.count - a.count; });
+      })();
       contractSkills = normList(contractSkills);
       contractCerts = normList(contractCerts);
 
@@ -772,6 +795,17 @@ exports.handler = async (event) => {
         { $count: 'total' }
       ]).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: totalCount[0] ? totalCount[0].total : 0 }) };
+    }
+
+    // ACTION: clearContaminatedSize - clear a wrong company size that contaminated many companies
+    if (action === 'clearContaminatedSize') {
+      var badSize = body.badSize || 220;
+      // Clear the size on jobs where it matches the bad value (it was wrongly propagated)
+      var result = await col.updateMany(
+        { companySize: badSize },
+        { $unset: { companySize: '' } }
+      );
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ cleared: result.modifiedCount, badSize: badSize }) };
     }
 
     // ACTION: propagateCompanyData - copy known-good URL/LinkedIn/size/type across all jobs of same company

@@ -198,7 +198,7 @@ body.role-viewer .edit-btn{display:none!important}
     <span class="user-name" id="userName">User</span>
     <svg viewBox="0 0 24 24" width="14" height="14" fill="rgba(255,255,255,.5)"><path d="M7 10l5 5 5-5z"/></svg>
     <div class="user-dropdown" id="userDropdown">
-      <div class="ud-header"><div class="ud-header-name" id="udName">User</div><div class="ud-header-email" id="udEmail">-</div></div>
+      <div class="ud-header"><div class="ud-header-name" id="udName">User</div><div class="ud-header-email" id="udEmail">-</div><div id="udHeaderRole" style="font-size:.6rem;margin-top:.2rem;font-weight:600"></div></div>
       <div class="ud-body">
         <div class="ud-detail"><span class="ud-detail-label">Role</span><span class="ud-detail-value" id="udRole">-</span></div>
         <div class="ud-detail"><span class="ud-detail-label">Last sign-in</span><span class="ud-detail-value" id="udLogin">-</span></div>
@@ -331,6 +331,7 @@ body.role-viewer .edit-btn{display:none!important}
               <button onclick="fixContaminatedUrls()" style="padding:.2rem .6rem;background:#B45309;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🧹 Clear ideaHelix URLs from Jobs</button>
               <button onclick="fixContactsViaLinkedin()" style="padding:.2rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Contacts via LinkedIn Scrape</button>
               <button onclick="propagateCompanyData()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Propagate Company URLs</button>
+              <button onclick="clearContaminatedSize()" style="padding:.2rem .6rem;background:#B45309;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📏 Clear Wrong Size (220)</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
@@ -565,6 +566,12 @@ function applyRoleVisibility(){
   var roleLabels={'super_admin':'Super Admin','admin':'Admin','manager':'Manager','analyst':'Analyst','viewer':'Viewer'};
   var udRoleEl=document.getElementById('udRole');
   if(udRoleEl)udRoleEl.textContent=roleLabels[r]||r;
+  var udHeaderRole=document.getElementById('udHeaderRole');
+  if(udHeaderRole){
+    var roleBadgeIcon={'super_admin':'🟣','admin':'🔵','manager':'🟢','analyst':'🟡','viewer':'⚪','pending':'🔴'};
+    udHeaderRole.textContent=(roleBadgeIcon[r]||'')+' '+(roleLabels[r]||r);
+    udHeaderRole.style.color=roleColors[r]||'#fff';
+  }
   var nameEl=document.getElementById('userName');
   if(nameEl)nameEl.title='Role: '+(roleLabels[r]||r);
 
@@ -1948,6 +1955,21 @@ async function fixExcessContacts(){
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
 }
 
+async function clearContaminatedSize(){
+  var badSize=parseInt(prompt('Clear which contaminated company size value? (it was wrongly spread to many companies)','220'));
+  if(!badSize)return;
+  if(!confirm('Clear company size '+badSize+' from ALL jobs that have it?\n\nThese will become empty and can be re-enriched correctly.'))return;
+  var st=document.getElementById('fixCompanyTypeStatus');
+  st.textContent='📏 Clearing wrong company size '+badSize+'...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'clearContaminatedSize',badSize:badSize})});
+    var d=await r.json();
+    st.textContent='📏 Done! Cleared size '+d.badSize+' from '+d.cleared+' jobs. Re-run "Enrich from LinkedIn" to get correct sizes.';
+    dashLoaded=false;
+    setTimeout(function(){st.textContent=''},15000);
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},10000)}
+}
+
 async function propagateCompanyData(){
   if(!confirm('Propagate known-good company URL, LinkedIn, size, and type across all jobs of the same company?\n\nThis fills empty/Google-search fields using data already present on other jobs of that company. Existing real data is never overwritten.'))return;
   var st=document.getElementById('fixCompanyTypeStatus');
@@ -2343,7 +2365,7 @@ async function searchDbByCompany(company){
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'search',company:company,limit:500,sort:JSON.stringify({datePosted:-1})})});
+      body:JSON.stringify({action:'search',company:company,exactCompany:true,limit:500,sort:JSON.stringify({datePosted:-1})})});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
     allJobs=data.jobs||[];
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
@@ -3428,6 +3450,8 @@ function downloadFile(content,name,type){
     <button class="mode-btn" id="setNav-users" onclick="setSettingsSection('users')" style="font-size:.65rem;padding:.25rem .6rem">👥 User Management</button>
   </div>
 
+  <div id="settingsSaveStatus" style="font-size:.7rem;font-weight:600;color:#059669;text-align:center;margin-bottom:.6rem;min-height:1rem"></div>
+
   <!-- GLOBAL SETTINGS (Super Admin) -->
   <div id="setSection-global">
     <div style="display:flex;gap:.2rem;align-items:center;margin-bottom:.6rem">
@@ -3581,8 +3605,6 @@ function downloadFile(content,name,type){
       </table>
     </div>
   </div>
-
-  <div id="settingsSaveStatus" style="font-size:.65rem;color:#059669;text-align:right;margin-top:.4rem"></div>
 </div>
 </div></div></div>
 </body>
