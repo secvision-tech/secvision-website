@@ -161,7 +161,7 @@ exports.handler = async (event) => {
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       'updateField': WRITE_ROLES, 'updateCompanyInfo': WRITE_ROLES, 'updateCompanyName': WRITE_ROLES,
       'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': WRITE_ROLES,
-      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY, 'clearContaminatedSize': SUPER_ONLY,
+      'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY, 'clearContaminatedSize': SUPER_ONLY, 'getCompaniesBySize': ADMIN_UP,
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
@@ -795,6 +795,28 @@ exports.handler = async (event) => {
         { $count: 'total' }
       ]).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: totalCount[0] ? totalCount[0].total : 0 }) };
+    }
+
+    // ACTION: getCompaniesBySize - list companies whose jobs have a specific size (for targeted re-enrichment)
+    if (action === 'getCompaniesBySize') {
+      var targetSize = body.targetSize;
+      var sizeMatch;
+      if (targetSize === 0 || targetSize === '0') {
+        sizeMatch = { $or: [{ companySize: { $in: [null, 0, ''] } }, { companySize: { $exists: false } }] };
+      } else {
+        sizeMatch = { companySize: parseInt(targetSize) };
+      }
+      var companies = await col.aggregate([
+        { $match: sizeMatch },
+        { $match: { company: { $nin: [null, ''] } } },
+        { $group: {
+          _id: '$company',
+          companyLinkedin: { $first: { $cond: [{ $and: [{ $ne: ['$companyLinkedin', ''] }, { $ne: ['$companyLinkedin', null] }] }, '$companyLinkedin', null] } },
+          jobCount: { $sum: 1 }
+        } },
+        { $sort: { jobCount: -1 } }
+      ]).toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: companies.length }) };
     }
 
     // ACTION: clearContaminatedSize - clear a wrong company size that contaminated many companies

@@ -198,7 +198,7 @@ body.role-viewer .edit-btn{display:none!important}
     <span class="user-name" id="userName">User</span>
     <svg viewBox="0 0 24 24" width="14" height="14" fill="rgba(255,255,255,.5)"><path d="M7 10l5 5 5-5z"/></svg>
     <div class="user-dropdown" id="userDropdown">
-      <div class="ud-header"><div class="ud-header-name" id="udName">User</div><div class="ud-header-email" id="udEmail">-</div><div id="udHeaderRole" style="font-size:.6rem;margin-top:.2rem;font-weight:600"></div></div>
+      <div class="ud-header"><div class="ud-header-name" id="udName">User</div><div class="ud-header-email" id="udEmail">-</div></div>
       <div class="ud-body">
         <div class="ud-detail"><span class="ud-detail-label">Role</span><span class="ud-detail-value" id="udRole">-</span></div>
         <div class="ud-detail"><span class="ud-detail-label">Last sign-in</span><span class="ud-detail-value" id="udLogin">-</span></div>
@@ -332,6 +332,7 @@ body.role-viewer .edit-btn{display:none!important}
               <button onclick="fixContactsViaLinkedin()" style="padding:.2rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔗 Fix Contacts via LinkedIn Scrape</button>
               <button onclick="propagateCompanyData()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Propagate Company URLs</button>
               <button onclick="clearContaminatedSize()" style="padding:.2rem .6rem;background:#B45309;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📏 Clear Wrong Size (220)</button>
+              <button onclick="enrichBySize()" style="padding:.2rem .6rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich Companies by Size</button>
               <button onclick="fixDescriptions()" style="padding:.2rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">📝 Fix Descriptions</button>
               <button onclick="reExtractFields()" style="padding:.2rem .6rem;background:#3B6D11;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🔄 Re-extract Fields</button>
               <button onclick="enrichAllCompanies()" id="enrichAllBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏢 Enrich All Companies (Apollo)</button>
@@ -566,12 +567,6 @@ function applyRoleVisibility(){
   var roleLabels={'super_admin':'Super Admin','admin':'Admin','manager':'Manager','analyst':'Analyst','viewer':'Viewer'};
   var udRoleEl=document.getElementById('udRole');
   if(udRoleEl)udRoleEl.textContent=roleLabels[r]||r;
-  var udHeaderRole=document.getElementById('udHeaderRole');
-  if(udHeaderRole){
-    var roleBadgeIcon={'super_admin':'🟣','admin':'🔵','manager':'🟢','analyst':'🟡','viewer':'⚪','pending':'🔴'};
-    udHeaderRole.textContent=(roleBadgeIcon[r]||'')+' '+(roleLabels[r]||r);
-    udHeaderRole.style.color=roleColors[r]||'#fff';
-  }
   var nameEl=document.getElementById('userName');
   if(nameEl)nameEl.title='Role: '+(roleLabels[r]||r);
 
@@ -1955,6 +1950,59 @@ async function fixExcessContacts(){
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
 }
 
+async function enrichBySize(){
+  var targetSize=prompt('Enrich companies whose size = ? (enter 0 for empty/missing size, or a specific wrong value like 220):','0');
+  if(targetSize===null)return;
+  targetSize=targetSize.trim();
+
+  var st=document.getElementById('fixCompanyTypeStatus');
+  st.textContent='🏢 Finding companies with size '+targetSize+'...';
+
+  try{
+    // Step 1: get companies matching the size
+    var r1=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getCompaniesBySize',targetSize:targetSize})});
+    var d1=await r1.json();
+    if(!d1.companies||!d1.companies.length){
+      st.textContent='✅ No companies found with size '+targetSize+'.';
+      setTimeout(function(){st.textContent=''},8000);return;
+    }
+
+    // Only those with a LinkedIn URL can be scraped by the company scraper
+    var scrapable=d1.companies.filter(function(c){return c.companyLinkedin&&c.companyLinkedin.indexOf('linkedin.com')>-1});
+    if(!scrapable.length){
+      st.textContent='⚠️ Found '+d1.companies.length+' companies with size '+targetSize+', but none have a LinkedIn URL to scrape. Add LinkedIn URLs first (or run Propagate Company URLs).';
+      setTimeout(function(){st.textContent=''},15000);return;
+    }
+
+    if(!confirm('Found '+d1.companies.length+' companies with size '+targetSize+' ('+scrapable.length+' have LinkedIn URLs).\n\nScrape LinkedIn to get correct company size for those '+scrapable.length+'?'))return;
+
+    var fixed=0;
+    for(var i=0;i<scrapable.length;i++){
+      var comp=scrapable[i];
+      st.textContent='🏢 Enriching '+(i+1)+'/'+scrapable.length+': '+comp._id+'...';
+      try{
+        var lr=await safeApiFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'scrapeCompany',linkedinUrl:comp.companyLinkedin,company:comp._id})});
+        if(lr.found){
+          var updates={};
+          if(lr.size&&lr.size>0)updates.companySize=lr.size;
+          if(lr.type)updates.companyType=lr.type;
+          if(lr.website)updates.companyUrl=lr.website;
+          if(Object.keys(updates).length){
+            await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp._id,updates:updates})});
+            fixed++;
+          }
+        }
+      }catch(e){}
+      // small delay
+      await new Promise(function(r){setTimeout(r,1500)});
+    }
+    st.textContent='🏢 Done! Enriched '+fixed+' of '+scrapable.length+' companies with correct size/type.';
+    dashLoaded=false;
+    setTimeout(function(){st.textContent=''},15000);
+
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},10000)}
+}
+
 async function clearContaminatedSize(){
   var badSize=parseInt(prompt('Clear which contaminated company size value? (it was wrongly spread to many companies)','220'));
   if(!badSize)return;
@@ -3316,7 +3364,7 @@ function renderSkillsInsight(certs,tools,skills,roles){
     var maxR=roles[0]?.count||1;
     roles.slice(0,8).forEach(function(r){
       var pct=Math.round(r.count/maxR*100);
-      var expLabel=(r.avgExp&&r.avgExp>0)?' · ~'+Math.round(r.avgExp)+'y exp':'';
+      var expLabel=(r.avgExp&&r.avgExp>0)?' <span style="color:#D97706;font-weight:700">· ~'+Math.round(r.avgExp)+'y exp</span>':'';
       html+='<div class="dash-insight-row"><span class="dash-insight-label">'+(r._id||'Unknown').slice(0,35)+'</span><div class="dash-insight-bar" style="width:'+pct+'%;background:'+PIE_COLORS[0]+'"></div><span class="dash-insight-pct">'+r.count+' jobs'+expLabel+'</span></div>';
     });
   }
