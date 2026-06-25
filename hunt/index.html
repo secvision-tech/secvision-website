@@ -2016,7 +2016,7 @@ async function restoreBackup(setId,sourceCollection,count){
 async function backupJobsNow_end(){}
 
 async function enrichTopCompanies(){
-  var topN=parseInt(prompt('Enrich the top N companies by job-opening count (that lack size):','100'))||100;
+  var topN=parseInt(prompt('Enrich the top N companies by job-opening count (that lack size).\n\n⚠️ Tip: Click "💾 Backup Now" first if you haven\'t!','100'))||100;
   if(topN>200)topN=200;
 
   var st=document.getElementById('fixCompanyTypeStatus');
@@ -2030,52 +2030,40 @@ async function enrichTopCompanies(){
       setTimeout(function(){st.textContent=''},8000);return;
     }
 
-    if(!confirm('Found top '+d1.total+' companies by job count needing size.\n'+d1.withLinkedin+' already have a LinkedIn URL; the rest will first try Apollo to find one.\n\nProceed? This scrapes LinkedIn for each (may take several minutes).'))return;
+    if(!confirm('Found top '+d1.total+' companies by job count needing size.\n\nEnrich each via Apollo (by name — finds size, website & LinkedIn automatically)?\n\nThis may take a few minutes.'))return;
 
-    var fixed=0,noData=0;
+    var fixed=0,notFound=0;
+    var companiesFound={};
     for(var i=0;i<d1.companies.length;i++){
       var comp=d1.companies[i];
       st.textContent='⭐ '+(i+1)+'/'+d1.companies.length+': '+comp._id+' ('+comp.jobCount+' jobs)...';
 
-      var linkedinUrl=comp.companyLinkedin||'';
+      try{
+        // Apollo-first: enrich by company NAME (no domain/LinkedIn needed)
+        var ce=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',body:JSON.stringify({action:'enrichCompany',company:comp._id,domain:comp.companyUrl?comp.companyUrl.replace(/^https?:\/\/(www\.)?/,'').replace(/\/.*$/,''):''})});
 
-      // If no LinkedIn, try Apollo enrichCompany to discover it
-      if(!linkedinUrl){
-        try{
-          var ce=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',body:JSON.stringify({action:'enrichCompany',company:comp._id,domain:''})});
-          if(ce&&ce.linkedin)linkedinUrl=ce.linkedin;
-          // Apollo may directly return size too
-          if(ce&&ce.size&&ce.size>0){
-            await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp._id,updates:{companySize:ce.size,companyType:ce.type||'',companyLinkedin:ce.linkedin||'',companyUrl:ce.website||''}})});
+        if(ce&&!ce.notFound&&!ce.error){
+          var updates={};
+          // size comes as a formatted string like "1,200" — strip commas to int
+          if(ce.size){var sizeNum=parseInt((''+ce.size).replace(/,/g,''));if(sizeNum>0)updates.companySize=sizeNum}
+          if(ce.linkedin)updates.companyLinkedin=ce.linkedin;
+          if(ce.website)updates.companyUrl=ce.website.indexOf('http')===0?ce.website:'https://'+ce.website;
+          if(Object.keys(updates).length){
+            await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateCompanyInfo',company:comp._id,exactCompany:true,companySize:updates.companySize||0,companyLinkedin:updates.companyLinkedin||'',companyWebsite:updates.companyUrl||''})});
             fixed++;
-            await new Promise(function(r){setTimeout(r,1200)});
-            continue;
-          }
-        }catch(e){}
-      }
+            if(updates.companySize)companiesFound[comp._id]=updates.companySize;
+          }else{notFound++}
+        }else{notFound++}
+      }catch(e){notFound++}
 
-      // Scrape LinkedIn company page if we have a URL
-      if(linkedinUrl){
-        try{
-          var lr=await safeApiFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'scrapeCompany',linkedinUrl:linkedinUrl,company:comp._id})});
-          if(lr.found){
-            var updates={};
-            if(lr.size&&lr.size>0)updates.companySize=lr.size;
-            if(lr.type)updates.companyType=lr.type;
-            if(lr.website)updates.companyUrl=lr.website;
-            if(Object.keys(updates).length){
-              await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp._id,updates:updates})});
-              fixed++;
-            }else{noData++}
-          }else{noData++}
-        }catch(e){noData++}
-      }else{noData++}
-
-      await new Promise(function(r){setTimeout(r,1500)});
+      // small delay between Apollo calls
+      await new Promise(function(r){setTimeout(r,1000)});
     }
-    st.textContent='⭐ Done! Enriched '+fixed+' of '+d1.companies.length+' top companies. '+noData+' had no data/LinkedIn.';
+
+    var sample=Object.keys(companiesFound).slice(0,5).map(function(k){return k+' ('+companiesFound[k]+')'}).join(', ');
+    st.innerHTML='⭐ Done! Enriched <b>'+fixed+'</b> of '+d1.companies.length+' top companies via Apollo. '+notFound+' not found.'+(sample?'<br>e.g. '+sample:'');
     dashLoaded=false;
-    setTimeout(function(){st.textContent=''},20000);
+    setTimeout(function(){st.textContent=''},25000);
 
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},12000)}
 }

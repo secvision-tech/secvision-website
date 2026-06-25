@@ -1535,7 +1535,9 @@ exports.handler = async (event) => {
 
     // Update company size for all jobs of a company
     if (action === 'updateCompanySize' || action === 'updateCompanyInfo') {
-      var compPattern = (body.company || '').replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var compRawName = (body.company || '').replace(/[®™©]/g, '').trim();
+      var compPattern = compRawName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var compRegex = body.exactCompany ? ('^' + compPattern + '$') : compPattern;
       var setFields = {};
       if (body.companySize) {
         var sizeStr = String(body.companySize).replace(/[^0-9]/g, '');
@@ -1546,7 +1548,7 @@ exports.handler = async (event) => {
       if (body.companyWebsite) setFields.companyUrl = body.companyWebsite;
       if (Object.keys(setFields).length === 0) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'No fields to update' }) };
       var result = await col.updateMany(
-        { company: { $regex: compPattern, $options: 'i' } },
+        { company: { $regex: compRegex, $options: 'i' } },
         { $set: setFields }
       );
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
