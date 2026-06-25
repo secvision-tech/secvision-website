@@ -162,6 +162,7 @@ exports.handler = async (event) => {
       'updateField': WRITE_ROLES, 'updateCompanyInfo': WRITE_ROLES, 'updateCompanyName': WRITE_ROLES,
       'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': WRITE_ROLES,
       'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY, 'clearContaminatedSize': SUPER_ONLY, 'getCompaniesBySize': ADMIN_UP, 'getTopCompaniesNeedingSize': ADMIN_UP,
+      'backupJobs': SUPER_ONLY, 'listBackups': ADMIN_UP, 'restoreJobs': SUPER_ONLY,
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
@@ -795,6 +796,94 @@ exports.handler = async (event) => {
         { $count: 'total' }
       ]).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ companies: companies, total: totalCount[0] ? totalCount[0].total : 0 }) };
+    }
+
+    // Collections that participate in backup/restore (add future data collections here)
+    var BACKUP_COLLECTIONS = ['jobs', 'contacts'];
+
+    // ACTION: backupJobs - snapshot all data collections into timestamped backups, keep last 5 sets
+    if (action === 'backupJobs') {
+      var label = (body.label || 'manual').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 30);
+      var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      var setId = ts + '_' + label; // identifies this backup set
+
+      var collectionsBackedUp = [];
+      for (var bc = 0; bc < BACKUP_COLLECTIONS.length; bc++) {
+        var srcName = BACKUP_COLLECTIONS[bc];
+        var backupColl = srcName + '_backup_' + setId;
+        try {
+          await db.collection(srcName).aggregate([{ $match: {} }, { $out: backupColl }]).toArray();
+          var cnt = await db.collection(backupColl).countDocuments({});
+          collectionsBackedUp.push({ source: srcName, backupName: backupColl, count: cnt });
+        } catch (e) {
+          collectionsBackedUp.push({ source: srcName, backupName: backupColl, count: 0, error: e.message });
+        }
+      }
+
+      var registry = db.collection('_backups_registry');
+      await registry.insertOne({
+        setId: setId, label: label, createdAt: new Date(),
+        collections: collectionsBackedUp,
+        createdBy: (authUser && authUser.email) || 'unknown'
+      });
+
+      // Prune: keep last 5 backup SETS (drop their collections + registry entries)
+      var allSets = await registry.find({}).sort({ createdAt: -1 }).toArray();
+      var pruned = 0;
+      for (var si = 5; si < allSets.length; si++) {
+        var oldSet = allSets[si];
+        (oldSet.collections || []).forEach(async function(c) {
+          try { await db.collection(c.backupName).drop(); } catch (e) {}
+        });
+        await registry.deleteOne({ _id: oldSet._id });
+        pruned++;
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ setId: setId, collections: collectionsBackedUp, pruned: pruned }) };
+    }
+
+    // ACTION: listBackups - list available backup sets with their collections
+    if (action === 'listBackups') {
+      var registry = db.collection('_backups_registry');
+      var backups = await registry.find({}).sort({ createdAt: -1 }).toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ backups: backups }) };
+    }
+
+    // ACTION: restoreJobs - restore ONE collection from a backup set
+    if (action === 'restoreJobs') {
+      var setId = body.setId;
+      var sourceCollection = body.sourceCollection; // which collection to restore (e.g. 'jobs' or 'contacts')
+      if (!setId || !sourceCollection) {
+        return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'setId and sourceCollection required' }) };
+      }
+      if (BACKUP_COLLECTIONS.indexOf(sourceCollection) === -1) {
+        return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Collection not allowed for restore' }) };
+      }
+      var registry = db.collection('_backups_registry');
+      var entry = await registry.findOne({ setId: setId });
+      if (!entry) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Backup set not found' }) };
+
+      var collEntry = (entry.collections || []).find(function(c) { return c.source === sourceCollection; });
+      if (!collEntry) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Collection not in this backup' }) };
+
+      // Safety: snapshot CURRENT state of just this collection before restoring
+      var preTs = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      var preName = sourceCollection + '_backup_' + preTs + '_prerestore';
+      await db.collection(sourceCollection).aggregate([{ $match: {} }, { $out: preName }]).toArray();
+      var preCount = await db.collection(preName).countDocuments({});
+      await registry.insertOne({
+        setId: preTs + '_prerestore', label: 'prerestore', createdAt: new Date(),
+        collections: [{ source: sourceCollection, backupName: preName, count: preCount }],
+        createdBy: (authUser && authUser.email) || 'unknown'
+      });
+
+      // Restore: replace the live collection with the backup contents
+      await db.collection(collEntry.backupName).aggregate([{ $match: {} }, { $out: sourceCollection }]).toArray();
+      var restoredCount = await db.collection(sourceCollection).countDocuments({});
+
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        restored: restoredCount, collection: sourceCollection,
+        fromSet: setId, safetySnapshot: preName
+      })};
     }
 
     // ACTION: getTopCompaniesNeedingSize - top-N companies by job count that lack size

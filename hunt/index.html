@@ -322,6 +322,15 @@ body.role-viewer .edit-btn{display:none!important}
           </div>
           <div class="dash-section" data-role="super_admin" style="margin-top:.5rem;padding:.5rem .8rem;background:#fff;border:1px solid var(--bd);border-radius:8px">
             <div style="font-size:.7rem;font-weight:600;color:var(--g5)">🔧 Data Maintenance <span style="background:#7C3AED;color:#fff;font-size:.45rem;padding:.05rem .2rem;border-radius:2px;margin-left:.3rem;vertical-align:middle">SUPER ADMIN</span></div>
+            <div style="margin-top:.4rem;padding:.4rem .6rem;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:6px">
+              <div style="font-size:.62rem;font-weight:700;color:#047857;margin-bottom:.3rem">🛟 Backup &amp; Restore — jobs + contacts (run a backup before risky operations)</div>
+              <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+                <button onclick="backupJobsNow()" style="padding:.2rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">💾 Backup Now</button>
+                <button onclick="showBackups()" style="padding:.2rem .6rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">♻️ Restore from Backup</button>
+                <span id="backupStatus" style="font-size:.6rem;color:#047857;align-self:center"></span>
+              </div>
+              <div id="backupList" style="margin-top:.4rem;display:none"></div>
+            </div>
             <div style="display:flex;gap:.5rem;margin-top:.3rem;flex-wrap:wrap">
               <button onclick="fixCountries()" style="padding:.2rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⚡ Fix Countries</button>
               <button onclick="fixCompanyTypes()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏷️ Fix Company Types</button>
@@ -1950,6 +1959,61 @@ async function fixExcessContacts(){
     setTimeout(function(){st.textContent=''},12000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
 }
+
+async function backupJobsNow(){
+  var label=prompt('Optional label for this backup (e.g. "before_enrich"):','manual');
+  if(label===null)return;
+  var st=document.getElementById('backupStatus');
+  st.textContent='💾 Creating backup (jobs + contacts)...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'backupJobs',label:label})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}
+    var summary=(d.collections||[]).map(function(c){return c.source+' ('+c.count+')'}).join(', ');
+    st.textContent='✅ Backup created: '+summary+(d.pruned>0?' · '+d.pruned+' old sets pruned':'')+'.';
+    setTimeout(function(){st.textContent=''},12000);
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},10000)}
+}
+
+async function showBackups(){
+  var listEl=document.getElementById('backupList');
+  var st=document.getElementById('backupStatus');
+  st.textContent='Loading backups...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'listBackups'})});
+    var d=await r.json();
+    st.textContent='';
+    if(!d.backups||!d.backups.length){listEl.style.display='block';listEl.innerHTML='<div style="font-size:.6rem;color:#9ca3af">No backups yet. Click "Backup Jobs Now" first.</div>';return}
+    var h='<div style="font-size:.6rem;color:var(--g5);font-weight:600;margin-bottom:.3rem">Available backups (newest first) — restore any single collection:</div>';
+    d.backups.forEach(function(b){
+      var dt=new Date(b.createdAt).toLocaleString();
+      h+='<div style="padding:.3rem .4rem;background:#fff;border:1px solid #e5e7eb;border-radius:4px;margin-bottom:.25rem;font-size:.6rem">';
+      h+='<div style="font-weight:600;margin-bottom:.2rem">'+esc(b.label||'manual')+' · '+dt+'</div>';
+      h+='<div style="display:flex;gap:.3rem;flex-wrap:wrap">';
+      (b.collections||[]).forEach(function(c){
+        h+='<button onclick="restoreBackup(\''+b.setId+'\',\''+c.source+'\','+c.count+')" style="padding:.15rem .5rem;background:#B45309;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">♻️ Restore '+c.source+' ('+c.count+')</button>';
+      });
+      h+='</div></div>';
+    });
+    listEl.style.display='block';listEl.innerHTML=h;
+  }catch(e){st.textContent='⚠️ Error: '+e.message}
+}
+
+async function restoreBackup(setId,sourceCollection,count){
+  if(!confirm('Restore "'+sourceCollection+'" ('+count+' records) from this backup?\n\nThis REPLACES the current '+sourceCollection+' collection only. A safety snapshot of the current '+sourceCollection+' is taken automatically first, so this is reversible.'))return;
+  var st=document.getElementById('backupStatus');
+  st.textContent='♻️ Restoring '+sourceCollection+' (safety snapshot first)...';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'restoreJobs',setId:setId,sourceCollection:sourceCollection})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}
+    st.textContent='✅ Restored '+d.restored+' '+d.collection+' records. Previous state saved for undo.';
+    dashLoaded=false;
+    setTimeout(function(){st.textContent=''},20000);
+  }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},10000)}
+}
+
+async function backupJobsNow_end(){}
 
 async function enrichTopCompanies(){
   var topN=parseInt(prompt('Enrich the top N companies by job-opening count (that lack size):','100'))||100;
