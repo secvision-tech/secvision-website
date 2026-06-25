@@ -1546,6 +1546,7 @@ exports.handler = async (event) => {
       }
       if (body.companyLinkedin) setFields.companyLinkedin = body.companyLinkedin;
       if (body.companyWebsite) setFields.companyUrl = body.companyWebsite;
+      if (body.companyType) setFields.companyType = body.companyType;
       if (Object.keys(setFields).length === 0) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'No fields to update' }) };
       var result = await col.updateMany(
         { company: { $regex: compRegex, $options: 'i' } },

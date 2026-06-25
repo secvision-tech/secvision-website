@@ -1403,8 +1403,7 @@ async function viewDet(i){
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
     h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
-    h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Manage Contacts</button>';
-    if(canEnrich)h+='<button onclick="getCompanySizeFromView('+i+')" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button>';
+    h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Manage Company</button>';
     h+='</div></div>';
   }
   // Load contacts async
@@ -1491,7 +1490,7 @@ async function delAllContacts(){
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteCompanyContacts',company:cfCompany})});
     var d=await r.json();
     document.getElementById('cfExisting').innerHTML='<div style="font-size:.65rem;color:#059669;padding:.3rem;background:#f0fdf4;border-radius:4px">✅ Deleted '+(d.deleted||0)+' contacts for '+cfCompany+'.</div>';
-    document.getElementById('cfTitle').textContent='Manage Contacts — '+cfCompany+' (0 contacts)';
+    document.getElementById('cfTitle').textContent='Manage Company — '+cfCompany+' (0 contacts)';
     viewDirty=true;
   }catch(e){alert('Error: '+e.message)}
 }
@@ -2570,7 +2569,7 @@ function renderPartnerTable(data){
     }
     var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none;cursor:pointer" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchCompanyOpenings(this.dataset.company)">'+d.count+' openings</a>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("SOC Director" OR "VP Operations" OR "CISO" OR "recruiter" OR "HR")');
-    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Manage Contacts</a></td></tr>';
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Manage Company</a></td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -2595,7 +2594,7 @@ function renderContractTable(data){
     var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchContractOpenings(this.dataset.company)">'+d.count+'</a>';
     var salaryHtml='<span style="font-size:.6rem;color:var(--g5)">'+(d.salary||'N/A')+'</span>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("recruiter" OR "HR" OR "hiring manager" OR "talent acquisition")');
-    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Manage Contacts</a></td></tr>';
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Manage Company</a></td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -2864,7 +2863,7 @@ async function searchDbByCompanyAndType(company,jobType){
 }
 
 // #176: Contact Finder Popup
-var contactPopupHtml='<div id="contactPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1000;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:620px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="cfTitle">Manage Contacts</h3><button onclick="closeContactPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.6rem"><button onclick="apolloSearch()" id="cfAutoBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Auto-Discover Contacts</button><button onclick="apolloEnrich()" id="cfEnrichBtn" style="padding:.3rem .8rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Get Company Size</button></div><div id="cfCompanyInfo" style="font-size:.6rem;color:var(--g5);margin-bottom:.4rem"></div><div id="cfDiscovered" style="margin-bottom:.6rem"></div><div id="cfExisting" style="margin-bottom:.6rem"></div><div id="cfManualSearch" style="margin-bottom:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🔗 Manual LinkedIn Search:</div><div style="display:flex;flex-wrap:wrap;gap:.3rem" id="cfLinks"></div></div><div style="border-top:1px solid #e5e7eb;padding-top:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">✏️ Add Contact — Enter name &amp; click Enrich to auto-fill from Apollo</div><div style="display:grid;grid-template-columns:1fr auto;gap:.4rem"><input id="cfName" placeholder="Full Name (e.g. John Smith)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><button onclick="enrichPerson()" id="cfEnrichPersonBtn" style="padding:.3rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Enrich</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.4rem"><input id="cfDesignation" placeholder="Designation (e.g. CISO, HR Head)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfEmail" placeholder="Email" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfLinkedin" placeholder="LinkedIn URL (optional)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><select id="cfSource" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><option value="Apollo.io">Apollo.io</option><option value="LinkedIn">LinkedIn</option><option value="Company Website">Company Website</option><option value="Manual">Manual</option></select></div><button onclick="addContact()" style="margin-top:.4rem;padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Contact</button></div><div id="cfStatus" style="font-size:.6rem;color:var(--pri);margin-top:.3rem"></div></div></div>';
+var contactPopupHtml='<div id="contactPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1000;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:620px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="cfTitle">Manage Company</h3><button onclick="closeContactPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.6rem"><button onclick="apolloSearch()" id="cfAutoBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Auto-Discover Contacts</button><button onclick="enrichCompanyDetails()" id="cfEnrichBtn" style="padding:.3rem .8rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">⭐ Enrich Company Details</button></div><div id="cfCompanyDetails" style="margin-bottom:.6rem"></div><div id="cfCompanyInfo" style="font-size:.6rem;color:var(--g5);margin-bottom:.4rem"></div><div id="cfDiscovered" style="margin-bottom:.6rem"></div><div id="cfExisting" style="margin-bottom:.6rem"></div><div id="cfManualSearch" style="margin-bottom:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🔗 Manual LinkedIn Search:</div><div style="display:flex;flex-wrap:wrap;gap:.3rem" id="cfLinks"></div></div><div style="border-top:1px solid #e5e7eb;padding-top:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">✏️ Add Contact — Enter name &amp; click Enrich to auto-fill from Apollo</div><div style="display:grid;grid-template-columns:1fr auto;gap:.4rem"><input id="cfName" placeholder="Full Name (e.g. John Smith)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><button onclick="enrichPerson()" id="cfEnrichPersonBtn" style="padding:.3rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Enrich</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.4rem"><input id="cfDesignation" placeholder="Designation (e.g. CISO, HR Head)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfEmail" placeholder="Email" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfLinkedin" placeholder="LinkedIn URL (optional)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><select id="cfSource" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><option value="Apollo.io">Apollo.io</option><option value="LinkedIn">LinkedIn</option><option value="Company Website">Company Website</option><option value="Manual">Manual</option></select></div><button onclick="addContact()" style="margin-top:.4rem;padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Contact</button></div><div id="cfStatus" style="font-size:.6rem;color:var(--pri);margin-top:.3rem"></div></div></div>';
 // ========== APPLICATION SETTINGS ==========
 var GLOBAL_SETTINGS={dateFormat:'DD/MM/YYYY',timeZone:'Asia/Kolkata',timeFormat:'24h',perPage:25,defaultTab:'dash',autoEnrich:'on',defaultCompanyType:'Enterprise',nonCyberFilter:'strict',maxQueries:30};
 var USER_PREFS={dateFormat:'',timeZone:'',timeFormat:'',perPage:'',defaultTab:''};
@@ -3242,7 +3241,7 @@ async function openContactFinder(company,domain,linkedin){
   cfLinkedin=linkedin||'';
   var hasDomain=cfDomain&&cfDomain.length>3;
   var hasLinkedin=cfLinkedin&&cfLinkedin.indexOf('linkedin.com')>-1;
-  document.getElementById('cfTitle').textContent='Manage Contacts — '+company+(cfDomain?' ('+cfDomain+')':'');
+  document.getElementById('cfTitle').textContent='Manage Company — '+company+(cfDomain?' ('+cfDomain+')':'');
   document.getElementById('contactPopup').style.display='flex';
   document.getElementById('cfDiscovered').innerHTML='';
   document.getElementById('cfCompanyInfo').innerHTML='';
@@ -3295,7 +3294,7 @@ async function openContactFinder(company,domain,linkedin){
       h+='</div>';
       document.getElementById('cfExisting').innerHTML=h;
       // Update popup title with count
-      document.getElementById('cfTitle').textContent='Manage Contacts — '+cfCompany+' ('+totalContacts+' contacts)';
+      document.getElementById('cfTitle').textContent='Manage Company — '+cfCompany+' ('+totalContacts+' contacts)';
     }else{
       document.getElementById('cfExisting').innerHTML='<div style="font-size:.6rem;color:#9ca3af;padding:.3rem;background:#f9fafb;border-radius:4px">No contacts saved yet.</div>';
     }
@@ -3383,39 +3382,87 @@ function prefillContact(name,desig){
   document.getElementById('cfStatus').textContent='Prefilled '+name+'. Add email and save.';
 }
 async function saveDiscovered_unused(){}
-async function apolloEnrich(){
+var pendingEnrichData=null;
+async function enrichCompanyDetails(){
   var btn=document.getElementById('cfEnrichBtn');
   btn.textContent='⏳ Enriching...';btn.disabled=true;
+  document.getElementById('cfCompanyDetails').innerHTML='<div style="font-size:.6rem;color:var(--g5)">Fetching company details from Apollo...</div>';
   try{
-    var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'enrichCompany',company:cfCompany,domain:cfDomain})});
+    var d=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',body:JSON.stringify({action:'enrichCompany',company:cfCompany,domain:cfDomain})});
     if(d.error||d.notFound){
       var msg='Company not found in Apollo database.';
-      if(d.mismatch)msg='Name mismatch — Apollo found: "'+esc(d.foundCompany||'')+'" instead of "'+esc(cfCompany)+'". Enter size manually below.';
-      if(d.error&&d.error.indexOf('insufficient credits')>-1)msg='⚠️ Apollo credits exhausted. Enter size manually using ✎ buttons in View, or upgrade your Apollo plan.';
+      if(d.mismatch)msg='Name mismatch — Apollo found: "'+esc(d.foundCompany||'')+'" instead of "'+esc(cfCompany)+'".';
+      else if(d.error&&d.error.toLowerCase().indexOf('credit')>-1)msg='⚠️ Apollo credits exhausted.';
       else if(d.error)msg='Error: '+esc(d.error);
-      document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#9ca3af;font-size:.6rem">'+msg+'</span>';return}
-    var h='<div style="background:#f0fdf4;padding:.4rem .6rem;border-radius:4px;font-size:.65rem;border-left:3px solid #16a34a">';
-    h+='<strong>'+esc(d.company)+'</strong>';
-    if(d.size)h+=' — <strong>'+d.size+' employees</strong>';
-    if(d.industry)h+=' — '+esc(d.industry);
-    if(d.founded)h+=' — Founded '+d.founded;
-    if(d.country)h+=' — '+esc(d.city?d.city+', ':'')+esc(d.country);
-    if(d.website)h+=' — <a href="'+(d.website.startsWith('http')?d.website:'https://'+d.website)+'" target="_blank">Website</a>';
-    if(d.linkedin)h+=' — <a href="'+d.linkedin+'" target="_blank">LinkedIn</a>';
-    h+='</div>';
-    if(d.description)h+='<div style="font-size:.55rem;color:#6b7280;margin-top:.2rem">'+esc(d.description)+'</div>';
-    document.getElementById('cfCompanyInfo').innerHTML=h;
-    // Save company size to DB
-    if(d.size){
-      try{
-        var sr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateCompanyInfo',company:cfCompany,companySize:d.size,companyLinkedin:d.linkedin||'',companyWebsite:d.website||''})});
-        var sd=await sr.json();
-        document.getElementById('cfStatus').textContent='✅ Company info saved ('+(sd.modified||0)+' jobs updated).';
-      }catch(e){document.getElementById('cfStatus').textContent='Info displayed but failed to save: '+e.message}
+      document.getElementById('cfCompanyDetails').innerHTML='<div style="background:#fef2f2;padding:.4rem .6rem;border-radius:4px;font-size:.6rem;color:#9ca3af;border-left:3px solid #DC2626">'+msg+'</div>';
+      return;
     }
-  }catch(e){document.getElementById('cfCompanyInfo').innerHTML='<span style="color:#DC2626">Error: '+e.message+'</span>'}
-  finally{btn.textContent='🏢 Get Company Size';btn.disabled=false}
+
+    // Derive company type: 1) from LinkedIn/industry, 2) fallback to classify
+    var derivedType=deriveCompanyType(d.industry,d.linkedin,cfCompany);
+
+    var sizeNum=d.size?parseInt((''+d.size).replace(/,/g,'')):0;
+    var websiteUrl=d.website?(d.website.indexOf('http')===0?d.website:'https://'+d.website):'';
+
+    pendingEnrichData={
+      company:cfCompany,
+      companySize:sizeNum,
+      companyLinkedin:d.linkedin||'',
+      companyWebsite:websiteUrl,
+      companyType:derivedType
+    };
+
+    // Preview panel with Save button (like auto-discover)
+    var h='<div style="background:#f0fdf4;padding:.5rem .6rem;border-radius:6px;border-left:3px solid #16a34a">';
+    h+='<div style="font-size:.65rem;font-weight:700;color:#047857;margin-bottom:.3rem">📋 Company Details Found (review &amp; save):</div>';
+    h+='<div style="font-size:.62rem;line-height:1.7">';
+    h+='<div><strong>Name:</strong> '+esc(d.company||cfCompany)+'</div>';
+    h+='<div><strong>Size:</strong> '+(sizeNum>0?sizeNum.toLocaleString()+' employees':'—')+'</div>';
+    h+='<div><strong>Type:</strong> '+esc(derivedType||'—')+'</div>';
+    h+='<div><strong>Website:</strong> '+(websiteUrl?'<a href="'+websiteUrl+'" target="_blank">'+esc(websiteUrl)+'</a>':'—')+'</div>';
+    h+='<div><strong>LinkedIn:</strong> '+(d.linkedin?'<a href="'+d.linkedin+'" target="_blank">'+esc(d.linkedin)+'</a>':'—')+'</div>';
+    if(d.industry)h+='<div><strong>Industry:</strong> '+esc(d.industry)+'</div>';
+    if(d.founded)h+='<div><strong>Founded:</strong> '+d.founded+'</div>';
+    if(d.country)h+='<div><strong>Location:</strong> '+esc(d.city?d.city+', ':'')+esc(d.country)+'</div>';
+    h+='</div>';
+    h+='<button onclick="saveEnrichedCompany()" style="margin-top:.5rem;padding:.3rem .8rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Company Details</button>';
+    h+='</div>';
+    document.getElementById('cfCompanyDetails').innerHTML=h;
+  }catch(e){document.getElementById('cfCompanyDetails').innerHTML='<span style="color:#DC2626;font-size:.6rem">Error: '+e.message+'</span>'}
+  finally{btn.textContent='⭐ Enrich Company Details';btn.disabled=false}
 }
+
+function deriveCompanyType(industry,linkedin,company){
+  var text=((industry||'')+' '+(company||'')).toLowerCase();
+  // Map common industry/name signals to our types
+  if(/staffing|recruit|talent|placement|headhunt/.test(text))return'Staffing Agency';
+  if(/managed security|mssp|mdr|soc as a service|security operations/.test(text))return'MSSP';
+  if(/consult|advisory/.test(text))return'Consulting';
+  if(/information technology|computer|software|saas|cyber|security/.test(text))return'Enterprise';
+  if(/staffing|recruit/.test((linkedin||'').toLowerCase()))return'Staffing Agency';
+  // Fallback: leave blank so existing classifyCompany/default applies
+  return'';
+}
+
+async function saveEnrichedCompany(){
+  if(!pendingEnrichData)return;
+  var p=pendingEnrichData;
+  document.getElementById('cfStatus').textContent='💾 Saving company details...';
+  try{
+    var sr=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({
+      action:'updateCompanyInfo',company:p.company,exactCompany:true,
+      companySize:p.companySize||0,companyLinkedin:p.companyLinkedin||'',
+      companyWebsite:p.companyWebsite||'',companyType:p.companyType||''
+    })});
+    var sd=await sr.json();
+    document.getElementById('cfStatus').textContent='✅ Company details saved ('+(sd.modified||0)+' jobs updated).';
+    viewDirty=true;
+    // Refresh the preview to show saved state
+    var dc=document.getElementById('cfCompanyDetails');
+    if(dc)dc.querySelector('button')&&(dc.querySelector('button').textContent='✅ Saved',dc.querySelector('button').disabled=true);
+  }catch(e){document.getElementById('cfStatus').textContent='⚠️ Save failed: '+e.message}
+}
+
 function closeContactPopup(){
   document.getElementById('contactPopup').style.display='none';
   // Refresh View if open
