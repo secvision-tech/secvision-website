@@ -3455,11 +3455,21 @@ async function saveEnrichedCompany(){
       companyWebsite:p.companyWebsite||'',companyType:p.companyType||''
     })});
     var sd=await sr.json();
+    // Update in-memory allJobs so View reflects immediately on close
+    if(typeof allJobs!=='undefined'&&allJobs.length){
+      allJobs.forEach(function(jj){
+        if(jj.company&&jj.company.toLowerCase()===p.company.toLowerCase()){
+          if(p.companySize>0)jj.companySize=p.companySize;
+          if(p.companyLinkedin)jj.companyLinkedin=p.companyLinkedin;
+          if(p.companyWebsite)jj.companyUrl=p.companyWebsite;
+          if(p.companyType)jj.companyType=p.companyType;
+        }
+      });
+    }
     document.getElementById('cfStatus').textContent='✅ Company details saved ('+(sd.modified||0)+' jobs updated).';
     viewDirty=true;
-    // Refresh the preview to show saved state
     var dc=document.getElementById('cfCompanyDetails');
-    if(dc)dc.querySelector('button')&&(dc.querySelector('button').textContent='✅ Saved',dc.querySelector('button').disabled=true);
+    if(dc&&dc.querySelector('button')){dc.querySelector('button').textContent='✅ Saved';dc.querySelector('button').disabled=true}
   }catch(e){document.getElementById('cfStatus').textContent='⚠️ Save failed: '+e.message}
 }
 
