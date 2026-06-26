@@ -136,10 +136,39 @@ exports.handler = async (event) => {
     // ===== PHASE 4: RBAC ENFORCEMENT =====
     // Get authenticated user's role from MongoDB
     var authRole = null;
+    var authScope = { regions: [], countries: [] };
     if (authUser && authUser.email) {
       var authUserDoc = await db.collection('users').findOne({ email: authUser.email });
-      if (authUserDoc) authRole = authUserDoc.role;
+      if (authUserDoc) {
+        authRole = authUserDoc.role;
+        authScope.regions = Array.isArray(authUserDoc.allowedRegions) ? authUserDoc.allowedRegions : [];
+        authScope.countries = Array.isArray(authUserDoc.allowedCountries) ? authUserDoc.allowedCountries : [];
+      }
     }
+
+    // #330: Build a Mongo filter clause restricting to the user's allowed regions/countries.
+    // Empty arrays = All (no restriction). Super admin always sees everything.
+    function scopeFilter() {
+      if (authRole === 'super_admin') return null;
+      var hasRegions = authScope.regions && authScope.regions.length > 0;
+      var hasCountries = authScope.countries && authScope.countries.length > 0;
+      if (!hasRegions && !hasCountries) return null; // All
+      var ors = [];
+      if (hasRegions) ors.push({ searchRegion: { $in: authScope.regions } });
+      if (hasCountries) {
+        ors.push({ searchCountry: { $in: authScope.countries.map(function(c){ return c.toLowerCase(); }) } });
+        ors.push({ detectedCountry: { $in: authScope.countries } });
+      }
+      return ors.length ? { $or: ors } : null;
+    }
+    // Merge scope into an existing filter object
+    function applyScope(filter) {
+      var sf = scopeFilter();
+      if (!sf) return filter;
+      if (!filter || Object.keys(filter).length === 0) return sf;
+      return { $and: [filter, sf] };
+    }
+
 
     // RBAC helper
     function requireRole(allowedRoles) {
@@ -153,20 +182,26 @@ exports.handler = async (event) => {
     var MANAGER_UP = ['super_admin', 'admin', 'manager'];
     var ADMIN_UP = ['super_admin', 'admin'];
     var SUPER_ONLY = ['super_admin'];
+    var STATUS_ROLES = ['super_admin', 'admin', 'manager', 'analyst']; // status: all except viewer
+    var CONTACT_ADD_ROLES = ['super_admin', 'admin', 'manager', 'analyst']; // add/discover contacts
+    var CONTACT_DEL_ROLES = ['super_admin', 'admin', 'manager']; // delete contacts: manager+
 
     // Define RBAC rules per action
     var ACTION_ROLES = {
       'search': ALL_ACTIVE, 'getDashboard': ALL_ACTIVE, 'getJob': ALL_ACTIVE,
       'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE,
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
-      'updateField': WRITE_ROLES, 'updateCompanyInfo': WRITE_ROLES, 'updateCompanyName': WRITE_ROLES,
-      'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': WRITE_ROLES,
+      // #336: company/job field edits are manager+ ; status is analyst+
+      'updateField': MANAGER_UP, 'updateCompanyInfo': MANAGER_UP, 'updateCompanyName': MANAGER_UP,
+      'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': STATUS_ROLES,
+      // contacts: add (analyst+), delete (manager+)
+      'saveContacts': CONTACT_ADD_ROLES, 'addContact': CONTACT_ADD_ROLES, 'deleteContact': CONTACT_DEL_ROLES,
       'getEnrichmentStatus': MANAGER_UP, 'getCompaniesNeedingEnrichment': ADMIN_UP, 'propagateCompanyData': SUPER_ONLY, 'clearContaminatedSize': SUPER_ONLY, 'getCompaniesBySize': ADMIN_UP, 'getTopCompaniesNeedingSize': ADMIN_UP,
       'backupJobs': SUPER_ONLY, 'listBackups': ADMIN_UP, 'restoreJobs': SUPER_ONLY,
       'fixCountries': SUPER_ONLY, 'fixCompanyTypes': SUPER_ONLY,
       'fixCompanyUrls': SUPER_ONLY, 'reExtract': SUPER_ONLY,
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
-      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP, 'tagScrapeFailed': ADMIN_UP, 'deleteCompanyContacts': ADMIN_UP,
+      'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP, 'tagScrapeFailed': ADMIN_UP, 'deleteCompanyContacts': CONTACT_DEL_ROLES,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -219,6 +254,7 @@ exports.handler = async (event) => {
       var skip = (page - 1) * limit;
       var sort = body.sort ? (typeof body.sort === 'string' ? JSON.parse(body.sort) : body.sort) : { dateScanned: -1 };
 
+      filter = applyScope(filter); // #330 region/country scoping
       var total = await col.countDocuments(filter);
       var jobs = await col.find(filter)
         .project({ description: 0 }) // exclude large field for list view
@@ -377,32 +413,36 @@ exports.handler = async (event) => {
 
     // ACTION: stats - get dashboard statistics
     if (action === 'stats') {
-      var totalJobs = await col.countDocuments({});
-      var statusCounts = await col.aggregate([
+      // #330: scope stage prepended to every dashboard pipeline (empty = no restriction)
+      var _sf = scopeFilter();
+      var SM = _sf ? [{ $match: _sf }] : [];
+      var scopedCount = _sf ? _sf : {};
+      var totalJobs = await col.countDocuments(scopedCount);
+      var statusCounts = await col.aggregate(SM.concat([
         { $group: { _id: '$status', count: { $sum: 1 } } }
-      ]).toArray();
-      var typeCounts = await col.aggregate([
+      ])).toArray();
+      var typeCounts = await col.aggregate(SM.concat([
         { $match: { companyType: { $nin: [null, ''] } } },
         { $group: { _id: '$companyType', count: { $sum: 1 } } },
         { $sort: { count: -1 } }
-      ]).toArray();
-      var countryCounts = await col.aggregate([
+      ])).toArray();
+      var countryCounts = await col.aggregate(SM.concat([
         { $match: { detectedCountry: { $ne: null } } },
         { $group: { _id: '$detectedCountry', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
-      var companyCounts = await col.aggregate([
+      ])).toArray();
+      var companyCounts = await col.aggregate(SM.concat([
         { $project: { companyNorm: { $trim: { input: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: { $toLower: '$company' }, find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } }, companyUrl: 1 } },
         { $group: { _id: '$companyNorm', count: { $sum: 1 }, url: { $first: '$companyUrl' } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
+      ])).toArray();
       companyCounts.forEach(function(c) {
         if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
       });
       // Split comma-separated fields, normalize case, then count
-      var certCounts = await col.aggregate([
+      var certCounts = await col.aggregate(SM.concat([
         { $match: { certifications: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$certifications', ', '] } } },
         { $unwind: '$items' },
@@ -410,8 +450,8 @@ exports.handler = async (event) => {
         { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
-      var complianceCounts = await col.aggregate([
+      ])).toArray();
+      var complianceCounts = await col.aggregate(SM.concat([
         { $match: { compliance: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$compliance', ', '] } } },
         { $unwind: '$items' },
@@ -419,8 +459,8 @@ exports.handler = async (event) => {
         { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
-      var toolsCounts = await col.aggregate([
+      ])).toArray();
+      var toolsCounts = await col.aggregate(SM.concat([
         { $match: { tools: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$tools', ', '] } } },
         { $unwind: '$items' },
@@ -428,34 +468,34 @@ exports.handler = async (event) => {
         { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
-      var locationCounts = await col.aggregate([
+      ])).toArray();
+      var locationCounts = await col.aggregate(SM.concat([
         { $match: { location: { $ne: 'Remote' } } },
         { $group: { _id: '$location', count: { $sum: 1 }, country: { $first: '$detectedCountry' } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
+      ])).toArray();
       // Append country name to location for display
       locationCounts.forEach(function(l) {
         if (l.country && l.country !== 'Unknown' && l._id && l._id.indexOf(l.country) === -1) {
           l._id = l._id + ' (' + l.country + ')';
         }
       });
-      var recentScans = await col.aggregate([
+      var recentScans = await col.aggregate(SM.concat([
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateScanned' } }, count: { $sum: 1 } } },
         { $sort: { _id: -1 } },
         { $limit: 14 }
-      ]).toArray();
+      ])).toArray();
 
       // Partnership targets: companies with most openings, grouped by type
-      var partnerTargets = await col.aggregate([
+      var partnerTargets = await col.aggregate(SM.concat([
         { $project: { companyNorm: { $trim: { input: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1, companySize: 1 } },
         { $group: { _id: { company: '$companyNorm', type: '$companyType' }, count: { $sum: 1 },
           statuses: { $push: '$status' }, locations: { $addToSet: '$location' },
           companyUrl: { $first: '$companyUrl' }, companySize: { $first: '$companySize' } } },
         { $sort: { count: -1 } },
         { $limit: 20 }
-      ]).toArray();
+      ])).toArray();
       // Title-case company names
       partnerTargets.forEach(function(p) {
         if (p._id && p._id.company) p._id.company = p._id.company.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
@@ -463,7 +503,7 @@ exports.handler = async (event) => {
 
       // Role distribution - case insensitive, normalize variants
       // #322: also compute average required experience (years) per role
-      var roleCounts = await col.aggregate([
+      var roleCounts = await col.aggregate(SM.concat([
         { $match: { titleClean: { $ne: null } } },
         { $project: {
           role: { $toLower: '$titleClean' },
@@ -482,10 +522,10 @@ exports.handler = async (event) => {
         } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
+      ])).toArray();
 
       // Skills distribution (comma-separated) - case insensitive
-      var skillCounts = await col.aggregate([
+      var skillCounts = await col.aggregate(SM.concat([
         { $match: { skills: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$skills', ', '] } } },
         { $unwind: '$items' },
@@ -493,37 +533,37 @@ exports.handler = async (event) => {
         { $group: { _id: { $toLower: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 15 }
-      ]).toArray();
+      ])).toArray();
 
       // Salary distribution (count by ranges)
-      var salaryJobs = await col.aggregate([
+      var salaryJobs = await col.aggregate(SM.concat([
         { $match: { salary: { $ne: 'Not disclosed' } } },
         { $group: { _id: '$salary', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
+      ])).toArray();
 
       // Contract-specific aggregations
       var contractFilter = { jobType: 'Contract' };
-      var contractTotal = await col.countDocuments(contractFilter);
-      var contractNew = await col.countDocuments({ jobType: 'Contract', status: 'new' });
-      var contractByCountry = await col.aggregate([
+      var contractTotal = await col.countDocuments(applyScope(contractFilter));
+      var contractNew = await col.countDocuments(applyScope({ jobType: 'Contract', status: 'new' }));
+      var contractByCountry = await col.aggregate(SM.concat([
         { $match: contractFilter },
         { $group: { _id: '$detectedCountry', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
-      ]).toArray();
-      var contractByCompany = await col.aggregate([
+      ])).toArray();
+      var contractByCompany = await col.aggregate(SM.concat([
         { $match: contractFilter },
         { $project: { companyNorm: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '\u00AE', replacement: '' } }, find: '\u2122', replacement: '' } }, find: '\u00A9', replacement: '' } } }, status: 1, location: 1, companyUrl: 1, salary: 1, companyType: 1, companySize: 1 } },
         { $group: { _id: '$companyNorm', count: { $sum: 1 }, statuses: { $push: '$status' }, locations: { $addToSet: '$location' }, companyUrl: { $first: '$companyUrl' }, salary: { $first: '$salary' }, companyType: { $first: '$companyType' }, companySize: { $first: '$companySize' } } },
         { $sort: { count: -1 } },
         { $limit: 25 }
-      ]).toArray();
+      ])).toArray();
       contractByCompany.forEach(function(c) {
         if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
       });
-      var contractSkills = await col.aggregate([
+      var contractSkills = await col.aggregate(SM.concat([
         { $match: { jobType: 'Contract', tools: { $type: 'string', $nin: ['', 'See details'] } } },
         { $project: { items: { $split: ['$tools', ', '] } } },
         { $unwind: '$items' },
@@ -531,8 +571,8 @@ exports.handler = async (event) => {
         { $group: { _id: { $toUpper: { $trim: { input: '$items' } } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 20 }
-      ]).toArray();
-      var contractCerts = await col.aggregate([
+      ])).toArray();
+      var contractCerts = await col.aggregate(SM.concat([
         { $match: { jobType: 'Contract', certifications: { $type: 'string', $nin: ['', 'See details'] } } },
         { $project: { items: { $split: ['$certifications', ', '] } } },
         { $unwind: '$items' },
@@ -540,9 +580,9 @@ exports.handler = async (event) => {
         { $group: { _id: { $trim: { input: '$items' } }, count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 15 }
-      ]).toArray();
+      ])).toArray();
       // Average hourly rate for contracts (convert all to hourly USD)
-      var contractSalaries = await col.find({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } }).project({ salary: 1 }).limit(200).toArray();
+      var contractSalaries = await col.find(applyScope({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } })).project({ salary: 1 }).limit(200).toArray();
       var avgRate = '-';
       if (contractSalaries.length > 0) {
         var hourlyRates = [];
@@ -1480,7 +1520,7 @@ exports.handler = async (event) => {
     if (action === 'getRecentContracts') {
       var oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-      var contracts = await col.find({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] })
+      var contracts = await col.find(applyScope({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] }))
         .sort({ datePosted: -1, dateScanned: -1 })
         .project({ title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
         .toArray();

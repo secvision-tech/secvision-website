@@ -37,7 +37,7 @@ function extractExp(job) {
     if (!seen[k]) { seen[k] = true; parts.push(m[1] + '+ yr ' + c); }
   }
   // P2: "X-Y years [of experience]" - validate range 1-30, require 'years' or 'experience' context
-  var p2 = /(?:around\s*|approximately\s*)?(\d+)\s*[\-\u2013\u2014]+\s*(\d+)\s*(?:(?:years?|yrs?)['\u2019]?\s*)(?:of\s*)?(?:[\w\s]*)?(?:experience|expertise)?/gi;
+  var p2 = /(?:around\s*|approximately\s*)?(\d+)\s*[\-\u2013\u2014]+\s*(\d+)\s*(?:\+|\s*plus)?\s*(?:(?:years?|yrs?)['\u2019]?\s*)(?:of\s*)?(?:[\w\s]*)?(?:experience|expertise)?/gi;
   while ((m = p2.exec(d)) !== null && parts.length < 5) {
     var y1 = parseInt(m[1]), y2 = parseInt(m[2]);
     if (y1 < 1 || y1 > 30 || y2 < 1 || y2 > 30 || y2 <= y1) continue;

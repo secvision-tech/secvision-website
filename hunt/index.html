@@ -523,10 +523,24 @@ async function provisionUser(){
     }
     // Fetch global settings from MongoDB
     fetchGlobalSettings();
+    // #335: Apply default landing tab from user preference (or global)
+    applyDefaultLandingTab();
   }catch(e){console.error('User provision error:',e)}
 }
 
+function applyDefaultLandingTab(){
+  var tab=getSetting('defaultTab')||'dash';
+  // viewers/analysts can't web search — if their default is 'web' but hidden, fall back to dash
+  var canWeb=curUserRole!=='viewer';
+  var map={'dash':'dash','contract':'contract','web':'web','db':'db'};
+  var target=map[tab]||'dash';
+  if(target==='web'&&!canWeb)target='dash';
+  if(target!=='dash')setMode(target);
+}
+
 var curUserRole='analyst',curUserData=null;
+// Global capability flags (set by applyRoleVisibility, used across the app)
+var CAP={canStatus:false,canContacts:false,canDeleteContacts:false,canEnrichCompany:false,canEditFields:false,canWeb:false};
 function applyRoleVisibility(){
   var r=curUserRole;
   var isSuper=r==='super_admin';
@@ -534,6 +548,14 @@ function applyRoleVisibility(){
   var isManager=r==='manager';
   var isViewer=r==='viewer';
   var isPending=r==='pending';
+
+  // Capability matrix
+  CAP.canStatus        = !isViewer && !isPending;                       // all except viewer
+  CAP.canContacts      = !isViewer && !isPending;                       // analyst+ can add/discover
+  CAP.canDeleteContacts= isSuper || isAdmin || isManager;              // manager+ only
+  CAP.canEnrichCompany = isSuper || isAdmin || isManager;              // manager+ only
+  CAP.canEditFields    = isSuper || isAdmin || isManager;              // manager+ only (job/company fields)
+  CAP.canWeb           = !isViewer && !isPending;
 
   // Block pending users entirely
   if(isPending){
@@ -1090,6 +1112,8 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
 // Auto-enrich companies: get size + contacts for new companies (runs in background)
 var enrichedCompaniesCache={};
 async function autoEnrichCompanies(){
+  // #332: respect global auto-enrich toggle (off = skip entirely)
+  if(getSetting('autoEnrich')==='off')return;
   var enSt=document.getElementById('enrichStatus');
   // Collect unique companies from current results (skip Job Boards only)
   var uniqueCompanies={};
@@ -1097,6 +1121,9 @@ async function autoEnrichCompanies(){
     if(j.company&&!enrichedCompaniesCache[j.company.toLowerCase()]&&j.companyType!=='Job Board')uniqueCompanies[j.company.toLowerCase()]=j.company;
   });
   var companyList=Object.values(uniqueCompanies);
+  // #332: cap to top 30 unique companies per search to control cost/time
+  var AUTO_ENRICH_CAP=30;
+  if(companyList.length>AUTO_ENRICH_CAP)companyList=companyList.slice(0,AUTO_ENRICH_CAP);
   if(!companyList.length)return;
 
   enSt.style.display='inline-block';
@@ -1126,26 +1153,34 @@ async function autoEnrichCompanies(){
       var comp=toEnrich[i];
       enSt.textContent='🏢 '+(i+1)+'/'+toEnrich.length+': '+comp.company+'...';
 
-      // Step 1: Get company size if missing — try Apollo first, then LinkedIn scraper
+      // Step 1a (FREE): try to fill size/LinkedIn/website from a sibling job of the same company already in results
       if(!comp.hasSize){
-        try{
-          var ed=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({action:'enrichCompany',company:comp.company,domain:''})});
-          if(ed.error&&ed.error.indexOf('insufficient credits')>-1){
-            enSt.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies.';
-            // Continue with LinkedIn scraper for remaining
-          }else if(ed.size||ed.linkedin){
-            await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-              body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:{companySize:ed.size||0,companyLinkedin:ed.linkedin||'',companyUrl:ed.website||''}})});
-            enriched++;
+        var sib={size:0,linkedin:'',website:'',type:''};
+        allJobs.forEach(function(j){
+          if(j.company&&j.company.toLowerCase()===comp.company.toLowerCase()){
+            if(!sib.size&&j.companySize){var n=typeof j.companySize==='number'?j.companySize:parseInt(String(j.companySize).replace(/[^0-9]/g,''));if(n>0)sib.size=n}
+            if(!sib.linkedin&&j.companyLinkedin)sib.linkedin=j.companyLinkedin;
+            if(!sib.website&&j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1)sib.website=j.companyUrl;
+            if(!sib.type&&j.companyType)sib.type=j.companyType;
           }
-        }catch(e){failed++}
+        });
+        if(sib.size||sib.linkedin||sib.website){
+          var su={};
+          if(sib.size)su.companySize=sib.size;
+          if(sib.linkedin)su.companyLinkedin=sib.linkedin;
+          if(sib.website)su.companyUrl=sib.website;
+          if(sib.type)su.companyType=sib.type;
+          try{
+            await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+              body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:su})});
+            if(sib.size){comp.hasSize=true;enriched++}
+          }catch(e){}
+        }
       }
 
-      // Step 1b: If still no size, try LinkedIn Company Scraper
+      // Step 1b (FREE/CHEAP): LinkedIn Company Scraper — only if a LinkedIn URL is available
       if(!comp.hasSize){
         try{
-          // Find LinkedIn URL from jobs
           var linkedinUrl='';
           allJobs.forEach(function(j){
             if(j.company.toLowerCase()===comp.company.toLowerCase()){
@@ -1165,11 +1200,32 @@ async function autoEnrichCompanies(){
               if(Object.keys(updates).length){
                 await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
                   body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:updates})});
-                enriched++;
+                if(updates.companySize){comp.hasSize=true;enriched++}
               }
             }
           }
         }catch(e){}
+      }
+
+      // Step 1c (COSTLY — LAST RESORT): Apollo enrichCompany, only if size still missing
+      if(!comp.hasSize){
+        try{
+          var ed=await safeApiFetch('/.netlify/functions/apollo',{method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:'enrichCompany',company:comp.company,domain:''})});
+          if(ed.error&&ed.error.indexOf('insufficient credits')>-1){
+            enSt.textContent='⚠️ Apollo credits exhausted after enriching '+enriched+' companies.';
+          }else if(ed.size||ed.linkedin){
+            var au={};
+            if(ed.size){var an=parseInt((''+ed.size).replace(/,/g,''));if(an>0)au.companySize=an}
+            if(ed.linkedin)au.companyLinkedin=ed.linkedin;
+            if(ed.website)au.companyUrl=ed.website.indexOf('http')===0?ed.website:'https://'+ed.website;
+            if(Object.keys(au).length){
+              await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({action:'updateCompanyIfEmpty',company:comp.company,updates:au})});
+              enriched++;
+            }
+          }
+        }catch(e){failed++}
       }
 
       // Step 2: Discover contacts if missing
@@ -1240,7 +1296,7 @@ function renderTable(){
     var companyCell='<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
     var ji=allJobs.indexOf(j);
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">View</button> <button class="fc-btn" onclick="findContacts('+ji+')">Contacts</button></td>';
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">'+(CAP.canStatus?'Manage':'View')+'</button> <button class="fc-btn" onclick="findContacts('+ji+')">'+(CAP.canEnrichCompany?'Company':'Contacts')+'</button></td>';
     tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.classList.contains('status-badge')||e.target.classList.contains('ctype-badge'))return;this.classList.toggle('row-hl')};
     // Bind status badge click
     var sBadge=tr.querySelector('.status-badge');
@@ -1375,35 +1431,39 @@ async function viewDet(i){
   var bens=Array.isArray(j.benefits)?j.benefits:[];
   var countryForSearch=j.detectedCountry&&j.detectedCountry!=='Unknown'?' '+j.detectedCountry:'';
   var companyLink=j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1?j.companyUrl:'https://www.google.com/search?q='+encodeURIComponent(j.company+countryForSearch+' official website');
-  var companyHtml='<a href="'+companyLink+'" target="_blank">'+j.company+'</a> <span onclick="editCompanyName('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company name">✎</span> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>';
+  var canEditCo=CAP.canEditFields; // manager+ can edit company/job fields
+  var editName=canEditCo?' <span onclick="editCompanyName('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company name">✎</span> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>':'';
+  var companyHtml='<a href="'+companyLink+'" target="_blank">'+j.company+'</a>'+editName;
   var mapQuery=j.location||'';
   if(j.detectedCountry&&j.detectedCountry!=='Unknown'&&mapQuery.indexOf(j.detectedCountry)===-1)mapQuery+=', '+j.detectedCountry;
   if(/^Remote$/i.test(j.location))mapQuery=j.company+(j.detectedCountry&&j.detectedCountry!=='Unknown'?', '+j.detectedCountry:'');
   var locationHtml=j.location?'<a href="https://www.google.com/maps/search/'+encodeURIComponent(mapQuery)+'" target="_blank" style="color:var(--ac)" title="View on Google Maps: '+mapQuery+'">'+j.location+' 📍</a>':'N/A';
-  locationHtml+=' <span onclick="editFieldInView('+i+',\'location\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit location">✎</span>';
-  var countryHtml=(j.detectedCountry||'Unknown')+' <span onclick="editCountry('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit country">✎</span>';
-  var jobTypeHtml=(j.jobType||'Not specified')+' <span onclick="editField('+i+',\'jobType\',\'Job Type\',\'Full-time,Contract,Part-time,Internship,Not specified\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit job type">✎</span>';
-  var salaryHtml=(j.salary||'Not disclosed')+' <span onclick="editFieldFree('+i+',\'salary\',\'Salary/Rate\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit salary">✎</span>';
-  var experienceHtml=(j.experience||'Not specified')+' <span onclick="editFieldFree('+i+',\'experience\',\'Experience\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit experience">✎</span>';
+  if(canEditCo)locationHtml+=' <span onclick="editFieldInView('+i+',\'location\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit location">✎</span>';
+  var countryHtml=(j.detectedCountry||'Unknown')+(canEditCo?' <span onclick="editCountry('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit country">✎</span>':'');
+  var jobTypeHtml=(j.jobType||'Not specified')+(canEditCo?' <span onclick="editField('+i+',\'jobType\',\'Job Type\',\'Full-time,Contract,Part-time,Internship,Not specified\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit job type">✎</span>':'');
+  var salaryHtml=(j.salary||'Not disclosed')+(canEditCo?' <span onclick="editFieldFree('+i+',\'salary\',\'Salary/Rate\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit salary">✎</span>':'');
+  var experienceHtml=(j.experience||'Not specified')+(canEditCo?' <span onclick="editFieldFree('+i+',\'experience\',\'Experience\')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit experience">✎</span>':'');
   var companySizeVal=j.companySize;
   var companySizeHtml='N/A';
   if(companySizeVal){
     var sizeNum=typeof companySizeVal==='number'?companySizeVal:parseInt(String(companySizeVal).replace(/[^0-9]/g,''));
     companySizeHtml=sizeNum&&!isNaN(sizeNum)?sizeNum.toLocaleString()+(sizeNum===1?' employee':' employees'):String(companySizeVal).replace(/\s*employees\s*/gi,'').trim()+' employees';
   }
-  companySizeHtml+=' <span onclick="editCompanySize('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company size">✎</span>';
+  if(canEditCo)companySizeHtml+=' <span onclick="editCompanySize('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company size">✎</span>';
   var companyLinkedinHtml=j.companyLinkedin?'<a href="'+j.companyLinkedin+'" target="_blank" style="color:var(--pri)">LinkedIn ↗</a>':'N/A';
-  companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
-  var companyTypeHtml=(j.companyType||'Not classified')+' <span onclick="editCompanyTypeInView('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Change company type">✎</span>';
-  var canContact=curUserRole!=='viewer';
-  var canEnrich=curUserRole==='super_admin'||curUserRole==='admin'||curUserRole==='manager';
-  var canEdit=curUserRole!=='viewer';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status','<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1)+'</span>'],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  if(canEditCo)companyLinkedinHtml+=' <span onclick="editCompanyLinkedin('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company LinkedIn URL">✎</span>';
+  var companyTypeHtml=(j.companyType||'Not classified')+(canEditCo?' <span onclick="editCompanyTypeInView('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Change company type">✎</span>':'');
+  var canContact=CAP.canContacts;
+  var canEnrich=CAP.canEnrichCompany;
+  // Status: editable by all except viewer (analyst+). Render as clickable only if canStatus.
+  var statusInner=(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1);
+  var statusHtml=CAP.canStatus?'<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+statusInner+'</span>':'<span class="status-badge status-'+(j.status||'new')+'">'+statusInner+'</span>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links (only show section if user has access)
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
     h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
-    h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🏢 Manage Company</button>';
+    h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">'+(canEnrich?'🏢 Manage Company':'🔍 Manage Contacts')+'</button>';
     h+='</div></div>';
   }
   // Load contacts async
@@ -2944,6 +3004,7 @@ function initSettingsPage(){
     document.getElementById('setGlobalTimeZone').value=GLOBAL_SETTINGS.timeZone;
     document.getElementById('setGlobalPerPage').value=GLOBAL_SETTINGS.perPage;
     document.getElementById('setGlobalDefaultTab').value=GLOBAL_SETTINGS.defaultTab;
+    if(document.getElementById('setGlobalAutoEnrich'))document.getElementById('setGlobalAutoEnrich').value=GLOBAL_SETTINGS.autoEnrich||'on';
   }
   // Populate user prefs (all roles)
   document.getElementById('setUserDateFormat').value=USER_PREFS.dateFormat||'';
@@ -2996,6 +3057,7 @@ async function saveGlobalSettings(){
   GLOBAL_SETTINGS.timeZone=document.getElementById('setGlobalTimeZone').value;
   GLOBAL_SETTINGS.perPage=parseInt(document.getElementById('setGlobalPerPage').value);
   GLOBAL_SETTINGS.defaultTab=document.getElementById('setGlobalDefaultTab').value;
+  if(document.getElementById('setGlobalAutoEnrich'))GLOBAL_SETTINGS.autoEnrich=document.getElementById('setGlobalAutoEnrich').value;
   localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS));
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',
@@ -3052,12 +3114,12 @@ function applySettings(){
 async function loadUserList(){
   var tbody=document.getElementById('usersTableBody');
   if(!tbody)return;
-  tbody.innerHTML='<tr><td colspan="6" style="padding:.8rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
+  tbody.innerHTML='<tr><td colspan="7" style="padding:.8rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'listUsers'})});
     var d=await r.json();
     var users=d.users||[];
-    if(!users.length){tbody.innerHTML='<tr><td colspan="6" style="padding:.8rem;text-align:center;color:var(--g3)">No users found.</td></tr>';return}
+    if(!users.length){tbody.innerHTML='<tr><td colspan="7" style="padding:.8rem;text-align:center;color:var(--g3)">No users found.</td></tr>';return}
     var roleColors={'super_admin':'#7C3AED','admin':'#2563EB','manager':'#059669','analyst':'#D97706','viewer':'#6B7280','pending':'#DC2626'};
     var roleLabels={'super_admin':'Super Admin','admin':'Admin','manager':'Manager','analyst':'Analyst','viewer':'Viewer','pending':'Pending'};
     var statusColors={'active':'#059669','suspended':'#DC2626','pending':'#D97706'};
@@ -3080,6 +3142,12 @@ async function loadUserList(){
       var lastLogin=u.lastLogin?fmtDate(u.lastLogin):'Never';
       var actions=isSelf?'<span style="color:var(--g3);font-size:.55rem">You</span>':'<button onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.65rem" title="Remove user">🗑️</button>';
 
+      // #330: scope summary + edit button
+      var rgns=Array.isArray(u.allowedRegions)?u.allowedRegions:[];
+      var ctrs=Array.isArray(u.allowedCountries)?u.allowedCountries:[];
+      var scopeLabel=(rgns.length===0&&ctrs.length===0)?'All':((rgns.join(',')+(ctrs.length?' / '+ctrs.join(','):'')).slice(0,24));
+      var scopeCell=(u.role==='super_admin')?'<span style="color:var(--g3);font-size:.55rem">All (super)</span>':'<button onclick="editUserScope(\''+u._id+'\',\''+esc(u.name||u.email)+'\','+JSON.stringify(rgns).replace(/"/g,'&quot;')+','+JSON.stringify(ctrs).replace(/"/g,'&quot;')+')" style="font-size:.55rem;padding:.1rem .4rem;background:var(--g1);border:1px solid var(--g2);border-radius:3px;cursor:pointer" title="Assign regions/countries">'+esc(scopeLabel)+' ✎</button>';
+
       return '<tr style="border-bottom:1px solid var(--g1)">'
         +'<td style="padding:.4rem .5rem"><div style="display:flex;align-items:center;gap:.3rem">'
         +'<span style="width:24px;height:24px;border-radius:50%;background:'+(roleColors[u.role]||'#6B7280')+';color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:.5rem;font-weight:700;flex-shrink:0">'+initials+'</span>'
@@ -3087,10 +3155,11 @@ async function loadUserList(){
         +'<td style="padding:.4rem .5rem"><span style="font-size:.55rem;background:var(--g1);padding:.1rem .3rem;border-radius:3px">'+(u.userType||'internal')+(u.externalCompany?' · '+u.externalCompany:'')+'</span></td>'
         +'<td style="padding:.4rem .5rem">'+roleSelect+'</td>'
         +'<td style="padding:.4rem .5rem">'+statusBadge+'</td>'
+        +'<td style="padding:.4rem .5rem">'+scopeCell+'</td>'
         +'<td style="padding:.4rem .5rem;font-size:.55rem;color:var(--g4)">'+lastLogin+'</td>'
         +'<td style="padding:.4rem .5rem;text-align:center">'+actions+'</td></tr>';
     }).join('');
-  }catch(e){tbody.innerHTML='<tr><td colspan="6" style="padding:.8rem;text-align:center;color:#DC2626">Error: '+e.message+'</td></tr>'}
+  }catch(e){tbody.innerHTML='<tr><td colspan="7" style="padding:.8rem;text-align:center;color:#DC2626">Error: '+e.message+'</td></tr>'}
 }
 
 function showAddInternalUser(){
@@ -3208,6 +3277,47 @@ async function deleteUser(userId,email){
   }catch(e){alert('Error: '+e.message)}
 }
 
+// #330: Region/country scope assignment
+var scopeEditUserId=null;
+function editUserScope(userId,name,curRegions,curCountries){
+  scopeEditUserId=userId;
+  curRegions=curRegions||[];curCountries=curCountries||[];
+  var regionList=[['NA','North America'],['EU','Europe'],['AP','Asia Pacific'],['ME','Middle East'],['AF','Africa'],['SA','South America']];
+  var h='<div style="font-size:.7rem;font-weight:700;margin-bottom:.5rem">Assign Scope — '+esc(name)+'</div>';
+  h+='<div style="font-size:.58rem;color:var(--g4);margin-bottom:.6rem">Leave everything unchecked = <strong>All Regions &amp; Countries</strong> (no restriction). Otherwise the user sees only jobs matching the selected regions and/or countries.</div>';
+  h+='<div style="font-weight:600;font-size:.62rem;margin-bottom:.3rem">Regions</div><div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem">';
+  regionList.forEach(function(r){
+    var ck=curRegions.indexOf(r[0])>-1?' checked':'';
+    h+='<label style="font-size:.6rem;display:flex;align-items:center;gap:.2rem"><input type="checkbox" class="scopeRegion" value="'+r[0]+'"'+ck+'> '+r[1]+'</label>';
+  });
+  h+='</div>';
+  h+='<div style="font-weight:600;font-size:.62rem;margin-bottom:.3rem">Countries (optional, more granular)</div><div style="max-height:160px;overflow-y:auto;border:1px solid var(--g2);border-radius:4px;padding:.4rem">';
+  Object.keys(COUNTRIES_BY_REGION).forEach(function(rk){
+    if(rk==='Any')return;
+    (COUNTRIES_BY_REGION[rk]||[]).forEach(function(c){
+      var ck=curCountries.indexOf(c[0])>-1?' checked':'';
+      h+='<label style="font-size:.58rem;display:inline-flex;align-items:center;gap:.2rem;width:48%;margin-bottom:.2rem"><input type="checkbox" class="scopeCountry" value="'+c[0]+'"'+ck+'> '+esc(c[1])+'</label>';
+    });
+  });
+  h+='</div>';
+  h+='<div style="display:flex;gap:.4rem;margin-top:.6rem"><button onclick="saveUserScope()" style="padding:.3rem .8rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">💾 Save Scope</button><button onclick="closeScopeDialog()" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer">Cancel</button></div>';
+  document.getElementById('scopeDialogBody').innerHTML=h;
+  document.getElementById('scopeDialog').style.display='flex';
+}
+function closeScopeDialog(){document.getElementById('scopeDialog').style.display='none';scopeEditUserId=null}
+async function saveUserScope(){
+  if(!scopeEditUserId)return;
+  var regions=Array.prototype.slice.call(document.querySelectorAll('.scopeRegion:checked')).map(function(c){return c.value});
+  var countries=Array.prototype.slice.call(document.querySelectorAll('.scopeCountry:checked')).map(function(c){return c.value});
+  try{
+    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateUser',userId:scopeEditUserId,updates:{allowedRegions:regions,allowedCountries:countries}})});
+    closeScopeDialog();
+    loadUserList();
+    document.getElementById('userMgmtStatus').textContent='✅ Scope updated ('+(regions.length||countries.length?regions.length+' regions, '+countries.length+' countries':'All')+').';
+    setTimeout(function(){document.getElementById('userMgmtStatus').textContent=''},4000);
+  }catch(e){alert('Error: '+e.message)}
+}
+
 // Format date using effective settings
 function formatDateWithSettings(date,fmt,tz,tf){
   if(!date)return'N/A';
@@ -3232,7 +3342,8 @@ function fmtDate(date){return formatDateWithSettings(date)}
 // Initialize settings on load
 loadSettings();
 
-document.addEventListener('DOMContentLoaded',function(){document.body.insertAdjacentHTML('beforeend',contactPopupHtml)});
+var scopeDialogHtml='<div id="scopeDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1100;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div id="scopeDialogBody"></div></div></div>';
+document.addEventListener('DOMContentLoaded',function(){document.body.insertAdjacentHTML('beforeend',contactPopupHtml);document.body.insertAdjacentHTML('beforeend',scopeDialogHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
 async function openContactFinder(company,domain,linkedin){
@@ -3241,7 +3352,8 @@ async function openContactFinder(company,domain,linkedin){
   cfLinkedin=linkedin||'';
   var hasDomain=cfDomain&&cfDomain.length>3;
   var hasLinkedin=cfLinkedin&&cfLinkedin.indexOf('linkedin.com')>-1;
-  document.getElementById('cfTitle').textContent='Manage Company — '+company+(cfDomain?' ('+cfDomain+')':'');
+  var popupCanEnrich=CAP.canEnrichCompany;
+  document.getElementById('cfTitle').textContent=(popupCanEnrich?'Manage Company — ':'Manage Contacts — ')+company+(cfDomain?' ('+cfDomain+')':'');
   document.getElementById('contactPopup').style.display='flex';
   document.getElementById('cfDiscovered').innerHTML='';
   document.getElementById('cfCompanyInfo').innerHTML='';
@@ -3254,8 +3366,7 @@ async function openContactFinder(company,domain,linkedin){
   }else{
     autoBtn.disabled=false;autoBtn.style.opacity='1';autoBtn.title='';
   }
-  // #319: Gate "Get Company Size" in popup by same role as View (canEnrich = manager+)
-  var popupCanEnrich=curUserRole==='super_admin'||curUserRole==='admin'||curUserRole==='manager';
+  // #319: Gate "Enrich Company Details" in popup (manager+)
   var cfEnrichBtn=document.getElementById('cfEnrichBtn');
   if(cfEnrichBtn)cfEnrichBtn.style.display=popupCanEnrich?'':'none';
   // LinkedIn search links
@@ -3286,7 +3397,8 @@ async function openContactFinder(company,domain,linkedin){
       displayList.forEach(function(c){
         var linkedinHtml=c.linkedin?'<a href="'+c.linkedin+'" target="_blank" style="color:var(--pri);font-size:.55rem">LinkedIn ↗</a>':'';
         var emailHtml=(c.email&&c.email!=='N/A')?'<a href="mailto:'+esc(c.email)+'">'+esc(c.email)+'</a>':'';
-        h+='<div style="display:flex;justify-content:space-between;align-items:center;background:#f3f4f6;padding:.3rem .5rem;border-radius:4px;font-size:.65rem"><span><strong>'+esc(c.name)+'</strong> — '+esc(c.designation)+(emailHtml?' — '+emailHtml:'')+(linkedinHtml?' '+linkedinHtml:'')+' <span style="color:#9ca3af;font-size:.55rem">('+esc(c.source||'')+')</span></span><button onclick="deleteContact(\''+c._id+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.7rem" title="Remove">✕</button></div>';
+        var delX=CAP.canDeleteContacts?'<button onclick="deleteContact(\''+c._id+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.7rem" title="Remove">✕</button>':'';
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;background:#f3f4f6;padding:.3rem .5rem;border-radius:4px;font-size:.65rem"><span><strong>'+esc(c.name)+'</strong> — '+esc(c.designation)+(emailHtml?' — '+emailHtml:'')+(linkedinHtml?' '+linkedinHtml:'')+' <span style="color:#9ca3af;font-size:.55rem">('+esc(c.source||'')+')</span></span>'+delX+'</div>';
       });
       if(totalContacts>MAX_CF_DISPLAY){
         h+='<div style="padding:.3rem;color:#DC2626;font-size:.6rem;font-weight:600;background:#FEF2F2;border-radius:4px;margin-top:.3rem">⚠️ Showing '+MAX_CF_DISPLAY+' of '+totalContacts+'. Use Delete All and re-discover to cap at 20.</div>';
@@ -3717,6 +3829,8 @@ function downloadFile(content,name,type){
           <select id="setGlobalPerPage" class="set-input"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
         <div><label class="set-label">Default Landing Page</label>
           <select id="setGlobalDefaultTab" class="set-input"><option value="dash">Dashboard</option><option value="web">Search Web</option><option value="db">Search Database</option><option value="contract">Contract Pipeline</option></select></div>
+        <div><label class="set-label">Auto-Enrich Companies During Search</label>
+          <select id="setGlobalAutoEnrich" class="set-input"><option value="on">On (enrich new companies after search)</option><option value="off">Off (no auto-enrichment)</option></select></div>
       </div>
     </div>
 
@@ -3821,10 +3935,11 @@ function downloadFile(content,name,type){
           <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Type</th>
           <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Role</th>
           <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Status</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Scope</th>
           <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Last Login</th>
           <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4)">Actions</th>
         </tr></thead>
-        <tbody id="usersTableBody"><tr><td colspan="6" style="padding:1rem;text-align:center;color:var(--g3)">Loading users...</td></tr></tbody>
+        <tbody id="usersTableBody"><tr><td colspan="7" style="padding:1rem;text-align:center;color:var(--g3)">Loading users...</td></tr></tbody>
       </table>
     </div>
   </div>
