@@ -3117,6 +3117,8 @@ async function loadUserList(){
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'listUsers'})});
     var d=await r.json();
     var users=d.users||[];
+    window._usersMap={};
+    users.forEach(function(u){window._usersMap[u._id]=u});
     if(!users.length){tbody.innerHTML='<tr><td colspan="7" style="padding:.8rem;text-align:center;color:var(--g3)">No users found.</td></tr>';return}
     var roleColors={'super_admin':'#7C3AED','admin':'#2563EB','manager':'#059669','analyst':'#D97706','viewer':'#6B7280','pending':'#DC2626'};
     var roleLabels={'super_admin':'Super Admin','admin':'Admin','manager':'Manager','analyst':'Analyst','viewer':'Viewer','pending':'Pending'};
@@ -3144,7 +3146,7 @@ async function loadUserList(){
       var rgns=Array.isArray(u.allowedRegions)?u.allowedRegions:[];
       var ctrs=Array.isArray(u.allowedCountries)?u.allowedCountries:[];
       var scopeLabel=(rgns.length===0&&ctrs.length===0)?'All':((rgns.join(',')+(ctrs.length?' / '+ctrs.join(','):'')).slice(0,24));
-      var scopeCell=(u.role==='super_admin')?'<span style="color:var(--g3);font-size:.55rem">All (super)</span>':'<button onclick="editUserScope(\''+u._id+'\',\''+esc(u.name||u.email)+'\','+JSON.stringify(rgns).replace(/"/g,'&quot;')+','+JSON.stringify(ctrs).replace(/"/g,'&quot;')+')" style="font-size:.55rem;padding:.1rem .4rem;background:var(--g1);border:1px solid var(--g2);border-radius:3px;cursor:pointer" title="Assign regions/countries">'+esc(scopeLabel)+' ✎</button>';
+      var scopeCell=(u.role==='super_admin')?'<span style="color:var(--g3);font-size:.55rem">All (super)</span>':'<button onclick="editUserScope(\''+u._id+'\')" style="font-size:.55rem;padding:.1rem .4rem;background:var(--g1);border:1px solid var(--g2);border-radius:3px;cursor:pointer" title="Assign regions/countries">'+esc(scopeLabel)+' ✎</button>';
 
       return '<tr style="border-bottom:1px solid var(--g1)">'
         +'<td style="padding:.4rem .5rem"><div style="display:flex;align-items:center;gap:.3rem">'
@@ -3277,9 +3279,13 @@ async function deleteUser(userId,email){
 
 // #330: Region/country scope assignment
 var scopeEditUserId=null;
-function editUserScope(userId,name,curRegions,curCountries){
+function editUserScope(userId){
+  var u=(window._usersMap||{})[userId];
+  if(!u){alert('User not found. Please reload the user list.');return}
   scopeEditUserId=userId;
-  curRegions=curRegions||[];curCountries=curCountries||[];
+  var name=u.name||u.email||'User';
+  var curRegions=Array.isArray(u.allowedRegions)?u.allowedRegions:[];
+  var curCountries=Array.isArray(u.allowedCountries)?u.allowedCountries:[];
   var regionList=[['NA','North America'],['EU','Europe'],['AP','Asia Pacific'],['ME','Middle East'],['AF','Africa'],['SA','South America']];
   var h='<div style="font-size:.7rem;font-weight:700;margin-bottom:.5rem">Assign Scope — '+esc(name)+'</div>';
   h+='<div style="font-size:.58rem;color:var(--g4);margin-bottom:.6rem">Leave everything unchecked = <strong>All Regions &amp; Countries</strong> (no restriction). Otherwise the user sees only jobs matching the selected regions and/or countries.</div>';
@@ -3290,9 +3296,9 @@ function editUserScope(userId,name,curRegions,curCountries){
   });
   h+='</div>';
   h+='<div style="font-weight:600;font-size:.62rem;margin-bottom:.3rem">Countries (optional, more granular)</div><div style="max-height:160px;overflow-y:auto;border:1px solid var(--g2);border-radius:4px;padding:.4rem">';
-  Object.keys(COUNTRIES_BY_REGION).forEach(function(rk){
+  Object.keys(COUNTRIES).forEach(function(rk){
     if(rk==='Any')return;
-    (COUNTRIES_BY_REGION[rk]||[]).forEach(function(c){
+    (COUNTRIES[rk]||[]).forEach(function(c){
       var ck=curCountries.indexOf(c[0])>-1?' checked':'';
       h+='<label style="font-size:.58rem;display:inline-flex;align-items:center;gap:.2rem;width:48%;margin-bottom:.2rem"><input type="checkbox" class="scopeCountry" value="'+c[0]+'"'+ck+'> '+esc(c[1])+'</label>';
     });
@@ -3924,16 +3930,16 @@ function downloadFile(content,name,type){
     </div>
 
     <!-- Users Table -->
-    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;overflow:hidden">
-      <table style="width:100%;border-collapse:collapse;font-size:.65rem">
+    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;overflow:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:fixed">
         <thead><tr style="background:var(--g1);border-bottom:1px solid var(--g2)">
-          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">User</th>
-          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Type</th>
-          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Role</th>
-          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Status</th>
-          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Scope</th>
-          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Last Login</th>
-          <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4)">Actions</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:120px">User</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:70px">Type</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:90px">Role</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:70px">Status</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:90px">Scope</th>
+          <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:90px">Last Login</th>
+          <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4);min-width:60px">Actions</th>
         </tr></thead>
         <tbody id="usersTableBody"><tr><td colspan="7" style="padding:1rem;text-align:center;color:var(--g3)">Loading users...</td></tr></tbody>
       </table>
