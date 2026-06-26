@@ -3004,7 +3004,6 @@ function initSettingsPage(){
     document.getElementById('setGlobalTimeZone').value=GLOBAL_SETTINGS.timeZone;
     document.getElementById('setGlobalPerPage').value=GLOBAL_SETTINGS.perPage;
     document.getElementById('setGlobalDefaultTab').value=GLOBAL_SETTINGS.defaultTab;
-    if(document.getElementById('setGlobalAutoEnrich'))document.getElementById('setGlobalAutoEnrich').value=GLOBAL_SETTINGS.autoEnrich||'on';
   }
   // Populate user prefs (all roles)
   document.getElementById('setUserDateFormat').value=USER_PREFS.dateFormat||'';
@@ -3057,7 +3056,6 @@ async function saveGlobalSettings(){
   GLOBAL_SETTINGS.timeZone=document.getElementById('setGlobalTimeZone').value;
   GLOBAL_SETTINGS.perPage=parseInt(document.getElementById('setGlobalPerPage').value);
   GLOBAL_SETTINGS.defaultTab=document.getElementById('setGlobalDefaultTab').value;
-  if(document.getElementById('setGlobalAutoEnrich'))GLOBAL_SETTINGS.autoEnrich=document.getElementById('setGlobalAutoEnrich').value;
   localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS));
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',
@@ -3829,8 +3827,6 @@ function downloadFile(content,name,type){
           <select id="setGlobalPerPage" class="set-input"><option value="25">25</option><option value="50">50</option><option value="100">100</option></select></div>
         <div><label class="set-label">Default Landing Page</label>
           <select id="setGlobalDefaultTab" class="set-input"><option value="dash">Dashboard</option><option value="web">Search Web</option><option value="db">Search Database</option><option value="contract">Contract Pipeline</option></select></div>
-        <div><label class="set-label">Auto-Enrich Companies During Search</label>
-          <select id="setGlobalAutoEnrich" class="set-input"><option value="on">On (enrich new companies after search)</option><option value="off">Off (no auto-enrichment)</option></select></div>
       </div>
     </div>
 
