@@ -583,7 +583,7 @@ function detectCountry(job, searchCountry) {
 
   // Priority 7: Use search country as fallback (only for Latin-script descriptions)
   if (searchCountry) {
-    var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa'};
+    var scMap = {'us':'United States','ca':'Canada','uk':'United Kingdom','gb':'United Kingdom','in':'India','au':'Australia','de':'Germany','fr':'France','jp':'Japan','sg':'Singapore','nl':'Netherlands','ie':'Ireland','ch':'Switzerland','se':'Sweden','ae':'United Arab Emirates','il':'Israel','br':'Brazil','mx':'Mexico','nz':'New Zealand','za':'South Africa','sa':'Saudi Arabia','qa':'Qatar','bh':'Bahrain','kw':'Kuwait','om':'Oman','kr':'South Korea','hk':'Hong Kong','my':'Malaysia','ph':'Philippines','id':'Indonesia','th':'Thailand','es':'Spain','it':'Italy','pl':'Poland','pt':'Portugal','no':'Norway','dk':'Denmark','fi':'Finland','be':'Belgium','at':'Austria','cz':'Czech Republic','ro':'Romania','eg':'Egypt','ng':'Nigeria','ke':'Kenya','ar':'Argentina','cl':'Chile','co':'Colombia','pe':'Peru'};
     if (scMap[searchCountry.toLowerCase()]) return scMap[searchCountry.toLowerCase()];
   }
 
