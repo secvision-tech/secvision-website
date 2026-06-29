@@ -597,7 +597,7 @@ var JOB_BOARDS = /^(?:indeed|glassdoor|ziprecruiter|dice|monster|careerbuilder|s
 // Known Staffing/Recruiting agencies
 var STAFFING_AGENCIES = /^(?:robert\s*half|hays|hays\s*technology|randstad|tek\s*systems|teksystems|adecco|modis|insight\s*global|kforce(?:\s*(?:federal|government|gov)\s*(?:solutions)?)?|cybercoders|aerotek|manpower(?:group)?|kelly\s*services|softworld.*kelly|beacon\s*hill|apex\s*systems|allegis|staffing\s*technologies|harvey\s*nash|michael\s*page|page\s*group|spencer\s*stuart|egon\s*zehnder|man\s*tech|disys|corestaff|matlen\s*silver|experis|vaco|addison\s*group|solis|motion\s*recruitment|talent\s*(?:solutions|bridge|partners)|brainworks|dunhill|recruiting\s*(?:from\s*scratch|innovation)|private\s*label\s*staff|11th\s*hour\s*service|river\s*hawk|nanosoft\s*consulting)$/i;
 
-function classifyCompany(company, desc, companyUrl) {
+function classifyCompany(company, desc, companyUrl, defaultType) {
   var compName = (company || '').trim();
   var text = (company + ' ' + desc).toLowerCase();
   var url = (companyUrl || '').toLowerCase();
@@ -664,7 +664,9 @@ function classifyCompany(company, desc, companyUrl) {
   for (var k in score) {
     if (score[k] > bestScore) { bestScore = score[k]; best = map[k]; }
   }
-  return bestScore >= 3 ? best : '';
+  // Below confidence threshold → use configured default (e.g. 'Enterprise'), or '' if default is blank
+  if (bestScore >= 3) return best;
+  return (typeof defaultType === 'string') ? defaultType : 'Enterprise';
 }
 
 // #175: Extract company size from JD
@@ -816,6 +818,7 @@ exports.handler = async (event) => {
     var country = body.country || 'us';
     var isUSCA = !body.country || body.country === 'us' || body.country === 'ca';
     var countryName = body.countryName || '';
+    var defaultCompanyType = (typeof body.defaultCompanyType === 'string') ? body.defaultCompanyType : 'Enterprise';
     var pagesPerRole = Math.min(Math.max(1, Math.ceil((body.pages||10) / roles.length)), 5);
     var allJobs = [], seenIds = {}, totalApiCalls = 0, startTime = Date.now();
 
@@ -922,7 +925,7 @@ exports.handler = async (event) => {
         date: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc).toLocaleDateString('en-US') : 'N/A',
         dateRaw: job.job_posted_at_datetime_utc || '',
         title: job.job_title || 'N/A', titleClean: (function(){ var tc=cleanTitle(job.job_title); var dur=extractDuration((job.job_title||'')+' '+desc); return (dur&&!/\d+\s*(?:month|week|year)/i.test(tc))?tc+' - '+dur:tc; })(), company: actualCompany,
-        companyType: classifyCompany(actualCompany, desc, companyWebUrl),
+        companyType: classifyCompany(actualCompany, desc, companyWebUrl, defaultCompanyType),
         companySize: extractCompanySize(desc),
         companyUrl: companyWebUrl,
         location: enrichLocation(job),
