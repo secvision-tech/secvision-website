@@ -1949,6 +1949,7 @@ exports.handler = async (event) => {
         [/\bTaiwan\b/i, 'Taiwan'], [/\bHong\s*Kong\b/i, 'Hong Kong'], [/\bPakistan\b/i, 'Pakistan'],
         [/\bBangladesh\b/i, 'Bangladesh'], [/\bTurkey\b|\bTürkiye\b/i, 'Turkey'],
         [/\bSaudi\s*Arabia\b/i, 'Saudi Arabia'], [/\bQatar\b/i, 'Qatar'], [/\bBahrain\b/i, 'Bahrain'],
+        [/\bUnited\s*Arab\s*Emirates\b|\bU\.?A\.?E\.?\b/i, 'United Arab Emirates'], [/\bOman\b/i, 'Oman'], [/\bKuwait\b/i, 'Kuwait'],
         [/\bKuwait\b/i, 'Kuwait'], [/\bNigeria\b/i, 'Nigeria'], [/\bKenya\b/i, 'Kenya'],
         [/\bGhana\b/i, 'Ghana'], [/\bMorocco\b/i, 'Morocco'],
         [/\bUnited\s*States\b|\bUSA\b/i, 'United States'], [/\bUnited\s*Kingdom\b/i, 'United Kingdom'],
@@ -2044,6 +2045,14 @@ exports.handler = async (event) => {
         for (var cm = 0; cm < CITY_COUNTRY_MAP.length; cm++) {
           if (CITY_COUNTRY_MAP[cm][0].test(loc)) return CITY_COUNTRY_MAP[cm][1];
         }
+        // Check 5b: full country NAME present in the location string (e.g. "Ras al-Khaimah, United Arab Emirates", "United Arab Emirates")
+        for (var tpl = 0; tpl < textCountryPatterns.length; tpl++) {
+          if (textCountryPatterns[tpl][0].test(loc)) return textCountryPatterns[tpl][1];
+        }
+        // Check 5c: additional UK / Germany / UAE area-cities not in the main lists
+        if (/\b(?:Swansea|Newport|Wrexham|Aberdeen|Dundee|Inverness|Exeter|Plymouth|Norwich|York|Bath|Coventry|Leicester|Derby)\b/i.test(loc)) return 'United Kingdom';
+        if (/\b(?:Kempten|Augsburg|Nuremberg|Nürnberg|Mannheim|Karlsruhe|Freiburg|Heidelberg|Wolfsburg|Ingolstadt|Regensburg|Ulm)\b/i.test(loc)) return 'Germany';
+        if (/\b(?:Ras al[\s-]?Khaimah|Ajman|Fujairah|Umm al[\s-]?Quwain|Al Ain)\b/i.test(loc)) return 'United Arab Emirates';
 
         // Check 6: Description/title has country names or known cities
         for (var tp2 = 0; tp2 < textCountryPatterns.length; tp2++) {
@@ -2059,21 +2068,22 @@ exports.handler = async (event) => {
           if (CITY_COUNTRY_MAP[cm2][0].test(text)) return CITY_COUNTRY_MAP[cm2][1];
         }
 
-        // Check 7: Detect non-English text by script (don't default to US/UK)
+        // Check 7: searchCountry fallback FIRST (before script detection, so JP/AE/SA Remote jobs resolve)
+        // Japanese Kanji overlaps the Chinese unicode range, so script detection alone mislabels JP jobs.
+        if (j.searchCountry) {
+          var scLowerEarly = j.searchCountry.toLowerCase();
+          if (ccMap[scLowerEarly.toUpperCase()]) return ccMap[scLowerEarly.toUpperCase()];
+        }
+
+        // Check 8: Detect non-English text by script (don't default to US/UK)
         var descSample = (j.description || '').slice(0, 500);
-        if (/[\u0600-\u06FF\u0750-\u077F]/.test(descSample)) return null; // Arabic
-        if (/[\u4E00-\u9FFF]/.test(descSample)) return null; // Chinese
-        if (/[\u3040-\u309F\u30A0-\u30FF]/.test(descSample)) return 'Japan';
+        if (/[\u3040-\u309F\u30A0-\u30FF]/.test(descSample)) return 'Japan'; // Japanese kana → definitely Japan
         if (/[\uAC00-\uD7AF]/.test(descSample)) return 'South Korea';
         if (/[\u0E00-\u0E7F]/.test(descSample)) return 'Thailand';
-        if (/[\u0400-\u04FF]/.test(descSample)) return null; // Cyrillic
         if (/[\u0900-\u097F]/.test(descSample)) return 'India'; // Hindi
-
-        // Check 8: searchCountry fallback (only for Latin-script descriptions)
-        if (j.searchCountry) {
-          var scLower = j.searchCountry.toLowerCase();
-          if (ccMap[scLower.toUpperCase()]) return ccMap[scLower.toUpperCase()];
-        }
+        if (/[\u0600-\u06FF\u0750-\u077F]/.test(descSample)) return null; // Arabic - ambiguous
+        if (/[\u4E00-\u9FFF]/.test(descSample)) return null; // Chinese (only if no searchCountry matched above)
+        if (/[\u0400-\u04FF]/.test(descSample)) return null; // Cyrillic
 
         return null;
       }
