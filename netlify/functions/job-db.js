@@ -146,19 +146,52 @@ exports.handler = async (event) => {
       }
     }
 
-    // #330: Build a Mongo filter clause restricting to the user's allowed regions/countries.
-    // Empty arrays = All (no restriction). Super admin always sees everything.
+    // #330 / region-as-countries: canonical region → countries map (mirrors frontend COUNTRIES)
+    // Each entry: code (matches searchCountry) + full name (matches detectedCountry)
+    var REGION_MAP = {
+      'NA': [['us','United States'],['ca','Canada'],['mx','Mexico']],
+      'EU': [['uk','United Kingdom'],['gb','United Kingdom'],['de','Germany'],['fr','France'],['nl','Netherlands'],['ie','Ireland'],['ch','Switzerland'],['se','Sweden'],['no','Norway'],['dk','Denmark'],['fi','Finland'],['be','Belgium'],['at','Austria'],['es','Spain'],['it','Italy'],['pl','Poland'],['pt','Portugal'],['cz','Czech Republic'],['ro','Romania']],
+      'AP': [['in','India'],['au','Australia'],['sg','Singapore'],['jp','Japan'],['kr','South Korea'],['nz','New Zealand'],['hk','Hong Kong'],['my','Malaysia'],['ph','Philippines'],['id','Indonesia'],['th','Thailand']],
+      'ME': [['ae','United Arab Emirates'],['sa','Saudi Arabia'],['il','Israel'],['qa','Qatar'],['bh','Bahrain'],['kw','Kuwait'],['om','Oman']],
+      'AF': [['za','South Africa'],['ng','Nigeria'],['ke','Kenya'],['eg','Egypt'],['gh','Ghana'],['ma','Morocco']],
+      'SA': [['br','Brazil'],['ar','Argentina'],['cl','Chile'],['co','Colombia'],['pe','Peru']]
+    };
+    // Map a country code (e.g. 'us') to its full detectedCountry name
+    var CODE_TO_NAME = {};
+    Object.keys(REGION_MAP).forEach(function(rk){ REGION_MAP[rk].forEach(function(p){ CODE_TO_NAME[p[0]] = p[1]; }); });
+
+    // #330: Build a Mongo filter that restricts to the user's allowed regions/countries.
+    // Regions are EXPANDED into their countries and matched on detectedCountry/searchCountry
+    // (NOT searchRegion — that just records which search found the job and can be wrong for
+    //  remote/mislabeled jobs). Empty scope = All. Super admin = everything.
     function scopeFilter() {
       if (authRole === 'super_admin') return null;
       var hasRegions = authScope.regions && authScope.regions.length > 0;
       var hasCountries = authScope.countries && authScope.countries.length > 0;
       if (!hasRegions && !hasCountries) return null; // All
-      var ors = [];
-      if (hasRegions) ors.push({ searchRegion: { $in: authScope.regions } });
-      if (hasCountries) {
-        ors.push({ searchCountry: { $in: authScope.countries.map(function(c){ return c.toLowerCase(); }) } });
-        ors.push({ detectedCountry: { $in: authScope.countries } });
+
+      var codes = {};   // searchCountry codes (lowercase)
+      var names = {};   // detectedCountry full names
+      // Expand regions into their countries
+      if (hasRegions) {
+        authScope.regions.forEach(function(rg){
+          (REGION_MAP[rg] || []).forEach(function(p){ codes[p[0]] = 1; names[p[1]] = 1; });
+        });
       }
+      // Add explicitly-assigned countries (stored as codes from the UI)
+      if (hasCountries) {
+        authScope.countries.forEach(function(c){
+          var code = String(c).toLowerCase();
+          codes[code] = 1;
+          if (CODE_TO_NAME[code]) names[CODE_TO_NAME[code]] = 1;
+        });
+      }
+      var codeList = Object.keys(codes);
+      var nameList = Object.keys(names);
+      if (!codeList.length && !nameList.length) return null;
+      var ors = [];
+      if (codeList.length) ors.push({ searchCountry: { $in: codeList } });
+      if (nameList.length) ors.push({ detectedCountry: { $in: nameList } });
       return ors.length ? { $or: ors } : null;
     }
     // Merge scope into an existing filter object
