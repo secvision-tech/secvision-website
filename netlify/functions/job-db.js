@@ -189,10 +189,14 @@ exports.handler = async (event) => {
       }
       var codeList = Object.keys(codes);
       var nameList = Object.keys(names);
-      if (!codeList.length && !nameList.length) return null;
+      if (!nameList.length && !codeList.length) return null;
+      // Scope on detectedCountry (the ACTUAL job location). searchCountry only records which
+      // search found the job and is unreliable (e.g. a Canada search can return an Australia job),
+      // so it must NOT widen the scope. Match detectedCountry by full name; also accept jobs whose
+      // detectedCountry is missing but searchCountry matches (best-effort for un-detected ones).
       var ors = [];
-      if (codeList.length) ors.push({ searchCountry: { $in: codeList } });
       if (nameList.length) ors.push({ detectedCountry: { $in: nameList } });
+      if (codeList.length) ors.push({ $and: [ { searchCountry: { $in: codeList } }, { $or: [ { detectedCountry: { $in: [null, '', 'Unknown'] } }, { detectedCountry: { $exists: false } } ] } ] });
       return ors.length ? { $or: ors } : null;
     }
     // Merge scope into an existing filter object
