@@ -2042,6 +2042,11 @@ exports.handler = async (event) => {
         }
 
         // Check 5: Location has country/state names or known cities
+        // 5-pre: explicit country name in location wins (avoids "Melbourne, Victoria, Australia" → Canada via "Victoria")
+        if (/\bAustralia\b/i.test(loc)) return 'Australia';
+        if (/\bNew\s*Zealand\b/i.test(loc)) return 'New Zealand';
+        if (/\bUnited\s*States\b|\bUSA\b/i.test(loc)) return 'United States';
+        if (/\bCanada\b/i.test(loc)) return 'Canada';
         if (US_STATE_NAMES.test(loc) || US_STATE_CD.test(loc) || US_CITIES.test(loc)) return 'United States';
         if (UK_CITIES.test(loc)) return 'United Kingdom';
         if (CA_CITIES.test(loc)) return 'Canada';
