@@ -3142,10 +3142,27 @@ async function loadUserList(){
       var lastLogin=u.lastLogin?fmtDate(u.lastLogin):'Never';
       var actions=isSelf?'<span style="color:var(--g3);font-size:.55rem">You</span>':'<button onclick="deleteUser(\''+u._id+'\',\''+u.email+'\')" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.65rem" title="Remove user">🗑️</button>';
 
-      // #330: scope summary + edit button
-      var rgns=Array.isArray(u.allowedRegions)?u.allowedRegions:[];
+      // #330: scope summary + edit button (countries only; collapse complete regions into region names)
       var ctrs=Array.isArray(u.allowedCountries)?u.allowedCountries:[];
-      var scopeLabel=(rgns.length===0&&ctrs.length===0)?'All':((rgns.join(',')+(ctrs.length?' / '+ctrs.join(','):'')).slice(0,24));
+      var scopeLabel;
+      if(ctrs.length===0){scopeLabel='All';}
+      else{
+        var regionNms={'NA':'North America','EU':'Europe','AP':'Asia Pacific','ME':'Middle East','AF':'Africa','SA':'South America'};
+        var remaining=ctrs.slice();
+        var labelParts=[];
+        Object.keys(COUNTRIES).forEach(function(rk){
+          if(rk==='Any')return;
+          var rc=(COUNTRIES[rk]||[]).map(function(c){return c[0]});
+          if(rc.length>0&&rc.every(function(code){return ctrs.indexOf(code)>-1})){
+            labelParts.push(regionNms[rk]||rk);
+            remaining=remaining.filter(function(code){return rc.indexOf(code)===-1});
+          }
+        });
+        // remaining individual countries shown as uppercase codes
+        remaining.forEach(function(code){labelParts.push(code.toUpperCase())});
+        scopeLabel=labelParts.join(', ');
+        if(scopeLabel.length>30)scopeLabel=scopeLabel.slice(0,28)+'…';
+      }
       var scopeCell=(u.role==='super_admin')?'<span style="color:var(--g3);font-size:.55rem">All (super)</span>':'<button onclick="editUserScope(\''+u._id+'\')" style="font-size:.55rem;padding:.1rem .4rem;background:var(--g1);border:1px solid var(--g2);border-radius:3px;cursor:pointer" title="Assign regions/countries">'+esc(scopeLabel)+' ✎</button>';
 
       return '<tr style="border-bottom:1px solid var(--g1)">'
@@ -3284,40 +3301,54 @@ function editUserScope(userId){
   if(!u){alert('User not found. Please reload the user list.');return}
   scopeEditUserId=userId;
   var name=u.name||u.email||'User';
-  var curRegions=Array.isArray(u.allowedRegions)?u.allowedRegions:[];
   var curCountries=Array.isArray(u.allowedCountries)?u.allowedCountries:[];
-  var regionList=[['NA','North America'],['EU','Europe'],['AP','Asia Pacific'],['ME','Middle East'],['AF','Africa'],['SA','South America']];
+  var regionNames={'NA':'North America','EU':'Europe','AP':'Asia Pacific','ME':'Middle East','AF':'Africa','SA':'South America'};
+
   var h='<div style="font-size:.7rem;font-weight:700;margin-bottom:.5rem">Assign Scope — '+esc(name)+'</div>';
-  h+='<div style="font-size:.58rem;color:var(--g4);margin-bottom:.6rem">Leave everything unchecked = <strong>All Regions &amp; Countries</strong> (no restriction). Otherwise the user sees only jobs matching the selected regions and/or countries.</div>';
-  h+='<div style="font-weight:600;font-size:.62rem;margin-bottom:.3rem">Regions</div><div style="display:flex;flex-wrap:wrap;gap:.4rem;margin-bottom:.6rem">';
-  regionList.forEach(function(r){
-    var ck=curRegions.indexOf(r[0])>-1?' checked':'';
-    h+='<label style="font-size:.6rem;display:flex;align-items:center;gap:.2rem"><input type="checkbox" class="scopeRegion" value="'+r[0]+'"'+ck+'> '+r[1]+'</label>';
-  });
-  h+='</div>';
-  h+='<div style="font-weight:600;font-size:.62rem;margin-bottom:.3rem">Countries (optional, more granular)</div><div style="max-height:160px;overflow-y:auto;border:1px solid var(--g2);border-radius:4px;padding:.4rem">';
+  h+='<div style="font-size:.58rem;color:var(--g4);margin-bottom:.6rem">Leave everything unchecked = <strong>All Countries</strong> (no restriction). Checking a region selects all its countries; unchecking clears them. You can also fine-tune individual countries.</div>';
+  h+='<div style="max-height:340px;overflow-y:auto;border:1px solid var(--g2);border-radius:4px;padding:.5rem">';
   Object.keys(COUNTRIES).forEach(function(rk){
     if(rk==='Any')return;
-    (COUNTRIES[rk]||[]).forEach(function(c){
+    var rcountries=COUNTRIES[rk]||[];
+    var allChecked=rcountries.length>0&&rcountries.every(function(c){return curCountries.indexOf(c[0])>-1});
+    // Region header with group-toggle checkbox
+    h+='<div style="margin-bottom:.5rem">';
+    h+='<label style="font-size:.62rem;font-weight:700;display:flex;align-items:center;gap:.3rem;color:var(--pri);margin-bottom:.25rem"><input type="checkbox" class="scopeRegion" data-region="'+rk+'" onchange="toggleRegionCountries(\''+rk+'\',this.checked)"'+(allChecked?' checked':'')+'> '+(regionNames[rk]||rk)+'</label>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:.1rem;padding-left:1rem">';
+    rcountries.forEach(function(c){
       var ck=curCountries.indexOf(c[0])>-1?' checked':'';
-      h+='<label style="font-size:.58rem;display:inline-flex;align-items:center;gap:.2rem;width:48%;margin-bottom:.2rem"><input type="checkbox" class="scopeCountry" value="'+c[0]+'"'+ck+'> '+esc(c[1])+'</label>';
+      h+='<label style="font-size:.58rem;display:inline-flex;align-items:center;gap:.2rem;width:48%;margin-bottom:.15rem"><input type="checkbox" class="scopeCountry" data-region="'+rk+'" value="'+c[0]+'" onchange="syncRegionCheckbox(\''+rk+'\')"'+ck+'> '+esc(c[1])+'</label>';
     });
+    h+='</div></div>';
   });
   h+='</div>';
   h+='<div style="display:flex;gap:.4rem;margin-top:.6rem"><button onclick="saveUserScope()" style="padding:.3rem .8rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">💾 Save Scope</button><button onclick="closeScopeDialog()" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer">Cancel</button></div>';
   document.getElementById('scopeDialogBody').innerHTML=h;
   document.getElementById('scopeDialog').style.display='flex';
 }
+
+// Checking/unchecking a region toggles all its country checkboxes
+function toggleRegionCountries(region,checked){
+  var boxes=document.querySelectorAll('.scopeCountry[data-region="'+region+'"]');
+  boxes.forEach(function(b){b.checked=checked});
+}
+// When a country is toggled, update its region checkbox (checked only if ALL its countries are checked)
+function syncRegionCheckbox(region){
+  var boxes=document.querySelectorAll('.scopeCountry[data-region="'+region+'"]');
+  var regBox=document.querySelector('.scopeRegion[data-region="'+region+'"]');
+  if(!regBox)return;
+  var all=boxes.length>0&&Array.prototype.every.call(boxes,function(b){return b.checked});
+  regBox.checked=all;
+}
 function closeScopeDialog(){document.getElementById('scopeDialog').style.display='none';scopeEditUserId=null}
 async function saveUserScope(){
   if(!scopeEditUserId)return;
-  var regions=Array.prototype.slice.call(document.querySelectorAll('.scopeRegion:checked')).map(function(c){return c.value});
   var countries=Array.prototype.slice.call(document.querySelectorAll('.scopeCountry:checked')).map(function(c){return c.value});
   try{
-    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateUser',userId:scopeEditUserId,updates:{allowedRegions:regions,allowedCountries:countries}})});
+    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateUser',userId:scopeEditUserId,updates:{allowedRegions:[],allowedCountries:countries}})});
     closeScopeDialog();
     loadUserList();
-    document.getElementById('userMgmtStatus').textContent='✅ Scope updated ('+(regions.length||countries.length?regions.length+' regions, '+countries.length+' countries':'All')+').';
+    document.getElementById('userMgmtStatus').textContent='✅ Scope updated ('+(countries.length?countries.length+' countries':'All')+').';
     setTimeout(function(){document.getElementById('userMgmtStatus').textContent=''},4000);
   }catch(e){alert('Error: '+e.message)}
 }
