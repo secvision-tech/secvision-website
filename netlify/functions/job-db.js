@@ -138,7 +138,8 @@ exports.handler = async (event) => {
     var authRole = null;
     var authScope = { regions: [], countries: [] };
     if (authUser && authUser.email) {
-      var authUserDoc = await db.collection('users').findOne({ email: authUser.email });
+      var emailRe = new RegExp('^' + authUser.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+      var authUserDoc = await db.collection('users').findOne({ email: emailRe });
       if (authUserDoc) {
         authRole = authUserDoc.role;
         authScope.regions = Array.isArray(authUserDoc.allowedRegions) ? authUserDoc.allowedRegions : [];
@@ -807,7 +808,8 @@ exports.handler = async (event) => {
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
         certCounts, complianceCounts, toolsCounts, locationCounts, recentScans,
         partnerTargets, roleCounts, skillCounts, salaryJobs,
-        contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, contractCerts, avgRate
+        contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, contractCerts, avgRate,
+        _scope: { role: authRole, countries: authScope.countries, regions: authScope.regions, scoped: scopeFilter() !== null }
       })};
     }
 
