@@ -2744,7 +2744,7 @@ function renderContractJobs(){
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.tools||'').replace(/"/g,'&quot;')+'">'+(j.tools||'')+'</td>';
     html+='<td>'+statusHtml+'</td>';
     html+='<td style="font-size:.55rem">'+(j.source||'')+'</td>';
-    html+='<td><button class="vb" onclick="event.stopPropagation();viewContractJob(\''+j._id+'\')">View</button></td>';
+    html+='<td><button class="vb" onclick="event.stopPropagation();viewContractJob(\''+j._id+'\')">'+(CAP.canStatus?'Manage':'View')+'</button></td>';
     html+='</tr>';
   });
   html+='</tbody></table></div>';

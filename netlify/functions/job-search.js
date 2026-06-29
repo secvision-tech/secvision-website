@@ -322,29 +322,31 @@ function extractContractDuration(desc) {
     // Range patterns FIRST (before single-number patterns)
     /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)/i,
     /\b(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|initial|assignment)/i,
-    // Single-number patterns
-    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*(?:months?|mos?)(?:\s*(?:initial|rolling|extendable|minimum|\+\s*extension))?/i,
-    /\b(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|assignment|initial|rolling|duration)/i,
-    /\b(?:initial\s*)?(?:contract|engagement)\s*(?:[\-–:]\s*)?(\d+)\s*(?:months?|mos?)/i,
-    /\b(?:contract|engagement)\s*\(\s*(\d+)\s*(?:months?|mos?)(?:\s*(?:with|plus|renewable|extendable|potential)[\w\s]*)?\s*\)/i,
-    /\b(?:contract[\s-]*to[\s-]*hire|c2h|temp[\s-]*to[\s-]*perm)\s*(?:after\s*)?(\d+)\s*(?:months?|mos?)/i,
-    /\b(\d+)\s*(?:months?|mos?)\s*(?:\+\s*(?:\d+\s*)?(?:months?|extension))/i,
-    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*(?:weeks?)/i,
+    // Single-number patterns ([\s-]* allows "12-month")
+    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)(?:\s*(?:initial|rolling|extendable|minimum|\+\s*extension))?/i,
+    /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:contract|engagement|assignment|initial|rolling|duration)/i,
+    /\b(?:initial\s*)?(?:contract|engagement)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
+    /\b(?:contract|engagement)\s*\(\s*(\d+)[\s-]*(?:months?|mos?)(?:\s*(?:with|plus|renewable|extendable|potential)[\w\s]*)?\s*\)/i,
+    /\b(?:contract[\s-]*to[\s-]*hire|c2h|temp[\s-]*to[\s-]*perm)\s*(?:after\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
+    /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:\+\s*(?:\d+\s*)?(?:months?|extension))/i,
+    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:weeks?)/i,
     // Year-based patterns
-    /\b(\d+)[\s-]*(?:year|yr)\s*(?:renewable|rolling|extendable|fixed[\s-]*term)?\s*(?:contract|engagement|assignment)/i,
+    /\b(\d+)[\s-]*(?:year|yr)s?\s*(?:renewable|rolling|extendable|fixed[\s-]*term)?\s*(?:contract|engagement|assignment)/i,
     /\b(?:contract|engagement)\s*(?:[\-–:(]\s*)?(\d+)[\s-]*(?:year|yr)(?:\s*(?:renewable|rolling|extendable|initial))?\s*[):]?/i,
+    // "2 year Direct Contract" / "3 year fixed role" — optional 1-2 descriptor words between year and contract/role
+    /\b(\d+)[\s-]*(?:year|yr)s?\s*(?:\w+\s+){0,2}?(?:contract|engagement|assignment|role|position)/i,
   ];
   for (var i = 0; i < patterns.length; i++) {
     var m = d.match(patterns[i]);
     if (m) {
-      // Range patterns (indices 0, 1)
-      if (i <= 1 && m[2]) {
+      // Range patterns produce m[2] (start-end months)
+      if (m[2] && i <= 8) {
         var r1=parseInt(m[1]),r2=parseInt(m[2]);
         if(r1>=1&&r1<=36&&r2>=1&&r2<=36&&r2>r1) return r1+'-'+r2+' months';
         continue;
       }
-      // Year patterns (indices 7, 8)
-      if (i >= 7) {
+      // Year patterns (indices 9, 10, 11)
+      if (i >= 9) {
         var num = parseInt(m[1]);
         if (num >= 1 && num <= 5) {
           var yearLabel = num === 1 ? '1 year' : num + ' years';
@@ -533,22 +535,27 @@ function detectCountry(job, searchCountry) {
     if (apiMap[c]) return apiMap[c];
   }
 
-  // Priority 3: Check title + description for country names
+  // Priority 3: Check title + description for country names — but require LOCATION CONTEXT
+  // (avoids matching incidental mentions like "clients across France" or "our UAE partners")
   var text = (job.job_title || '') + ' ' + (job.job_description || '').slice(0, 1500);
-  if (/\b(?:USA|United\s*States|U\.S\.)\b/i.test(text)) return 'United States';
-  if (/\bRemote\s*[-,]?\s*US\b/i.test(text)) return 'United States';
+  // US/UK/Canada strong signals (title or explicit remote tags) are safe
+  if (/\b(?:USA|United\s*States|U\.S\.)\b/i.test(job.job_title || '')) return 'United States';
+  if (/\bRemote\s*[-,]?\s*(?:US|USA|United\s*States)\b/i.test(text)) return 'United States';
+  if (/\bRemote\s*[-,]?\s*UK\b/i.test(text) || /\bRemote\s*[-,]?\s*United\s*Kingdom\b/i.test(text)) return 'United Kingdom';
+  if (/\bRemote\s*[-,]?\s*(?:CA|Canada)\b/i.test(text)) return 'Canada';
+  if (US_STATES.test(job.job_title || '')) return 'United States';
+  // For other countries, require explicit location phrasing (based in / located in / X office / X-based / headquartered in)
+  var locCtx = '(?:based\\s+in|located\\s+in|location[:\\s]+|headquarter(?:ed|s)?\\s+in|office\\s+in|position\\s+(?:is\\s+)?(?:in|based))\\s+';
+  var ctxCountries = [['United States','(?:USA|United States|U\\.S\\.)'],['United Kingdom','United Kingdom|UK'],['Canada','Canada'],['India','India'],['Germany','Germany'],['France','France'],['Japan','Japan'],['Singapore','Singapore'],['Netherlands','Netherlands'],['Ireland','Ireland'],['Switzerland','Switzerland'],['United Arab Emirates','United Arab Emirates|UAE'],['Australia','Australia']];
+  for (var cc = 0; cc < ctxCountries.length; cc++) {
+    var ctxRe = new RegExp(locCtx + '(?:the\\s+)?(?:' + ctxCountries[cc][1] + ')\\b', 'i');
+    if (ctxRe.test(text)) return ctxCountries[cc][0];
+    // Also "<Country> office" / "<Country>-based"
+    var suffixRe = new RegExp('\\b(?:' + ctxCountries[cc][1] + ')(?:[\\s-]+(?:office|based|team))\\b', 'i');
+    if (suffixRe.test(text)) return ctxCountries[cc][0];
+  }
+  // USA strong signal in body (not just incidental) — US states pattern in body is reliable
   if (US_STATES.test(text)) return 'United States';
-  if (/\bUnited\s*Kingdom\b|\bRemote\s*UK\b/i.test(text)) return 'United Kingdom';
-  if (/\bCanada\b|\bRemote\s*CA\b/i.test(text)) return 'Canada';
-  if (/\bAustralia\b/i.test(text)) return 'Australia';
-  if (/\bIndia\b/i.test(text)) return 'India';
-  if (/\bGermany\b/i.test(text)) return 'Germany';
-  if (/\bFrance\b/i.test(text)) return 'France';
-  if (/\bJapan\b/i.test(text)) return 'Japan';
-  if (/\bSingapore\b/i.test(text)) return 'Singapore';
-  if (/\bNetherlands\b/i.test(text)) return 'Netherlands';
-  if (/\bIreland\b/i.test(text)) return 'Ireland';
-  if (/\bSwitzerland\b/i.test(text)) return 'Switzerland';
 
   // Priority 5: Check 2-letter country code at end of location (", EG", ", MY")
   var locStr = [job.job_city, job.job_state, job.job_country].filter(Boolean).join(', ');
