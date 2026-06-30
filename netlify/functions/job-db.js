@@ -824,23 +824,30 @@ exports.handler = async (event) => {
       var contacts = body.contacts || [];
       var company = body.company || '';
       if (!company || !contacts.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company and contacts required' }) };
+      var compRe = { $regex: '^' + company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' };
       // Cap at 20 contacts per company
       var MAX_CONTACTS = 20;
-      var existingCount = await contactsCol.countDocuments({ company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' } });
+      var existingCount = await contactsCol.countDocuments({ company: compRe });
       var allowedNew = Math.max(0, MAX_CONTACTS - existingCount);
-      if (allowedNew === 0) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: 0, message: 'Contact limit (20) reached for ' + company }) };
+      if (allowedNew === 0) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: 0, message: 'Contact limit (20) reached for ' + company + '. Delete some first.' }) };
       contacts = contacts.slice(0, allowedNew);
       var ops = contacts.map(function(c) {
-        return { updateOne: { filter: { company: { $regex: company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }, email: c.email },
-          update: { $set: { company: company, name: c.name, designation: c.designation, email: c.email, linkedin: c.linkedin || '', source: c.source || 'Manual', updatedAt: new Date() },
+        var hasEmail = c.email && c.email !== 'N/A' && c.email !== '';
+        // Match on email when present (dedupe by email); otherwise match on name (dedupe by name)
+        var matchFilter = hasEmail
+          ? { company: compRe, email: c.email }
+          : { company: compRe, name: c.name };
+        return { updateOne: { filter: matchFilter,
+          update: { $set: { company: company, name: c.name, designation: c.designation || 'N/A', email: hasEmail ? c.email : '', linkedin: c.linkedin || '', source: c.source || 'Manual', updatedAt: new Date() },
             $setOnInsert: { createdAt: new Date() } }, upsert: true } };
       });
       var result = await contactsCol.bulkWrite(ops, { ordered: false });
+      var savedCount = (result.upsertedCount || 0) + (result.modifiedCount || 0);
       // Also update the contact field on matching jobs
       var contactStr = contacts.map(function(c) { return c.name + ' (' + c.designation + (c.email && c.email !== 'N/A' ? ' - ' + c.email : '') + ')'; }).join(', ');
       var compPattern = company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      await col.updateMany({ company: { $regex: compPattern, $options: 'i' } }, { $set: { contact: contactStr } });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: contacts.length, contactStr: contactStr }) };
+      await col.updateMany({ company: { $regex: '^' + compPattern + '$', $options: 'i' } }, { $set: { contact: contactStr } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: contacts.length, upserted: result.upsertedCount || 0, modified: result.modifiedCount || 0, contactStr: contactStr }) };
     }
 
     // Get unique companies (for bulk enrichment)

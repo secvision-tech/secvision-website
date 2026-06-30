@@ -3392,7 +3392,11 @@ async function openContactFinder(company,domain,linkedin){
   document.getElementById('contactPopup').style.display='flex';
   document.getElementById('cfDiscovered').innerHTML='';
   document.getElementById('cfCompanyInfo').innerHTML='';
+  document.getElementById('cfCompanyDetails').innerHTML='';
   document.getElementById('cfStatus').textContent='';
+  pendingEnrichData=null; // #342: clear stale enrich data from previous company
+  // clear add-contact form fields too
+  ['cfName','cfDesignation','cfEmail','cfLinkedin'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
   // Disable Auto-Discover if no domain and no LinkedIn
   var autoBtn=document.getElementById('cfAutoBtn');
   if(!hasDomain&&!hasLinkedin){
@@ -3515,9 +3519,13 @@ async function saveDiscovered(){
   checks.forEach(function(c){contacts.push({name:c.dataset.name,designation:c.dataset.desig||'N/A',email:c.dataset.email||'N/A',linkedin:c.dataset.linkedin||'',source:'Apollo.io'})});
   document.getElementById('cfStatus').textContent='Saving '+contacts.length+' contacts...';
   try{
-    await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:contacts})});
-    document.getElementById('cfStatus').textContent='✅ Saved '+contacts.length+' contacts to all '+cfCompany+' jobs!';
-    openContactFinder(cfCompany);
+    var sr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:contacts})});
+    var sd=await sr.json();
+    if(sd.message){document.getElementById('cfStatus').textContent='⚠️ '+sd.message;return}
+    var n=(sd.upserted||0)+(sd.modified||0);
+    document.getElementById('cfStatus').textContent='✅ Saved '+(n||contacts.length)+' contacts to '+cfCompany+'!';
+    // Reload saved list without wiping the popup state
+    setTimeout(function(){openContactFinder(cfCompany,cfDomain,cfLinkedin)},800);
   }catch(e){document.getElementById('cfStatus').textContent='Error: '+e.message}
 }
 function prefillContact(name,desig){
@@ -3617,6 +3625,17 @@ async function saveEnrichedCompany(){
     viewDirty=true;
     var dc=document.getElementById('cfCompanyDetails');
     if(dc&&dc.querySelector('button')){dc.querySelector('button').textContent='✅ Saved';dc.querySelector('button').disabled=true}
+    // #344: now that we have a website/LinkedIn, clear the "no URL" warning and enable Auto-Discover
+    if(p.companyWebsite){cfDomain=p.companyWebsite.replace(/^https?:\/\/(www\.)?/,'').replace(/\/.*$/,'')}
+    if(p.companyLinkedin)cfLinkedin=p.companyLinkedin;
+    var hasDomainNow=cfDomain&&cfDomain.length>3;
+    var hasLinkedinNow=cfLinkedin&&cfLinkedin.indexOf('linkedin.com')>-1;
+    if(hasDomainNow||hasLinkedinNow){
+      var ab=document.getElementById('cfAutoBtn');
+      if(ab){ab.disabled=false;ab.style.opacity='1';ab.title=''}
+      var ci=document.getElementById('cfCompanyInfo');
+      if(ci&&ci.innerHTML.indexOf('No company website')>-1)ci.innerHTML='';
+    }
   }catch(e){document.getElementById('cfStatus').textContent='⚠️ Save failed: '+e.message}
 }
 
