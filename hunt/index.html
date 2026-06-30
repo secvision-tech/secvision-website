@@ -1557,6 +1557,9 @@ async function delAllContacts(){
 
 function findContacts(idx){
   var j=allJobs[idx];if(!j)return;
+  // Hard reset enrich panel + pending data before anything (guards against stale company details)
+  var dcEl=document.getElementById('cfCompanyDetails');if(dcEl)dcEl.innerHTML='';
+  pendingEnrichData=null;
   var domain='';
   if(j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1){
     try{domain=new URL(j.companyUrl).hostname.replace(/^www\./,'')}catch(e){}
@@ -3602,6 +3605,11 @@ function deriveCompanyType(industry,linkedin,company){
 async function saveEnrichedCompany(){
   if(!pendingEnrichData)return;
   var p=pendingEnrichData;
+  // Guard: only save if the enriched data still matches the currently-open company
+  if(p.company&&cfCompany&&p.company.toLowerCase()!==cfCompany.toLowerCase()){
+    document.getElementById('cfStatus').textContent='⚠️ Company changed — re-run Enrich Company Details.';
+    return;
+  }
   document.getElementById('cfStatus').textContent='💾 Saving company details...';
   try{
     var sr=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({
