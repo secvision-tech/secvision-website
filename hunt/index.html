@@ -271,6 +271,7 @@ body.role-viewer .edit-btn{display:none!important}
       <div id="dashPanel" class="dash-panel show">
         <div class="dash-loading" id="dashLoading">Loading dashboard...</div>
         <div id="dashContent" style="display:none">
+          <div style="display:flex;justify-content:flex-end;margin-bottom:.4rem"><button onclick="refreshDashboard()" style="padding:.25rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔄 Refresh</button></div>
           <!-- Pipeline Summary -->
           <div class="dash-summary">
             <div class="dash-card"><div class="dash-card-num" id="dTotal">0</div><div class="dash-card-label">Total Opportunities</div></div>
@@ -362,6 +363,7 @@ body.role-viewer .edit-btn{display:none!important}
     <div id="contractPanel" class="dash-panel">
       <div class="dash-loading" id="contractLoading">Loading contract pipeline...</div>
       <div id="contractContent" style="display:none">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:.4rem"><button onclick="refreshContract()" style="padding:.25rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔄 Refresh</button></div>
         <div class="dash-summary" style="grid-template-columns:repeat(4,1fr)">
           <div class="dash-card" style="border-left:3px solid #DC2626"><div class="dash-card-num" id="dContract" style="color:#DC2626">0</div><div class="dash-card-label">Contract Jobs</div></div>
           <div class="dash-card" style="border-left:3px solid #854F0B"><div class="dash-card-num" id="dContractNew" style="color:#854F0B">0</div><div class="dash-card-label">New (Unactioned)</div></div>
@@ -541,6 +543,25 @@ function applyDefaultLandingTab(){
 var curUserRole='analyst',curUserData=null;
 // Global capability flags (set by applyRoleVisibility, used across the app)
 var CAP={canStatus:false,canContacts:false,canDeleteContacts:false,canEnrichCompany:false,canEditFields:false,canWeb:false};
+// #345/#346: role-based label + action for the company/contacts table button
+function companyBtn(company,idx){
+  var comp=(company||'').replace(/'/g,"\\'");
+  if(!CAP.canContacts){
+    // Viewer: "Browse" → open Search Database filtered to this company
+    return '<button class="fc-btn" onclick="browseCompanyJobs(\''+comp+'\')">Browse</button>';
+  }
+  if(!CAP.canEnrichCompany){
+    // Analyst: contacts only
+    return '<button class="fc-btn" onclick="'+(typeof idx==='number'?'findContacts('+idx+')':'openContactFinder(\''+comp+'\')')+'">Manage Contacts</button>';
+  }
+  // Manager+: full company management
+  return '<button class="fc-btn" onclick="'+(typeof idx==='number'?'findContacts('+idx+')':'openContactFinder(\''+comp+'\')')+'">Manage Company</button>';
+}
+// #345: Viewer browse — go to Search Database, filter by company
+function browseCompanyJobs(company){
+  if(typeof searchCompanyOpenings==='function'){searchCompanyOpenings(company);}
+  else{setMode('db');var q=document.getElementById('dbQuery');if(q){q.value='';}searchDbByCompany&&searchDbByCompany(company);}
+}
 function applyRoleVisibility(){
   var r=curUserRole;
   var isSuper=r==='super_admin';
@@ -1296,7 +1317,7 @@ function renderTable(){
     var companyCell='<a href="'+j.companyUrl+'" target="_blank" title="Visit website">'+j.company+'</a>';
     var sourceCell=j.applyLink?'<a href="'+j.applyLink+'" target="_blank" title="View posting">'+j.source+'</a>':j.source;
     var ji=allJobs.indexOf(j);
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">'+(CAP.canStatus?'Manage':'View')+'</button> <button class="fc-btn" onclick="findContacts('+ji+')">'+(CAP.canEnrichCompany?'Company':'Contacts')+'</button></td>';
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">'+(CAP.canStatus?'Manage':'View')+'</button> '+companyBtn(j.company,ji)+'</td>';
     tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.classList.contains('status-badge')||e.target.classList.contains('ctype-badge'))return;this.classList.toggle('row-hl')};
     // Bind status badge click
     var sBadge=tr.querySelector('.status-badge');
@@ -1466,7 +1487,6 @@ async function viewDet(i){
     h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">'+(canEnrich?'🏢 Manage Company':'🔍 Manage Contacts')+'</button>';
     h+='</div></div>';
   }
-  // Load contacts async
   if(canContact)setTimeout(async function(){
     try{
       var cr=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'getContacts',company:j.company})});
@@ -1896,6 +1916,8 @@ var LONGFORMS={
   'YARA':'YARA (Yet Another Ridiculous Acronym - Malware Rules)',
 };
 
+async function refreshDashboard(){dashLoaded=false;await loadDashboard();dashLoaded=true}
+async function refreshContract(){contractLoaded=false;await loadContractPipeline();contractLoaded=true}
 async function loadDashboard(){
   document.getElementById('dashLoading').style.display='block';
   document.getElementById('dashLoading').textContent='Loading dashboard...';
@@ -2632,7 +2654,7 @@ function renderPartnerTable(data){
     }
     var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none;cursor:pointer" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchCompanyOpenings(this.dataset.company)">'+d.count+' openings</a>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("SOC Director" OR "VP Operations" OR "CISO" OR "recruiter" OR "HR")');
-    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Manage Company</a></td></tr>';
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td>'+companyBtn(company)+'</td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -2657,7 +2679,7 @@ function renderContractTable(data){
     var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchContractOpenings(this.dataset.company)">'+d.count+'</a>';
     var salaryHtml='<span style="font-size:.6rem;color:var(--g5)">'+(d.salary||'N/A')+'</span>';
     var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("recruiter" OR "HR" OR "hiring manager" OR "talent acquisition")');
-    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td><a href="#" onclick="event.preventDefault();openContactFinder(\''+company.replace(/'/g,"\\'")+'\')" class="act-link">Manage Company</a></td></tr>';
+    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td>'+companyBtn(company)+'</td></tr>';
   });
   html+='</tbody></table>';
   el.innerHTML=html;
@@ -3351,7 +3373,8 @@ async function saveUserScope(){
     await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateUser',userId:scopeEditUserId,updates:{allowedRegions:[],allowedCountries:countries}})});
     closeScopeDialog();
     loadUserList();
-    document.getElementById('userMgmtStatus').textContent='✅ Scope updated ('+(countries.length?countries.length+' countries':'All')+').';
+    dashLoaded=false;contractLoaded=false; // #349: scope changed, dashboards stale
+    document.getElementById('userMgmtStatus').textContent='✅ Scope updated ('+(countries.length?countries.length+' countries':'All')+'). Affected user should refresh their dashboard.';
     setTimeout(function(){document.getElementById('userMgmtStatus').textContent=''},4000);
   }catch(e){alert('Error: '+e.message)}
 }
@@ -3526,7 +3549,7 @@ async function saveDiscovered(){
     var sd=await sr.json();
     if(sd.message){document.getElementById('cfStatus').textContent='⚠️ '+sd.message;return}
     var n=(sd.upserted||0)+(sd.modified||0);
-    document.getElementById('cfStatus').textContent='✅ Saved '+(n||contacts.length)+' contacts to '+cfCompany+'!';
+    document.getElementById('cfStatus').textContent='✅ Saved '+(n||contacts.length)+' contacts to '+cfCompany+'!';contactsChangedInPopup=true;
     // Reload saved list without wiping the popup state
     setTimeout(function(){openContactFinder(cfCompany,cfDomain,cfLinkedin)},800);
   }catch(e){document.getElementById('cfStatus').textContent='Error: '+e.message}
@@ -3629,7 +3652,7 @@ async function saveEnrichedCompany(){
         }
       });
     }
-    document.getElementById('cfStatus').textContent='✅ Company details saved ('+(sd.modified||0)+' jobs updated).';
+    document.getElementById('cfStatus').textContent='✅ Company details saved ('+(sd.modified||0)+' jobs updated).';contactsChangedInPopup=true;
     viewDirty=true;
     var dc=document.getElementById('cfCompanyDetails');
     if(dc&&dc.querySelector('button')){dc.querySelector('button').textContent='✅ Saved';dc.querySelector('button').disabled=true}
@@ -3654,7 +3677,16 @@ function closeContactPopup(){
     viewDirty=true;
     viewDet(currentViewIdx);
   }
+  // #347: if contacts/company were changed in the popup, mark dashboards stale so they refresh on next view
+  if(contactsChangedInPopup){
+    dashLoaded=false;contractLoaded=false;
+    contactsChangedInPopup=false;
+    // If currently viewing dashboard/contract, refresh live
+    if(searchMode==='dash'){refreshDashboard()}
+    else if(searchMode==='contract'){refreshContract()}
+  }
 }
+var contactsChangedInPopup=false;
 
 async function enrichPerson(){
   var name=document.getElementById('cfName').value.trim();
@@ -3691,7 +3723,7 @@ async function addContact(){
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'saveContacts',company:cfCompany,contacts:[{name:name,designation:desig,email:email||'N/A',linkedin:linkedin,source:source}]})});
     var d=await r.json();
-    document.getElementById('cfStatus').textContent='✅ Saved! Contact added to all '+cfCompany+' jobs.';
+    document.getElementById('cfStatus').textContent='✅ Saved! Contact added to all '+cfCompany+' jobs.';contactsChangedInPopup=true;
     document.getElementById('cfName').value='';document.getElementById('cfDesignation').value='';document.getElementById('cfEmail').value='';document.getElementById('cfLinkedin').value='';
     openContactFinder(cfCompany);
   }catch(e){document.getElementById('cfStatus').textContent='Error: '+e.message}
@@ -3700,7 +3732,8 @@ async function deleteContact(id){
   if(!confirm('Remove this contact?'))return;
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'deleteContact',contactId:id})});
-    openContactFinder(cfCompany);
+    contactsChangedInPopup=true;
+    openContactFinder(cfCompany,cfDomain,cfLinkedin);
   }catch(e){alert('Error: '+e.message)}
 }
 

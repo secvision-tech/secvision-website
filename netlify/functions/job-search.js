@@ -171,6 +171,15 @@ function extractSalary(job) {
     return '$'+Math.round(job.job_min_salary).toLocaleString()+'-$'+Math.round(job.job_max_salary).toLocaleString()+s;
   }
   var d = job.job_description || '';
+  // #350: British day-rate patterns — "£400pd", "£400 p/d", "£400 per day", "£400/day"
+  var gbpDayRange = d.match(/£\s*([\d,]+)\s*[\-\u2013to]+\s*£?\s*([\d,]+)\s*(?:pd\b|p\/d\b|per\s*day|\/\s*day|a\s*day)/i);
+  if (gbpDayRange) return '£'+gbpDayRange[1].replace(/,/g,'')+'-£'+gbpDayRange[2].replace(/,/g,'')+'/day';
+  var gbpDay = d.match(/£\s*([\d,]+)\s*(?:pd\b|p\/d\b|per\s*day|\/\s*day|a\s*day|daily)/i);
+  if (gbpDay) return '£'+gbpDay[1].replace(/,/g,'')+'/day';
+  var gbpHr = d.match(/£\s*([\d,]+(?:\.\d+)?)\s*(?:ph\b|p\/h\b|per\s*hour|\/\s*h(?:r|our)?|an\s*hour)/i);
+  if (gbpHr) return '£'+gbpHr[1].replace(/,/g,'')+'/hr';
+  var gbpYr = d.match(/£\s*([\d,]+)\s*(k)?\s*(?:pa\b|p\.a\.|per\s*annum|per\s*year|\/\s*(?:yr|year|annum))/i);
+  if (gbpYr) { var gv=gbpYr[1].replace(/,/g,''); if(gbpYr[2])gv=String(parseInt(gv)*1000); return '£'+parseInt(gv).toLocaleString()+'/yr'; }
   // Helper: detect period from context
   function detectPeriod(text, matchStr) {
     var ctx = text.substring(Math.max(0, text.indexOf(matchStr) - 40), text.indexOf(matchStr) + matchStr.length + 60);
