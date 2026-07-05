@@ -1528,7 +1528,11 @@ async function viewDet(i){
   var isNonEnglish=/[\u0600-\u06FF\u0750-\u077F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0900-\u097F\u0980-\u09FF\u0C00-\u0C7F\u0B80-\u0BFF\u00C0-\u024F\u1E00-\u1EFF]/.test(desc.slice(0,500));
   var translateBtnHtml=isNonEnglish?' <button onclick="toggleTranslate('+i+')" id="translateBtn" style="font-size:.6rem;padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600">🌐 Translate to English</button>':'';
   h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center">Full Description'+translateBtnHtml+'</h4><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+formatDesc(desc.slice(0,5000))+'</div></div>';
-  if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" class="dm-apply">Apply Now &rarr;</a>';
+  // Match Profiles is the primary action (supply-side matching). Apply link kept as secondary.
+  h+='<div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;flex-wrap:wrap">';
+  if(CAP.canContacts)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
+  if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--ac);text-decoration:underline">View original posting &rarr;</a>';
+  h+='</div>';
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
 }
 var viewDirty=false;
@@ -2950,7 +2954,7 @@ async function searchDbByCompanyAndType(company,jobType){
 // #176: Contact Finder Popup
 var contactPopupHtml='<div id="contactPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1000;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:620px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.8rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="cfTitle">Manage Company</h3><button onclick="closeContactPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div style="display:flex;gap:.3rem;flex-wrap:wrap;margin-bottom:.6rem"><button onclick="apolloSearch()" id="cfAutoBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Auto-Discover Contacts</button><button onclick="enrichCompanyDetails()" id="cfEnrichBtn" style="padding:.3rem .8rem;background:#0F766E;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">⭐ Enrich Company Details</button></div><div id="cfCompanyDetails" style="margin-bottom:.6rem"></div><div id="cfCompanyInfo" style="font-size:.6rem;color:var(--g5);margin-bottom:.4rem"></div><div id="cfDiscovered" style="margin-bottom:.6rem"></div><div id="cfExisting" style="margin-bottom:.6rem"></div><div id="cfManualSearch" style="margin-bottom:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.3rem;font-weight:600">🔗 Manual LinkedIn Search:</div><div style="display:flex;flex-wrap:wrap;gap:.3rem" id="cfLinks"></div></div><div style="border-top:1px solid #e5e7eb;padding-top:.6rem"><div style="font-size:.65rem;color:var(--g5);margin-bottom:.4rem;font-weight:600">✏️ Add Contact — Enter name &amp; click Enrich to auto-fill from Apollo</div><div style="display:grid;grid-template-columns:1fr auto;gap:.4rem"><input id="cfName" placeholder="Full Name (e.g. John Smith)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><button onclick="enrichPerson()" id="cfEnrichPersonBtn" style="padding:.3rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔍 Enrich</button></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-top:.4rem"><input id="cfDesignation" placeholder="Designation (e.g. CISO, HR Head)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfEmail" placeholder="Email" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><input id="cfLinkedin" placeholder="LinkedIn URL (optional)" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><select id="cfSource" style="padding:.3rem .5rem;border:1px solid #d1d5db;border-radius:4px;font-size:.7rem;font-family:DM Sans,sans-serif"><option value="Apollo.io">Apollo.io</option><option value="LinkedIn">LinkedIn</option><option value="Company Website">Company Website</option><option value="Manual">Manual</option></select></div><button onclick="addContact()" style="margin-top:.4rem;padding:.3rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">💾 Save Contact</button></div><div id="cfStatus" style="font-size:.6rem;color:var(--pri);margin-top:.3rem"></div></div></div>';
 // ========== APPLICATION SETTINGS ==========
-var GLOBAL_SETTINGS={dateFormat:'DD/MM/YYYY',timeZone:'Asia/Kolkata',timeFormat:'24h',perPage:25,defaultTab:'dash',autoEnrich:'on',defaultCompanyType:'Enterprise',nonCyberFilter:'strict',maxQueries:30};
+var GLOBAL_SETTINGS={dateFormat:'MM/DD/YYYY',timeZone:'America/New_York',timeFormat:'12h',perPage:25,defaultTab:'dash',autoEnrich:'on',defaultCompanyType:'Enterprise',nonCyberFilter:'strict',maxQueries:30};
 var USER_PREFS={dateFormat:'',timeZone:'',timeFormat:'',perPage:'',defaultTab:''};
 var TIMEZONE_LIST=['UTC','Asia/Kolkata','America/New_York','America/Chicago','America/Denver','America/Los_Angeles','America/Toronto','America/Sao_Paulo','America/Mexico_City','Europe/London','Europe/Berlin','Europe/Paris','Europe/Amsterdam','Europe/Dublin','Europe/Zurich','Europe/Stockholm','Europe/Madrid','Europe/Rome','Europe/Warsaw','Europe/Helsinki','Europe/Oslo','Europe/Copenhagen','Europe/Bucharest','Europe/Prague','Asia/Dubai','Asia/Riyadh','Asia/Jerusalem','Asia/Singapore','Asia/Tokyo','Asia/Hong_Kong','Asia/Seoul','Asia/Shanghai','Asia/Kuala_Lumpur','Asia/Bangkok','Australia/Sydney','Australia/Melbourne','Pacific/Auckland'];
 
@@ -2971,15 +2975,10 @@ function loadSettings(){
   // Load user prefs
   var up=localStorage.getItem('huntUserPrefs');
   if(up){try{Object.assign(USER_PREFS,JSON.parse(up))}catch(e){}}
-  // Auto-detect on first visit (only if no saved global settings exist)
-  if(!localStorage.getItem('huntSettingsInit')&&!gs){
-    var det=detectUserLocale();
-    GLOBAL_SETTINGS.dateFormat=det.dateFormat;
-    GLOBAL_SETTINGS.timeZone=det.timeZone;
-    GLOBAL_SETTINGS.timeFormat=det.timeFormat;
-    localStorage.setItem('huntGlobalSettings',JSON.stringify(GLOBAL_SETTINGS));
-    localStorage.setItem('huntSettingsInit','1');
-  }
+  // #351: US defaults (MM/DD/YYYY, America/New_York, 12h) are the app baseline.
+  // The super-admin global setting (from MongoDB) is authoritative and overrides these.
+  // We no longer auto-detect from browser locale, so all users share consistent formatting
+  // unless an individual sets their own User Preferences.
   // Also try to load from MongoDB
   fetchGlobalSettings();
 }
@@ -3404,9 +3403,119 @@ function fmtDate(date){return formatDateWithSettings(date)}
 loadSettings();
 
 var scopeDialogHtml='<div id="scopeDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1100;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div id="scopeDialogBody"></div></div></div>';
-document.addEventListener('DOMContentLoaded',function(){document.body.insertAdjacentHTML('beforeend',contactPopupHtml);document.body.insertAdjacentHTML('beforeend',scopeDialogHtml)});
+var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
+document.addEventListener("DOMContentLoaded",function(){document.body.insertAdjacentHTML("beforeend",contactPopupHtml);document.body.insertAdjacentHTML("beforeend",scopeDialogHtml);document.body.insertAdjacentHTML("beforeend",matchPopupHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
+// ============ MATCH PROFILES ENGINE (frontend orchestration) ============
+var matchState={jobId:null,jobTitle:'',company:'',page:0,polling:false};
+
+async function openMatchProfiles(idx){
+  var j=allJobs[idx];if(!j)return;
+  matchState={jobId:j._id||j.jobId||'',jobTitle:j.title||j.titleClean||'',company:j.company||'',page:0,polling:false};
+  document.getElementById('matchPopup').style.display='flex';
+  document.getElementById('matchTitle').textContent='🎯 Match Profiles';
+  document.getElementById('matchSub').innerHTML='<strong>'+esc(matchState.jobTitle)+'</strong> at '+esc(matchState.company)+' &middot; consultants scoring ≥60% shown, best first';
+  document.getElementById('matchResults').innerHTML='';
+  document.getElementById('matchPager').style.display='none';
+  runMatch(0);
+}
+function closeMatchPopup(){document.getElementById('matchPopup').style.display='none';matchState.polling=false}
+
+async function runMatch(page){
+  matchState.page=page;
+  var st=document.getElementById('matchStatus');
+  st.textContent='⏳ Scoring cached consultant profiles...';
+  document.getElementById('matchResults').innerHTML='';
+  try{
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}
+    if((!d.matches||!d.matches.length)&&d.needsTopUp){
+      st.innerHTML='🔍 Few cached matches. Fetching fresh consultant profiles from LinkedIn (this can take 30–60s)...';
+      await topUpProfiles();
+      return;
+    }
+    renderMatches(d);
+    if(d.needsTopUp&&page===0){
+      st.innerHTML='ℹ️ Showing '+d.totalMatches+' cached match(es). <button onclick="topUpProfiles()" style="padding:.15rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button>';
+    }else{st.textContent=''}
+  }catch(e){st.textContent='⚠️ Error: '+e.message}
+}
+
+async function topUpProfiles(){
+  var st=document.getElementById('matchStatus');
+  st.innerHTML='🔍 Searching LinkedIn for matching consultants...';
+  try{
+    var sr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'startTopUp',jobId:matchState.jobId})});
+    var sd=await sr.json();
+    if(sd.error){st.textContent='⚠️ '+sd.error;return}
+    matchState.polling=true;
+    pollTopUp(sd.runId,sd.datasetId,0);
+  }catch(e){st.textContent='⚠️ Error: '+e.message}
+}
+
+async function pollTopUp(runId,datasetId,tries){
+  if(!matchState.polling)return;
+  if(tries>20){document.getElementById('matchStatus').textContent='⚠️ Profile fetch timed out. Try again.';return}
+  var st=document.getElementById('matchStatus');
+  st.innerHTML='🔍 Fetching &amp; scoring consultant profiles... ('+(tries*8)+'s)';
+  try{
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'checkTopUp',jobId:matchState.jobId,runId:runId,datasetId:datasetId})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;matchState.polling=false;return}
+    if(!d.done){setTimeout(function(){pollTopUp(runId,datasetId,tries+1)},8000);return}
+    matchState.polling=false;
+    st.innerHTML='✅ Fetched '+d.fetched+' profiles. Scoring against job...';
+    runMatch(0);
+  }catch(e){st.textContent='⚠️ Error: '+e.message;matchState.polling=false}
+}
+
+function renderMatches(d){
+  var el=document.getElementById('matchResults');
+  if(!d.matches||!d.matches.length){el.innerHTML='<div style="font-size:.7rem;color:var(--g5);padding:1rem;text-align:center">No consultants scored ≥60% for this role yet. Try "Fetch More from LinkedIn".</div>';document.getElementById('matchPager').style.display='none';return}
+  var h='';
+  d.matches.forEach(function(m,i){h+=matchCard(m,d.page*10+i+1)});
+  el.innerHTML=h;
+  var pager=document.getElementById('matchPager');
+  pager.style.display='flex';
+  document.getElementById('matchPrevBtn').style.visibility=d.page>0?'visible':'hidden';
+  document.getElementById('matchNextBtn').style.visibility=d.hasMore?'visible':'hidden';
+  document.getElementById('matchPageInfo').textContent='Page '+(d.page+1)+' · '+d.totalMatches+' total matches';
+}
+
+function matchColor(pct){if(pct>=80)return'#047857';if(pct>=70)return'#0F766E';if(pct>=60)return'#B45309';return'#DC2626'}
+
+function matchCard(m,rank){
+  var col=matchColor(m.overall);
+  var dims=m.dimensions||{};
+  var dimBar=function(label,val){val=val||0;return'<div style="display:flex;align-items:center;gap:.4rem;margin-bottom:.15rem"><span style="font-size:.55rem;color:var(--g5);width:70px">'+label+'</span><div style="flex:1;background:#eef1f6;border-radius:3px;height:6px;overflow:hidden"><div style="width:'+val+'%;height:100%;background:'+matchColor(val)+'"></div></div><span style="font-size:.55rem;color:var(--g5);width:26px;text-align:right">'+val+'%</span></div>'};
+  var skills=(m.skills||[]).slice(0,10).map(function(s){return'<span style="font-size:.5rem;background:#EEF2FF;color:#4338CA;padding:.05rem .3rem;border-radius:3px">'+esc(s)+'</span>'}).join(' ');
+  var certs=(m.certifications||[]).map(function(c){return'<span style="font-size:.5rem;background:#ECFDF5;color:#047857;padding:.05rem .3rem;border-radius:3px">'+esc(c)+'</span>'}).join(' ');
+  var flags=(m.flags||[]).map(function(f){return'<div style="font-size:.55rem;color:#B45309">⚠️ '+esc(f)+'</div>'}).join('');
+  var cardId='mc'+rank;
+  return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
+    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+'</div>'
+    +'<div style="font-size:.6rem;color:var(--g5)">'+esc(m.headline||m.currentRole||'')+'</div>'
+    +'<div style="font-size:.55rem;color:var(--g4)">'+esc(m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
+    +'<div style="text-align:center;flex-shrink:0"><div style="font-size:1.3rem;font-weight:800;color:'+col+';line-height:1">'+m.overall+'%</div><div style="font-size:.5rem;color:var(--g4)">match</div></div>'
+    +'</div>'
+    +(m.reason?'<div style="font-size:.58rem;color:var(--g5);font-style:italic;margin:.3rem 0">"'+esc(m.reason)+'"</div>':'')
+    +flags
+    +'<div style="margin-top:.4rem"><button onclick="toggleMatchDetail(\''+cardId+'\')" style="font-size:.55rem;background:none;border:none;color:var(--ac);cursor:pointer;padding:0">▾ Score breakdown</button>'
+    +'<div id="'+cardId+'" style="display:none;margin-top:.3rem">'
+    +dimBar('Skills',dims.skills)+dimBar('Certs',dims.certifications)+dimBar('Compliance',dims.compliance)+dimBar('Role fit',dims.role)+dimBar('Experience',dims.experience)+dimBar('Rate',dims.rate)
+    +(skills?'<div style="margin-top:.3rem;display:flex;flex-wrap:wrap;gap:.2rem">'+skills+'</div>':'')
+    +(certs?'<div style="margin-top:.2rem;display:flex;flex-wrap:wrap;gap:.2rem">'+certs+'</div>':'')
+    +'</div></div>'
+    +'</div>';
+}
+function toggleMatchDetail(id){var el=document.getElementById(id);if(el)el.style.display=el.style.display==='none'?'block':'none'}
+function matchNextPage(){runMatch(matchState.page+1)}
+function matchPrevPage(){if(matchState.page>0)runMatch(matchState.page-1)}
+// ============ END MATCH PROFILES ============
+
 async function openContactFinder(company,domain,linkedin){
   cfCompany=company;
   cfDomain=domain||'';
