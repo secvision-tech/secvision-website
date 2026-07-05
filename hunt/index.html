@@ -3449,7 +3449,7 @@ async function topUpProfiles(){
   try{
     var sr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'startTopUp',jobId:matchState.jobId})});
     var sd=await sr.json();
-    if(sd.error){st.textContent='⚠️ '+sd.error;return}
+    if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')<br>Search: "'+esc(sd.sentKeywords||'')+'"</div>':'');return}
     matchState.polling=true;
     pollTopUp(sd.runId,sd.datasetId,0);
   }catch(e){st.textContent='⚠️ Error: '+e.message}
@@ -3496,7 +3496,7 @@ function matchCard(m,rank){
   var cardId='mc'+rank;
   return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
-    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+'</div>'
+    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
     +'<div style="font-size:.6rem;color:var(--g5)">'+esc(m.headline||m.currentRole||'')+'</div>'
     +'<div style="font-size:.55rem;color:var(--g4)">'+esc(m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
     +'<div style="text-align:center;flex-shrink:0"><div style="font-size:1.3rem;font-weight:800;color:'+col+';line-height:1">'+m.overall+'%</div><div style="font-size:.5rem;color:var(--g4)">match</div></div>'

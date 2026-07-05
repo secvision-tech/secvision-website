@@ -115,6 +115,14 @@ function normalizeApifyProfile(p) {
       return { school: ed.schoolName || '', degree: ed.degreeName || '', field: ed.fieldOfStudy || '' };
     }) : [],
     languages: Array.isArray(p.languages) ? p.languages.map(function (l) { return l.name; }) : [],
+    // Contractor detection: employmentType in experience, or freelance/consultant/contractor signals
+    contractorSignal: (function () {
+      var txt = ((p.headline || '') + ' ' + (p.summary || '') + ' ' +
+        exp.map(function (e) { return (e.title || '') + ' ' + (e.employmentType || '') + ' ' + (e.companyName || ''); }).join(' ')).toLowerCase();
+      var isContractor = /\b(freelanc|contract|consultant|self-employed|independent|c2c|corp-to-corp|1099|sole proprietor|contractor)\b/.test(txt);
+      var hasContractEmployment = exp.some(function (e) { return /freelance|contract|self-employed/i.test(e.employmentType || ''); });
+      return { likely: isContractor || hasContractEmployment, employmentTypes: exp.map(function (e) { return e.employmentType || ''; }).filter(Boolean) };
+    })(),
     // hard-gate attributes — LinkedIn rarely exposes these, so default unknown
     workAuthorization: 'unknown',
     securityClearance: 'unknown',
@@ -143,6 +151,7 @@ function extractJobRequirements(job) {
     experienceRequired: job.experience || '',
     country: job.detectedCountry || job.searchCountry || '',
     location: job.location || '',
+    isContractRole: (job.jobType === 'Contract') || /\bcontract\b|c2c|corp-to-corp|contractor|freelance/i.test(job.jobType || ''),
     remote: job.remote || '',
     jobType: job.jobType || '',
     salary: job.salary || '',
@@ -193,6 +202,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
       headline: p.headline,
       currentRole: p.currentRole,
       years: p.yearsExperience,
+      contractorLikely: p.contractorSignal ? p.contractorSignal.likely : false,
       skills: p.skills.slice(0, 40),
       certs: p.certifications.slice(0, 20),
       summary: (p.summary || '').slice(0, 400),
@@ -213,11 +223,12 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Certifications preferred: ' + (req.certifications.join(', ') || 'none') + '\n' +
     'Compliance experience: ' + (req.compliance.join(', ') || 'none') + '\n' +
     'Experience required: ' + (req.experienceRequired || 'not specified') + '\n' +
-    'Location/Country: ' + (req.country || req.location || 'any') + '\n\n' +
+    'Location/Country: ' + (req.country || req.location || 'any') + '\n' +
+    'Engagement type: ' + (req.isContractRole ? 'CONTRACT — prefer candidates who are contractors/consultants/freelancers open to contract work (see contractorLikely flag). Penalize role score for candidates who appear to be settled full-time employees not open to contract.' : 'Full-time or either') + '\n\n' +
     'CANDIDATES (JSON array):\n' + JSON.stringify(compact) + '\n\n' +
     'For EACH candidate return an object with these 0-100 scores:\n' +
     '  skills, certifications, compliance, role, experience, rate\n' +
-    '(rate: 50 if unknown). Also a one-sentence "reason".\n' +
+    '(rate: 50 if unknown. For CONTRACT roles, factor contractor-availability into the "role" score.) Also a one-sentence "reason".\n' +
     'Respond with ONLY a JSON array like:\n' +
     '[{"i":0,"skills":85,"certifications":70,"compliance":60,"role":90,"experience":80,"rate":50,"reason":"..."}]';
 
@@ -268,6 +279,8 @@ function buildSearchKeywords(req) {
   if (req.role) kw.push(req.role);
   // add top 2 tools for signal
   (req.tools || []).slice(0, 2).forEach(function (t) { kw.push(t); });
+  // For contract roles, bias the search toward contractors/consultants
+  if (req.isContractRole) kw.push('contract consultant');
   var combined = kw.join(' ').slice(0, 80);
   return combined || 'cybersecurity engineer';
 }
@@ -384,7 +397,12 @@ exports.handler = async function (event) {
         });
         var run = await resp.json();
         if (!run.data || !run.data.id) {
-          return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start profile fetch', detail: JSON.stringify(run).slice(0, 300) }) };
+          return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+            error: 'Failed to start profile fetch',
+            apifyStatus: resp.status,
+            detail: run && run.error ? (run.error.message || run.error.type || JSON.stringify(run.error)) : JSON.stringify(run).slice(0, 400),
+            sentKeywords: keywords, sentLocation: locations
+          }) };
         }
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ runId: run.data.id, datasetId: run.data.defaultDatasetId, keywords: keywords }) };
       } catch (e) {
@@ -426,6 +444,7 @@ exports.handler = async function (event) {
               skills: np.skills, certifications: np.certifications, currentRole: np.currentRole,
               currentCompany: np.currentCompany, yearsExperience: np.yearsExperience,
               experience: np.experience, summary: np.summary, education: np.education, languages: np.languages,
+              contractorSignal: np.contractorSignal,
               workAuthorization: np.workAuthorization, securityClearance: np.securityClearance,
               availability: np.availability, rateExpectation: np.rateExpectation,
               source: np.source, sourceId: np.sourceId, fetchedAt: np.fetchedAt
@@ -466,6 +485,7 @@ function formatMatch(m) {
     dimensions: m.dimensions,
     reason: m.reason,
     flags: m.flags || [],
+    contractorLikely: m.profile.contractorSignal ? m.profile.contractorSignal.likely : false,
     source: m.profile.source
   };
 }
