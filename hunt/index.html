@@ -3505,7 +3505,7 @@ function matchCard(m,rank){
     +flags
     +'<div style="margin-top:.4rem"><button onclick="toggleMatchDetail(\''+cardId+'\')" style="font-size:.55rem;background:none;border:none;color:var(--ac);cursor:pointer;padding:0">▾ Score breakdown</button>'
     +'<div id="'+cardId+'" style="display:none;margin-top:.3rem">'
-    +dimBar('Skills',dims.skills)+dimBar('Certs',dims.certifications)+dimBar('Compliance',dims.compliance)+dimBar('Role fit',dims.role)+dimBar('Experience',dims.experience)+dimBar('Rate',dims.rate)
+    +dimBar('Skills',dims.skills)+dimBar('Certs',dims.certifications)+dimBar('Compliance',dims.compliance)+dimBar('Role fit',dims.role)+dimBar('Experience',dims.experience)+(dims.education!==undefined?dimBar('Education',dims.education):'')+dimBar('Rate',dims.rate)
     +(skills?'<div style="margin-top:.3rem;display:flex;flex-wrap:wrap;gap:.2rem">'+skills+'</div>':'')
     +(certs?'<div style="margin-top:.2rem;display:flex;flex-wrap:wrap;gap:.2rem">'+certs+'</div>':'')
     +'</div></div>'

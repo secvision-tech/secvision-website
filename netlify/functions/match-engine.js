@@ -83,7 +83,21 @@ function normalizeApifyProfile(p) {
     if (m) totalYears += parseInt(m[1]);
   });
   var certs = (Array.isArray(p.certifications) ? p.certifications : [])
-    .map(function (c) { return c.name || ''; }).filter(Boolean);
+    .map(function (c) { return (typeof c === 'string') ? c : (c.name || ''); }).filter(Boolean);
+  // Fallback: if actor didn't return a certifications field, scan about/headline/experience text
+  // for common cybersecurity cert names so cert-matching still works.
+  if (!certs.length) {
+    var scanText = ((p.summary || '') + ' ' + (p.headline || '') + ' ' +
+      (Array.isArray(p.experience) ? p.experience.map(function (e) { return (e.title || '') + ' ' + (e.description || ''); }).join(' ') : ''));
+    var CERT_PATTERNS = ['CISSP', 'CISM', 'CISA', 'CEH', 'OSCP', 'OSCE', 'GCIH', 'GCIA', 'GSEC', 'GPEN', 'GCFA', 'GWAPT',
+      'CCSP', 'CCSK', 'Security\\+', 'CompTIA Security', 'CySA\\+', 'PenTest\\+', 'CASP',
+      'SC-100', 'SC-200', 'SC-300', 'AZ-500', 'AZ-104', 'AWS Security', 'CCNA', 'CCNP', 'CISSP-ISSAP',
+      'CRISC', 'CGEIT', 'CIPP', 'ITIL', 'PMP'];
+    CERT_PATTERNS.forEach(function (c) {
+      var re = new RegExp('\\b' + c + '\\b', 'i');
+      if (re.test(scanText)) certs.push(c.replace('\\+', '+'));
+    });
+  }
   var currentRole = exp[0] ? (exp[0].title || '') : (p.headline || '');
   var currentCompany = exp[0] ? (exp[0].companyName || '') : '';
 
@@ -159,6 +173,12 @@ function extractJobRequirements(job) {
     requiresClearance: /clearance|cleared|ts\/sci|secret|public trust/i.test(job.description || job.eligibility || ''),
     requiresCitizen: /u\.?s\.?\s*citizen|must be a citizen|citizenship required/i.test(job.description || job.eligibility || ''),
     onsite: /on-?site|in-?person|hybrid/i.test((job.remote || '') + ' ' + (job.location || '')),
+    // Education requirement — only score education when the JD actually mentions a degree requirement
+    educationRequired: (function () {
+      var d = (job.description || '') + ' ' + (job.eligibility || '');
+      var m = d.match(/\b(bachelor'?s?|master'?s?|ph\.?d|doctorate|b\.?s\.?|m\.?s\.?|b\.?tech|m\.?tech|degree)\b[^.]{0,60}/i);
+      return m ? m[0].trim().slice(0, 80) : '';
+    })(),
     description: (job.description || '').slice(0, 1500)
   };
 }
@@ -206,6 +226,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
       skills: p.skills.slice(0, 40),
       certs: p.certifications.slice(0, 20),
       summary: (p.summary || '').slice(0, 400),
+      education: (p.education || []).map(function (e) { return (e.degree || '') + ' ' + (e.field || ''); }).filter(function (s) { return s.trim(); }).join('; '),
       experience: (p.experience || []).slice(0, 4).map(function (e) {
         return e.title + ' @ ' + e.company + ' (' + e.duration + ')' + (e.description ? ': ' + e.description.slice(0, 150) : '');
       })
@@ -216,6 +237,18 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Use semantic understanding: e.g. "Splunk ES + QRadar" satisfies a "SIEM engineering" requirement even without exact keywords. ' +
     'Be strict and realistic. Return ONLY valid JSON, no prose, no markdown fences.';
 
+  // Education is scored ONLY when the JD requires it; otherwise it's ignored (no penalty).
+  var scoreEducation = !!req.educationRequired;
+  var w = Object.assign({}, weights);
+  if (scoreEducation) {
+    // carve out 10 points for education, proportionally from the others
+    var edW = 10;
+    var factor = (100 - edW) / 100;
+    w = { skills: Math.round(weights.skills * factor), certifications: Math.round(weights.certifications * factor),
+      compliance: Math.round(weights.compliance * factor), role: Math.round(weights.role * factor),
+      experience: Math.round(weights.experience * factor), rate: Math.round(weights.rate * factor), education: edW };
+  }
+
   var prompt =
     'JOB REQUIREMENTS:\n' +
     'Role: ' + req.role + '\n' +
@@ -223,14 +256,16 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Certifications preferred: ' + (req.certifications.join(', ') || 'none') + '\n' +
     'Compliance experience: ' + (req.compliance.join(', ') || 'none') + '\n' +
     'Experience required: ' + (req.experienceRequired || 'not specified') + '\n' +
+    (scoreEducation ? 'Education required: ' + req.educationRequired + '\n' : '') +
     'Location/Country: ' + (req.country || req.location || 'any') + '\n' +
     'Engagement type: ' + (req.isContractRole ? 'CONTRACT — prefer candidates who are contractors/consultants/freelancers open to contract work (see contractorLikely flag). Penalize role score for candidates who appear to be settled full-time employees not open to contract.' : 'Full-time or either') + '\n\n' +
     'CANDIDATES (JSON array):\n' + JSON.stringify(compact) + '\n\n' +
     'For EACH candidate return an object with these 0-100 scores:\n' +
-    '  skills, certifications, compliance, role, experience, rate\n' +
-    '(rate: 50 if unknown. For CONTRACT roles, factor contractor-availability into the "role" score.) Also a one-sentence "reason".\n' +
+    '  skills, certifications, compliance, role, experience, rate' + (scoreEducation ? ', education' : '') + '\n' +
+    '(rate: 50 if unknown. For CONTRACT roles, factor contractor-availability into the "role" score.' +
+    (scoreEducation ? ' Score "education" 0-100 on how well the candidate\'s degree/field matches the required education.' : '') + ') Also a one-sentence "reason".\n' +
     'Respond with ONLY a JSON array like:\n' +
-    '[{"i":0,"skills":85,"certifications":70,"compliance":60,"role":90,"experience":80,"rate":50,"reason":"..."}]';
+    '[{"i":0,"skills":85,"certifications":70,"compliance":60,"role":90,"experience":80,"rate":50' + (scoreEducation ? ',"education":75' : '') + ',"reason":"..."}]';
 
   var resp = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -261,10 +296,12 @@ async function scoreProfilesBatch(req, profiles, weights) {
       skills: clamp(s.skills), certifications: clamp(s.certifications), compliance: clamp(s.compliance),
       role: clamp(s.role), experience: clamp(s.experience), rate: clamp(s.rate === undefined ? 50 : s.rate)
     };
+    if (scoreEducation) dims.education = clamp(s.education === undefined ? 50 : s.education);
     var overall = Math.round(
-      (dims.skills * weights.skills + dims.certifications * weights.certifications +
-        dims.compliance * weights.compliance + dims.role * weights.role +
-        dims.experience * weights.experience + dims.rate * weights.rate) / 100
+      (dims.skills * w.skills + dims.certifications * w.certifications +
+        dims.compliance * w.compliance + dims.role * w.role +
+        dims.experience * w.experience + dims.rate * w.rate +
+        (scoreEducation ? dims.education * w.education : 0)) / 100
     );
     return { profile: p, overall: overall, dimensions: dims, reason: s.reason || '' };
   });
@@ -392,7 +429,7 @@ exports.handler = async function (event) {
             keywords: [keywords],
             limit: FETCH_BATCH,
             location: locations,
-            profileFields: ['about', 'experience', 'skills', 'certifications', 'education']
+            profileFields: ['about', 'experience', 'skills', 'languages', 'organizations']
           })
         });
         var run = await resp.json();
