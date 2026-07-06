@@ -257,14 +257,16 @@ exports.handler = async (event) => {
     if (action === 'search') {
       var filter = {};
       if (body.query) {
+        var q = body.query.trim();
+        // #352: Search targeted fields. Description is excluded from the general OR because
+        // incidental mentions (e.g. "Google Cloud" matching a "Google" search) create noise.
         filter.$or = [
-          { title: { $regex: body.query, $options: 'i' } },
-          { titleClean: { $regex: body.query, $options: 'i' } },
-          { company: { $regex: body.query, $options: 'i' } },
-          { skills: { $regex: body.query, $options: 'i' } },
-          { tools: { $regex: body.query, $options: 'i' } },
-          { certifications: { $regex: body.query, $options: 'i' } },
-          { description: { $regex: body.query, $options: 'i' } }
+          { title: { $regex: q, $options: 'i' } },
+          { titleClean: { $regex: q, $options: 'i' } },
+          { company: { $regex: q, $options: 'i' } },
+          { skills: { $regex: q, $options: 'i' } },
+          { tools: { $regex: q, $options: 'i' } },
+          { certifications: { $regex: q, $options: 'i' } }
         ];
       }
       if (body.status && body.status !== 'all') filter.status = body.status;
