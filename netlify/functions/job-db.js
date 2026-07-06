@@ -283,6 +283,14 @@ exports.handler = async (event) => {
       if (body.jobType && body.jobType !== 'all') filter.jobType = body.jobType;
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
       if (body.detectedCountry && body.detectedCountry !== 'all') filter.detectedCountry = body.detectedCountry;
+      if (body.location) {
+        if (body.exactLocation) {
+          var locEsc = body.location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          filter.location = { $regex: '^' + locEsc + '$', $options: 'i' };
+        } else {
+          filter.location = { $regex: body.location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+        }
+      }
       if (body.dateFrom || body.dateTo) {
         filter.datePosted = {};
         if (body.dateFrom) filter.datePosted.$gte = new Date(body.dateFrom);
