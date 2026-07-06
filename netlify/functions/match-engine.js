@@ -312,14 +312,12 @@ function clamp(n) { n = parseInt(n); if (isNaN(n)) return 0; return Math.max(0, 
 // Build Apify search keywords from job requirements
 // ---------------------------------------------------------------------------
 function buildSearchKeywords(req) {
-  var kw = [];
-  if (req.role) kw.push(req.role);
-  // add top 2 tools for signal
-  (req.tools || []).slice(0, 2).forEach(function (t) { kw.push(t); });
-  // For contract roles, bias the search toward contractors/consultants
-  if (req.isContractRole) kw.push('contract consultant');
-  var combined = kw.join(' ').slice(0, 80);
-  return combined || 'cybersecurity engineer';
+  // #354: use the ROLE only — adding tools/contract words returned too many out-of-context
+  // results. A clean role keyword ("Security Architect") yields far more relevant profiles.
+  var role = (req.role || '').trim();
+  // strip seniority/level noise that hurts search recall
+  role = role.replace(/\b(senior|junior|lead|principal|staff|sr\.?|jr\.?|l[1-4]|level\s*[1-4])\b/gi, '').replace(/\s+/g, ' ').trim();
+  return role || 'cybersecurity engineer';
 }
 
 // ---------------------------------------------------------------------------
