@@ -2854,6 +2854,7 @@ function searchDashPie(field,value){
   var params={action:'search',limit:500,sort:JSON.stringify({datePosted:-1})};
   if(field==='companyType')params.companyType=value;
   else if(field==='country')params.detectedCountry=value;
+  else if(field==='company'){params.company=value;params.exactCompany=true;}
   else params.query=value;
 
   authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)})
