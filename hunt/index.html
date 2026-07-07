@@ -405,6 +405,7 @@ body.role-viewer .edit-btn{display:none!important}
         <select id="consPipeline" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Pipeline Stages</option><option value="none">Not started</option><option value="contacted">Contacted</option><option value="interested">Interested</option><option value="not_interested">Not Interested</option><option value="contacted_no_response">No Response</option><option value="screening_pending">Screening Pending</option><option value="screening_in_progress">Screening In Progress</option><option value="screening_failed">Screening Failed</option><option value="screening_successful">Screening Passed</option><option value="negotiations_in_progress">Negotiations</option><option value="secvision_agreement_signing">SecVision Agreement Signing</option><option value="secvision_agreement_signed">SecVision Agreement Signed</option><option value="proposed_to_client">Proposed to Client</option><option value="interview_in_progress">Client Interview</option><option value="client_interview_successful">Interview Passed</option><option value="client_interview_failed">Interview Failed</option><option value="client_agreement_signing">Client Agreement Signing</option><option value="client_agreement_signed">Client Agreement Signed</option><option value="placed">Placed</option></select>
         <select id="consRegion" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Regions</option><option value="NA">North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select>
         <select id="consPeriod" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">Any Time</option><option value="1">Last 24h</option><option value="3">Last 3 days</option><option value="7">Last week</option><option value="14">Last 2 weeks</option><option value="30">Last month</option><option value="180">Last 6 months</option><option value="365">Last 1 year</option></select>
+        <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.2rem;cursor:pointer"><input type="checkbox" id="consCertified" onchange="renderConsultants()" style="cursor:pointer">⭐ Certified only</label>
         <button onclick="loadConsultants()" style="padding:.35rem .7rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Search</button>
       </div>
       <div id="consInfo" style="font-size:.62rem;color:var(--g5);margin-bottom:.4rem"></div>
@@ -3581,13 +3582,39 @@ function pipelineBadge(s){
   return '<span style="font-size:.48rem;background:'+bg+';color:'+col+';padding:.1rem .3rem;border-radius:3px;font-weight:600">'+esc(PIPELINE_LABELS[s]||s)+'</span>';
 }
 var consCurPage=1,consPerPage=25;
+// Priority certifications worth flagging in the table (cloud + top security certs)
+var PRIORITY_CERTS=['CISSP','CISM','CISA','CCSP','OSCP','CEH','GCIH','GCIA','GSEC',
+  'AWS','AZURE','GCP','AZ-500','SC-200','SC-100','AZ-104','AWS SECURITY','GOOGLE CLOUD',
+  'CCSK','COMPTIA SECURITY','SECURITY+','CASP','CRISC'];
+function matchedPriorityCerts(certs){
+  if(!certs||!certs.length)return [];
+  var up=certs.map(function(c){return (c||'').toUpperCase()});
+  var hits=[];
+  PRIORITY_CERTS.forEach(function(pc){
+    if(up.some(function(u){return u.indexOf(pc)>-1})){
+      // normalize display label
+      var label=pc==='SECURITY+'?'Security+':(pc==='COMPTIA SECURITY'?'Security+':(pc==='AWS SECURITY'?'AWS':(pc==='GOOGLE CLOUD'?'GCP':pc)));
+      if(hits.indexOf(label)===-1)hits.push(label);
+    }
+  });
+  return hits;
+}
+function certMarker(certs){
+  var hits=matchedPriorityCerts(certs);
+  if(!hits.length)return '';
+  var top=hits.slice(0,3).join(', ');
+  var more=hits.length>3?' +'+(hits.length-3):'';
+  return ' <span title="Key certifications: '+esc(hits.join(', '))+'" style="font-size:.46rem;background:#FEF9C3;color:#854D0E;padding:.05rem .3rem;border-radius:3px;font-weight:700;border:1px solid #FDE68A">⭐ '+esc(top)+esc(more)+'</span>';
+}
 function renderConsultants(){
   var tb=document.getElementById('consBody');
-  if(!consultantsData.length){tb.innerHTML='<tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">No consultants found. Use "+ Add Profile", or (admin) "Import Cached Profiles" to test.</td></tr>';document.getElementById('consPag').style.display='none';return}
-  var tot=consultantsData.length,tp=Math.ceil(tot/consPerPage);
+  var certOnly=document.getElementById('consCertified')&&document.getElementById('consCertified').checked;
+  var data=certOnly?consultantsData.filter(function(c){return matchedPriorityCerts(c.certifications).length>0}):consultantsData;
+  if(!data.length){tb.innerHTML='<tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">'+(certOnly?'No consultants with priority certifications found.':'No consultants found. Use "+ Add Profile", or (admin) "Import Cached Profiles" to test.')+'</td></tr>';document.getElementById('consPag').style.display='none';return}
+  var tot=data.length,tp=Math.ceil(tot/consPerPage);
   if(consCurPage>tp)consCurPage=tp;if(consCurPage<1)consCurPage=1;
   var start=(consCurPage-1)*consPerPage,end=Math.min(start+consPerPage,tot);
-  var pageItems=consultantsData.slice(start,end);
+  var pageItems=data.slice(start,end);
   var h='';
   pageItems.forEach(function(c){
     var skills=(c.skills||[]).slice(0,4).join(', ')+((c.skills||[]).length>4?'…':'');
@@ -3597,7 +3624,7 @@ function renderConsultants(){
     var contact=(c.email?esc(c.email):'')+(c.email&&c.phone?'<br>':'')+(c.phone?'<span style="color:var(--g4)">'+esc(c.phone)+'</span>':'');
     if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
     h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
-      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+'</td>'
+      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
       +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
