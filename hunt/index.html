@@ -232,6 +232,7 @@ body.role-viewer .edit-btn{display:none!important}
         <button class="mode-btn" id="modeContract" onclick="setMode('contract')">Contract Pipeline</button>
         <button class="mode-btn" id="modeWeb" onclick="setMode('web')">Search Web (Live)</button>
         <button class="mode-btn" id="modeDb" onclick="setMode('db')">Search Database (Saved)</button>
+        <button class="mode-btn" id="modeConsultants" onclick="setMode('consultants')">Consultants</button>
       </div>
       <div id="webSearchPanel" style="display:none">
       <div class="sf">
@@ -384,6 +385,43 @@ body.role-viewer .edit-btn{display:none!important}
             <div id="contractJobsList" class="dash-table-wrap" style="font-size:.65rem"></div>
           </div>
         </div>
+      </div>
+    </div>
+
+    <div id="consultantsPanel" class="dash-panel">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;gap:.4rem">
+        <h2 style="font-size:.9rem;color:var(--pri);margin:0">🧑‍💻 Consultant Database</h2>
+        <div style="display:flex;gap:.4rem">
+          <button onclick="refreshConsultants()" style="padding:.3rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔄 Refresh</button>
+          <button id="addConsultantBtn" onclick="openAddConsultant()" style="padding:.3rem .7rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">+ Add Profile</button>
+        </div>
+      </div>
+      <!-- Filters -->
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem;align-items:center">
+        <input id="consQuery" placeholder="Search name, role, skills, certs..." style="flex:1;min-width:180px;padding:.35rem .5rem;border:1px solid var(--g2);border-radius:4px;font-size:.65rem" onkeydown="if(event.key==='Enter')loadConsultants()">
+        <select id="consEngagement" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Types</option><option value="Contractor">Contractor</option><option value="Permanent">Permanent</option><option value="Unknown">Unknown</option></select>
+        <select id="consAvailability" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Status</option><option value="available">Available</option><option value="busy">Busy</option><option value="placed">Placed (SecVision)</option><option value="do_not_contact">Do Not Contact</option></select>
+        <select id="consRegion" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Regions</option><option value="NA">North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select>
+        <select id="consPeriod" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">Any Time</option><option value="1">Last 24h</option><option value="3">Last 3 days</option><option value="7">Last week</option><option value="14">Last 2 weeks</option><option value="30">Last month</option></select>
+        <button onclick="loadConsultants()" style="padding:.35rem .7rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Search</button>
+      </div>
+      <div id="consInfo" style="font-size:.62rem;color:var(--g5);margin-bottom:.4rem"></div>
+      <div style="overflow:auto;border:1px solid var(--g2);border-radius:8px;background:var(--card)">
+        <table style="width:100%;border-collapse:collapse;font-size:.62rem">
+          <thead><tr style="background:var(--g1);border-bottom:1px solid var(--g2)">
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Name</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Role</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Location</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Country</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Type</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Status</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Skills</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Source</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4)">Updated</th>
+            <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4)">Action</th>
+          </tr></thead>
+          <tbody id="consBody"><tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
+        </table>
       </div>
     </div>
     <div class="rp" style="display:none">
@@ -709,14 +747,17 @@ function setMode(mode){
   searchMode=mode;
   document.getElementById('modeWeb').classList.toggle('active',mode==='web');
   document.getElementById('modeDb').classList.toggle('active',mode==='db');
+  document.getElementById('modeConsultants').classList.toggle('active',mode==='consultants');
   document.getElementById('modeDash').classList.toggle('active',mode==='dash');
   document.getElementById('modeContract').classList.toggle('active',mode==='contract');
   document.getElementById('webSearchPanel').style.display=mode==='web'?'block':'none';
   document.getElementById('dbSearchPanel').style.display=mode==='db'?'block':'none';
   document.getElementById('dashPanel').classList.toggle('show',mode==='dash');
   document.getElementById('contractPanel').classList.toggle('show',mode==='contract');
-  // Show/hide results panel for search modes vs dashboard/contract/settings
-  document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract')?'none':'flex';
+  var consPanel=document.getElementById('consultantsPanel');if(consPanel)consPanel.classList.toggle('show',mode==='consultants');
+  // Show/hide results panel for search modes vs dashboard/contract/consultants/settings
+  document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract'||mode==='consultants')?'none':'flex';
+  if(mode==='consultants'){loadConsultants();return;}
   if(mode==='dash'){
     if(!dashLoaded){loadDashboard();dashLoaded=true}return;
   }
@@ -3452,6 +3493,72 @@ var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:
 document.addEventListener("DOMContentLoaded",function(){document.body.insertAdjacentHTML("beforeend",contactPopupHtml);document.body.insertAdjacentHTML("beforeend",scopeDialogHtml);document.body.insertAdjacentHTML("beforeend",matchPopupHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
+// ============ CONSULTANT DATABASE ============
+var consultantsData=[];
+async function loadConsultants(){
+  var tb=document.getElementById('consBody');if(!tb)return;
+  tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
+  var period=document.getElementById('consPeriod').value;
+  var dateFrom='';
+  if(period!=='all'){var d=new Date();d.setDate(d.getDate()-parseInt(period));dateFrom=d.toISOString().slice(0,10);}
+  var params={action:'listConsultants',
+    query:document.getElementById('consQuery').value.trim(),
+    engagementType:document.getElementById('consEngagement').value,
+    availability:document.getElementById('consAvailability').value,
+    region:document.getElementById('consRegion').value,
+    dateFrom:dateFrom,limit:200};
+  try{
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(params)});
+    var d=await r.json();
+    if(d.error){tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:#DC2626">'+esc(d.error)+'</td></tr>';return}
+    consultantsData=d.consultants||[];
+    document.getElementById('consInfo').textContent=d.total+' consultant(s) in database.';
+    renderConsultants();
+    // gate Add button
+    var addBtn=document.getElementById('addConsultantBtn');if(addBtn)addBtn.style.display=CAP.canEnrichCompany?'inline-block':'none';
+  }catch(e){tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:#DC2626">Error: '+esc(e.message)+'</td></tr>'}
+}
+function refreshConsultants(){loadConsultants()}
+
+function availBadge(a){
+  var map={'available':['#047857','#ECFDF5','Available'],'busy':['#B45309','#FEF3C7','Busy'],'placed':['#4338CA','#EEF2FF','Placed'],'do_not_contact':['#DC2626','#FEE2E2','Do Not Contact']};
+  var m=map[a]||['#6B7280','#F3F4F6',a||'—'];
+  return '<span style="font-size:.5rem;background:'+m[1]+';color:'+m[0]+';padding:.1rem .35rem;border-radius:3px;font-weight:600">'+m[2]+'</span>';
+}
+function typeBadgeCons(t){
+  if(t==='Contractor')return '<span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.1rem .35rem;border-radius:3px;font-weight:600">Contractor</span>';
+  if(t==='Permanent')return '<span style="font-size:.5rem;background:#E0E7FF;color:#3730A3;padding:.1rem .35rem;border-radius:3px">Permanent</span>';
+  return '<span style="font-size:.5rem;color:var(--g4)">'+esc(t||'—')+'</span>';
+}
+function renderConsultants(){
+  var tb=document.getElementById('consBody');
+  if(!consultantsData.length){tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">No consultants found. Use "+ Add Profile" or adopt from Match Profiles.</td></tr>';return}
+  var h='';
+  consultantsData.forEach(function(c,i){
+    var skills=(c.skills||[]).slice(0,5).join(', ')+((c.skills||[]).length>5?'…':'');
+    var avail=c.availability||'available';
+    var availDate=(avail==='busy'||avail==='placed')&&c.availableFrom?' <span style="font-size:.48rem;color:var(--g4)">till '+fmtDate(c.availableFrom)+'</span>':'';
+    var src=(c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual');
+    h+='<tr style="border-bottom:1px solid var(--g1)">'
+      +'<td style="padding:.4rem .5rem;font-weight:600">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+'</td>'
+      +'<td style="padding:.4rem .5rem">'+esc(c.currentRole||c.headline||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g5)">'+esc(c.location||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g5)">'+esc(c.country||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem">'+typeBadgeCons(c.engagementType)+'</td>'
+      +'<td style="padding:.4rem .5rem">'+availBadge(avail)+availDate+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g5)" title="'+esc((c.skills||[]).join(', '))+'">'+esc(skills||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g4);font-size:.55rem">'+esc(src||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g4);font-size:.55rem">'+(c.updatedAt?fmtDate(c.updatedAt):'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;text-align:center"><button class="vb" onclick="openManageProfile(\''+c._id+'\')">'+(CAP.canStatus?'Manage':'View')+'</button></td>'
+      +'</tr>';
+  });
+  tb.innerHTML=h;
+}
+// Stubs for Stage 2 (wired next)
+function openManageProfile(id){alert('Manage Profile popup — built in Stage 2. ID: '+id)}
+function openAddConsultant(){alert('Add Profile form — built in Stage 2')}
+// ============ END CONSULTANT DATABASE ============
+
 // ============ MATCH PROFILES ENGINE (frontend orchestration) ============
 var matchState={jobId:null,jobTitle:'',company:'',page:0,polling:false};
 
