@@ -18,6 +18,21 @@ const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
 const CACHE_COLLECTION = 'consultant_profiles';
 
+// Pipeline statuses in canonical order (Phase A onboarding -> Phase B placement)
+var PIPELINE_STATUSES = [
+  'none', 'contacted', 'interested', 'not_interested', 'contacted_no_response',
+  'screening_pending', 'screening_in_progress', 'screening_failed', 'screening_successful',
+  'negotiations_in_progress', 'secvision_agreement_signing', 'secvision_agreement_signed',
+  'proposed_to_client', 'interview_in_progress', 'client_interview_successful', 'client_interview_failed',
+  'client_agreement_signing', 'client_agreement_signed', 'placed'
+];
+// Stages at/after which a HARD lock applies (only claiming analyst / managers may change)
+var HARD_LOCK_STAGES = ['client_agreement_signing', 'client_agreement_signed', 'placed'];
+// Stages representing an ACTIVE working claim
+var ACTIVE_CLAIM_STAGES = PIPELINE_STATUSES.filter(function (s) {
+  return s !== 'none' && s !== 'not_interested' && s !== 'contacted_no_response' && s !== 'screening_failed' && s !== 'client_interview_failed';
+});
+
 const hdrs = {
   'Content-Type': 'application/json',
   'Access-Control-Allow-Origin': '*',
@@ -27,19 +42,24 @@ const hdrs = {
 
 // RBAC
 var VIEW_ROLES = ['super_admin', 'admin', 'manager', 'analyst', 'viewer'];
-var STATUS_ROLES = ['super_admin', 'admin', 'manager', 'analyst']; // set status/availability
-var MANAGER_UP = ['super_admin', 'admin', 'manager'];              // edit/enrich/delete/place
+var STATUS_ROLES = ['super_admin', 'admin', 'manager', 'analyst']; // set status/availability/pipeline
+var MANAGER_UP = ['super_admin', 'admin', 'manager'];              // edit/enrich/place
+var ADMIN_UP = ['super_admin', 'admin'];                           // delete, bulk promote
 var ACTION_ROLES = {
   'listConsultants': VIEW_ROLES,
   'getConsultant': VIEW_ROLES,
   'setConsultantStatus': STATUS_ROLES,
+  'setPipelineStatus': STATUS_ROLES,
+  'claimConsultant': STATUS_ROLES,
+  'releaseConsultant': STATUS_ROLES,
   'createConsultant': MANAGER_UP,
   'updateConsultant': MANAGER_UP,
-  'deleteConsultant': MANAGER_UP,
+  'deleteConsultant': ADMIN_UP,          // delete NOT allowed to manager
   'enrichConsultant': MANAGER_UP,
   'adoptConsultant': MANAGER_UP,
   'importResume': MANAGER_UP,
-  'placeConsultant': MANAGER_UP
+  'placeConsultant': MANAGER_UP,
+  'promoteAllCached': ADMIN_UP           // one-time cached -> managed transfer
 };
 
 // ---- JWT ----
@@ -121,6 +141,7 @@ exports.handler = async function (event) {
       }
       if (body.engagementType && body.engagementType !== 'all') filter.engagementType = body.engagementType;
       if (body.availability && body.availability !== 'all') filter.availability = body.availability;
+      if (body.pipelineStatus && body.pipelineStatus !== 'all') filter.pipelineStatus = body.pipelineStatus;
       if (body.country && body.country !== 'all') filter.country = body.country;
       if (body.location) filter.location = { $regex: body.location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
       // region → countries
@@ -185,6 +206,7 @@ exports.handler = async function (event) {
         yearsExperience: c.yearsExperience || 0, summary: c.summary || '',
         engagementType: c.engagementType || 'Unknown',
         availability: c.availability || 'available', availableFrom: c.availableFrom || null,
+        pipelineStatus: c.pipelineStatus || 'none', claimedBy: null, claimedAt: null,
         placementInfo: c.placementInfo || null,
         rateExpectation: c.rateExpectation || null,
         workAuthorization: c.workAuthorization || 'unknown', securityClearance: c.securityClearance || 'unknown',
@@ -252,6 +274,93 @@ exports.handler = async function (event) {
     if (action === 'deleteConsultant') {
       await col.deleteOne({ _id: new ObjectId(body.id) });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: true }) };
+    }
+
+    // ---- SET PIPELINE STATUS (with claim + lock enforcement) ----
+    if (action === 'setPipelineStatus') {
+      var newStatus = body.pipelineStatus;
+      if (PIPELINE_STATUSES.indexOf(newStatus) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Invalid pipeline status' }) };
+      var prof = await col.findOne({ _id: new ObjectId(body.id) });
+      if (!prof) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
+
+      var isManager = MANAGER_UP.indexOf(authRole) > -1;
+      var currentClaim = prof.claimedBy || null;
+      var currentStage = prof.pipelineStatus || 'none';
+      var currentlyHardLocked = HARD_LOCK_STAGES.indexOf(currentStage) > -1;
+
+      // HARD LOCK: at/after client_agreement_signing, only the claiming analyst or a manager may change
+      if (currentlyHardLocked && !isManager && currentClaim && currentClaim !== authUser.email) {
+        return { statusCode: 423, headers: hdrs, body: JSON.stringify({ error: 'locked', message: 'This consultant is locked at a client-agreement stage by ' + currentClaim + '. Only they or a manager can change it.' }) };
+      }
+      // SOFT LOCK: someone else holds an active claim — warn unless caller confirms/override or is manager
+      if (currentClaim && currentClaim !== authUser.email && !isManager && !body.overrideClaim && ACTIVE_CLAIM_STAGES.indexOf(currentStage) > -1) {
+        return { statusCode: 409, headers: hdrs, body: JSON.stringify({ error: 'claimed', message: currentClaim + ' is already working this consultant (' + currentStage + '). Coordinate before proceeding.', claimedBy: currentClaim, claimedAt: prof.claimedAt }) };
+      }
+
+      var set = { pipelineStatus: newStatus, updatedAt: new Date(), updatedBy: authUser.email };
+      set['pipelineHistory'] = undefined; // placeholder to avoid accidental overwrite
+      delete set.pipelineHistory;
+
+      // Manage the claim based on the new stage
+      if (ACTIVE_CLAIM_STAGES.indexOf(newStatus) > -1) {
+        // becomes/continues an active claim → assign to this analyst if unclaimed or override
+        if (!currentClaim || body.overrideClaim || currentClaim === authUser.email || isManager) {
+          set.claimedBy = body.claimForSelf === false ? currentClaim : authUser.email;
+          if (!prof.claimedAt || set.claimedBy !== currentClaim) set.claimedAt = new Date();
+        }
+      } else {
+        // terminal/negative stage → release the claim
+        set.claimedBy = null; set.claimedAt = null;
+      }
+
+      await col.updateOne({ _id: prof._id }, {
+        $set: set,
+        $push: { pipelineHistory: { status: newStatus, by: authUser.email, at: new Date() } }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true, pipelineStatus: newStatus, claimedBy: set.claimedBy }) };
+    }
+
+    // ---- CLAIM / RELEASE ----
+    if (action === 'claimConsultant') {
+      var pc = await col.findOne({ _id: new ObjectId(body.id) });
+      if (!pc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
+      if (pc.claimedBy && pc.claimedBy !== authUser.email && MANAGER_UP.indexOf(authRole) === -1 && !body.overrideClaim) {
+        return { statusCode: 409, headers: hdrs, body: JSON.stringify({ error: 'claimed', message: pc.claimedBy + ' already owns this consultant.', claimedBy: pc.claimedBy }) };
+      }
+      await col.updateOne({ _id: pc._id }, { $set: { claimedBy: authUser.email, claimedAt: new Date(), updatedAt: new Date() } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ claimed: true, claimedBy: authUser.email }) };
+    }
+    if (action === 'releaseConsultant') {
+      var pr = await col.findOne({ _id: new ObjectId(body.id) });
+      if (!pr) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
+      if (pr.claimedBy && pr.claimedBy !== authUser.email && MANAGER_UP.indexOf(authRole) === -1) {
+        return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Only the owner or a manager can release this claim.' }) };
+      }
+      await col.updateOne({ _id: pr._id }, { $set: { claimedBy: null, claimedAt: null, updatedAt: new Date() } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ released: true }) };
+    }
+
+    // ---- PROMOTE ALL CACHED -> MANAGED (one-time, super/admin) ----
+    if (action === 'promoteAllCached') {
+      var res = await col.updateMany(
+        { $or: [{ managed: { $exists: false } }, { managed: false }] },
+        {
+          $set: {
+            managed: true, availability: 'available', pipelineStatus: 'none',
+            promotedAt: new Date(), promotedBy: authUser.email
+          }
+        }
+      );
+      // set engagementType from contractorSignal where missing
+      await col.updateMany(
+        { managed: true, engagementType: { $exists: false }, 'contractorSignal.likely': true },
+        { $set: { engagementType: 'Contractor' } }
+      );
+      await col.updateMany(
+        { managed: true, engagementType: { $exists: false } },
+        { $set: { engagementType: 'Unknown' } }
+      );
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ promoted: res.modifiedCount || 0 }) };
     }
 
     return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action: ' + action }) };
