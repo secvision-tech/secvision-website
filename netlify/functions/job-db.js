@@ -266,7 +266,8 @@ exports.handler = async (event) => {
           { company: { $regex: q, $options: 'i' } },
           { skills: { $regex: q, $options: 'i' } },
           { tools: { $regex: q, $options: 'i' } },
-          { certifications: { $regex: q, $options: 'i' } }
+          { certifications: { $regex: q, $options: 'i' } },
+          { compliance: { $regex: q, $options: 'i' } }
         ];
       }
       if (body.status && body.status !== 'all') filter.status = body.status;
