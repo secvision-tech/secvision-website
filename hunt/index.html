@@ -3596,7 +3596,7 @@ function renderConsultants(){
     var claim=c.claimedBy?' <span title="Being worked by '+esc(c.claimedBy)+'" style="font-size:.45rem;color:#B45309">🔒</span>':'';
     var contact=(c.email?esc(c.email):'')+(c.email&&c.phone?'<br>':'')+(c.phone?'<span style="color:var(--g4)">'+esc(c.phone)+'</span>':'');
     if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
-    h+='<tr style="border-bottom:1px solid var(--g1)">'
+    h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
       +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+'</td>'
       +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
@@ -3620,8 +3620,247 @@ function renderConsultants(){
   document.getElementById('consPageInfo').textContent='Page '+consCurPage+' of '+tp+' ('+tot+' total)';
 }
 function consGoPage(p){var tp=Math.ceil(consultantsData.length/consPerPage);if(p<1||p>tp)return;consCurPage=p;renderConsultants()}
-function openManageProfile(id){alert('Manage Profile popup — built in Stage 2. ID: '+id)}
-function openAddConsultant(){alert('Add Profile form — built in Stage 2')}
+function consRowClick(e,el){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.closest('a')||e.target.closest('button'))return;el.classList.toggle('row-hl')}
+// ---- Manage Profile popup ----
+var manageProfileId=null,manageProfileData=null;
+async function openManageProfile(id){
+  manageProfileId=id;
+  var pop=document.getElementById('manageProfilePopup');
+  if(!pop){document.body.insertAdjacentHTML('beforeend',manageProfileHtml());pop=document.getElementById('manageProfilePopup')}
+  pop.style.display='flex';
+  document.getElementById('mpBody').innerHTML='<div style="padding:2rem;text-align:center;color:var(--g5)">Loading profile...</div>';
+  document.getElementById('mpStatus').textContent='';
+  try{
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'getConsultant',id:id})});
+    var d=await r.json();
+    if(d.error){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">'+esc(d.error)+'</div>';return}
+    manageProfileData=d.consultant;
+    renderManageProfile();
+  }catch(e){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">Error: '+esc(e.message)+'</div>'}
+}
+function closeManageProfile(){var p=document.getElementById('manageProfilePopup');if(p)p.style.display='none';manageProfileId=null;manageProfileData=null}
+function manageProfileHtml(){
+  return '<div id="manageProfilePopup" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,.85);z-index:1200;justify-content:center;align-items:center">'
+    +'<div style="background:#fff;border-radius:8px;width:96%;max-width:640px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 id="mpTitle" style="margin:0;font-size:.85rem;color:var(--pri)">Manage Profile</h3><button onclick="closeManageProfile()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
+    +'<div id="mpStatus" style="font-size:.62rem;margin-bottom:.5rem"></div>'
+    +'<div id="mpBody"></div>'
+    +'</div></div>';
+}
+function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="font-size:.55rem;color:var(--g4);display:block">'+label+'</span><span style="font-size:.68rem">'+(val||'—')+'</span></div>'}
+
+function renderManageProfile(){
+  var c=manageProfileData;if(!c)return;
+  var canStatus=CAP.canStatus, canEdit=CAP.canEnrichCompany;
+  document.getElementById('mpTitle').textContent=(canStatus?'Manage: ':'View: ')+(c.name||'Profile');
+  var h='';
+  if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .6rem;margin-bottom:.6rem;font-size:.58rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.7rem;padding:.6rem;background:var(--g1);border-radius:6px">';
+  h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.55rem">LinkedIn ↗</a>':''));
+  h+=fld('Role',esc(c.currentRole||c.headline));
+  h+=fld('Company',esc(c.currentCompany));
+  h+=fld('Location',esc(c.location)+(c.country?' ('+esc(c.country)+')':''));
+  h+=fld('Experience',(c.yearsExperience||0)+' yrs');
+  h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual')));
+  h+='</div>';
+  if((c.skills||[]).length)h+='<div style="margin-bottom:.5rem"><span style="font-size:.55rem;color:var(--g4)">Skills:</span> '+(c.skills||[]).map(function(s){return '<span style="font-size:.5rem;background:#EEF2FF;color:#4338CA;padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block">'+esc(s)+'</span>'}).join(' ')+'</div>';
+  if((c.certifications||[]).length)h+='<div style="margin-bottom:.6rem"><span style="font-size:.55rem;color:var(--g4)">Certs:</span> '+(c.certifications||[]).map(function(s){return '<span style="font-size:.5rem;background:#ECFDF5;color:#047857;padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block">'+esc(s)+'</span>'}).join(' ')+'</div>';
+
+  if(canStatus){
+    h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.4rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Status & Pipeline</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="mpType" class="set-input" style="width:100%;font-size:.62rem">'
+      +['Contractor','Permanent','Unknown'].map(function(t){return '<option value="'+t+'"'+(c.engagementType===t?' selected':'')+'>'+t+'</option>'}).join('')+'</select></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Availability</label><select id="mpAvail" class="set-input" style="width:100%;font-size:.62rem" onchange="mpAvailChange()">'
+      +[['available','Available'],['busy','Busy'],['placed','Placed'],['do_not_contact','Do Not Contact']].map(function(a){return '<option value="'+a[0]+'"'+(c.availability===a[0]?' selected':'')+'>'+a[1]+'</option>'}).join('')+'</select></div>';
+    h+='</div>';
+    h+='<div id="mpAvailFromWrap" style="margin-top:.4rem;'+((c.availability==='busy')?'':'display:none')+'"><label style="font-size:.55rem;color:var(--g4)">Available from</label><input type="date" id="mpAvailFrom" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.availableFrom?new Date(c.availableFrom).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.62rem">'
+      +Object.keys(PIPELINE_LABELS).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+'>'+PIPELINE_LABELS[k]+'</option>'}).join('')+'</select></div>';
+    h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileStatus()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Status</button>';
+    if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.35rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Claim</button>';
+    else h+='<button onclick="releaseProfile()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Release Claim</button>';
+    h+='</div></div>';
+  }
+
+  h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Contact Details</div>';
+  if(canEdit){
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Email</label><input id="mpEmail" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.email||'')+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Phone</label><input id="mpPhone" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.phone||'')+'"></div>';
+    h+='</div>';
+    h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileContact()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Contact</button>';
+    h+='<button onclick="enrichProfile()" id="mpEnrichBtn" style="padding:.35rem .8rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Enrich (Apollo)</button></div>';
+  }else{
+    h+=fld('Email',esc(c.email))+fld('Phone',esc(c.phone));
+  }
+  h+='</div>';
+
+  if(canEdit){
+    var pi=c.placementInfo||{};
+    h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Placement (via SecVision)</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Client</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.client||'')+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Role</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.role||'')+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Start</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">End</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
+    h+='</div><button onclick="savePlacement()" style="padding:.35rem .8rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;margin-top:.5rem">Mark as Placed</button></div>';
+  }
+
+  if(curUserRole==='admin'||curUserRole==='super_admin'){
+    h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem;text-align:right"><button onclick="deleteProfile()" style="padding:.3rem .7rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Delete Profile</button></div>';
+  }
+  document.getElementById('mpBody').innerHTML=h;
+}
+function mpAvailChange(){var v=document.getElementById('mpAvail').value;document.getElementById('mpAvailFromWrap').style.display=(v==='busy')?'block':'none'}
+function mpMsg(msg,color){var el=document.getElementById('mpStatus');el.textContent=msg;el.style.color=color||'var(--pri)'}
+
+async function saveProfileStatus(){
+  var body={action:'setPipelineStatus',id:manageProfileId,pipelineStatus:document.getElementById('mpPipeline').value};
+  try{
+    await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'setConsultantStatus',id:manageProfileId,
+      engagementType:document.getElementById('mpType').value,
+      availability:document.getElementById('mpAvail').value,
+      availableFrom:document.getElementById('mpAvail').value==='busy'?document.getElementById('mpAvailFrom').value:null})});
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
+    var d=await r.json();
+    if(d.error==='claimed'){
+      if(confirm('⚠️ '+d.message+'\n\nProceed anyway (override claim)?')){
+        body.overrideClaim=true;
+        var r2=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
+        var d2=await r2.json();
+        if(d2.error){mpMsg('⚠️ '+(d2.message||d2.error),'#DC2626');return}
+      }else{mpMsg('Status change cancelled (claim held by another).','#B45309');return}
+    }else if(d.error==='locked'){mpMsg('🔒 '+d.message,'#DC2626');return}
+    else if(d.error){mpMsg('⚠️ '+(d.message||d.error),'#DC2626');return}
+    mpMsg('✅ Status saved.','#047857');
+    openManageProfile(manageProfileId);
+    loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
+async function saveProfileContact(){
+  try{
+    await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:manageProfileId,updates:{email:document.getElementById('mpEmail').value.trim(),phone:document.getElementById('mpPhone').value.trim()}})});
+    mpMsg('✅ Contact saved.','#047857');loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
+async function enrichProfile(){
+  var btn=document.getElementById('mpEnrichBtn');btn.textContent='🔍 Searching...';btn.disabled=true;
+  try{
+    var c=manageProfileData;
+    var r=await authFetch('/.netlify/functions/apollo',{method:'POST',body:JSON.stringify({action:'matchPerson',name:c.name,company:c.currentCompany||''})});
+    var d=await r.json();
+    if(d.found){
+      if(d.email)document.getElementById('mpEmail').value=d.email;
+      if(d.phone)document.getElementById('mpPhone').value=d.phone;
+      mpMsg('✅ Found via Apollo — review & Save Contact.','#047857');
+    }else{mpMsg('No Apollo match found. Enter manually.','#B45309')}
+  }catch(e){mpMsg('Enrich error: '+e.message,'#DC2626')}
+  btn.textContent='🔍 Enrich (Apollo)';btn.disabled=false;
+}
+async function claimProfile(){
+  try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId})});
+    var d=await r.json();
+    if(d.error==='claimed'){if(confirm('⚠️ '+d.message+'\n\nOverride and claim?')){await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId,overrideClaim:true})})}else return}
+    mpMsg('✅ Claimed.','#047857');openManageProfile(manageProfileId);loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
+async function releaseProfile(){
+  try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'releaseConsultant',id:manageProfileId})});
+    mpMsg('✅ Released.','#047857');openManageProfile(manageProfileId);loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
+async function savePlacement(){
+  var pi={client:document.getElementById('mpPlaceClient').value.trim(),role:document.getElementById('mpPlaceRole').value.trim(),startDate:document.getElementById('mpPlaceStart').value||null,endDate:document.getElementById('mpPlaceEnd').value||null};
+  if(!pi.client){mpMsg('Client name required to place.','#B45309');return}
+  try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'placeConsultant',id:manageProfileId,placementInfo:pi})});
+    mpMsg('✅ Marked as placed.','#047857');openManageProfile(manageProfileId);loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
+async function deleteProfile(){
+  if(!confirm('Delete this profile permanently?'))return;
+  try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deleteConsultant',id:manageProfileId})});
+    closeManageProfile();loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
+function openAddConsultant(){
+  var pop=document.getElementById('addConsultantPopup');
+  if(!pop){document.body.insertAdjacentHTML('beforeend',addConsultantHtml());pop=document.getElementById('addConsultantPopup')}
+  pop.style.display='flex';
+  ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
+  document.getElementById('acType').value='Contractor';
+  document.getElementById('acStatus').textContent='';
+}
+function closeAddConsultant(){var p=document.getElementById('addConsultantPopup');if(p)p.style.display='none'}
+function addConsultantHtml(){
+  var f=function(id,label,type){return '<div><label style="font-size:.55rem;color:var(--g4)">'+label+'</label><input id="'+id+'" type="'+(type||'text')+'" class="set-input" style="width:100%;font-size:.62rem"></div>'};
+  return '<div id="addConsultantPopup" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,.85);z-index:1200;justify-content:center;align-items:center">'
+    +'<div style="background:#fff;border-radius:8px;width:96%;max-width:600px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)">+ Add Consultant Profile</h3><button onclick="closeAddConsultant()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
+    +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx) — optional</label><input type="file" id="acResume" accept=".docx" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">'
+    +f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')+f('acLocation','Location')
+    +f('acCountry','Country')+'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Permanent</option><option>Unknown</option></select></div>'
+    +f('acEmail','Email','email')+f('acPhone','Phone')+f('acLinkedin','LinkedIn URL')+f('acYears','Years Experience','number')
+    +'</div>'
+    +'<div style="margin-top:.5rem"><label style="font-size:.55rem;color:var(--g4)">Skills (comma-separated)</label><input id="acSkills" class="set-input" style="width:100%;font-size:.62rem"></div>'
+    +'<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Certifications (comma-separated)</label><input id="acCerts" class="set-input" style="width:100%;font-size:.62rem"></div>'
+    +'<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Summary</label><textarea id="acSummary" class="set-input" style="width:100%;font-size:.62rem;min-height:50px"></textarea></div>'
+    +'<div id="acStatus" style="font-size:.6rem;margin-top:.5rem"></div>'
+    +'<div style="display:flex;gap:.4rem;margin-top:.6rem;justify-content:flex-end"><button onclick="closeAddConsultant()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer">Cancel</button><button onclick="saveNewConsultant()" style="padding:.35rem .9rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Profile</button></div>'
+    +'</div></div>';
+}
+// Resume parsing via mammoth (loaded from CDN on demand)
+async function parseResume(e){
+  var file=e.target.files[0];if(!file)return;
+  var st=document.getElementById('acResumeStatus');st.textContent='Parsing resume...';
+  try{
+    if(typeof mammoth==='undefined'){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js')}
+    var buf=await file.arrayBuffer();
+    var result=await mammoth.extractRawText({arrayBuffer:buf});
+    var text=result.value||'';
+    // Basic field extraction
+    var email=(text.match(/[\w.+-]+@[\w-]+\.[\w.]+/)||[])[0]||'';
+    var phone=(text.match(/(\+?\d[\d\s().-]{7,}\d)/)||[])[0]||'';
+    var linkedin=(text.match(/linkedin\.com\/in\/[\w-]+/)||[])[0]||'';
+    if(email)document.getElementById('acEmail').value=email;
+    if(phone)document.getElementById('acPhone').value=phone.trim();
+    if(linkedin)document.getElementById('acLinkedin').value='https://'+linkedin;
+    // Name: first non-empty line, often the name
+    var firstLine=(text.split('\n').map(function(l){return l.trim()}).filter(Boolean)[0]||'');
+    if(firstLine&&firstLine.length<50&&!document.getElementById('acName').value)document.getElementById('acName').value=firstLine;
+    // Skills: look for common cyber skills mentioned
+    var SKILL_HINTS=['Splunk','Sentinel','QRadar','CrowdStrike','Defender','SIEM','SOAR','Python','Azure','AWS','GCP','Palo Alto','Fortinet','Wireshark','Nessus','Metasploit','Kubernetes','Terraform','KQL','EDR','XDR','DLP','IAM','PAM'];
+    var found=SKILL_HINTS.filter(function(s){return new RegExp('\\b'+s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(text)});
+    if(found.length)document.getElementById('acSkills').value=found.join(', ');
+    var CERT_HINTS=['CISSP','CISM','CISA','CEH','OSCP','GCIH','GCIA','Security+','SC-200','SC-100','AZ-500','CCSP','CCNA','CCNP'];
+    var fcerts=CERT_HINTS.filter(function(s){return new RegExp('\\b'+s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(text)});
+    if(fcerts.length)document.getElementById('acCerts').value=fcerts.join(', ');
+    st.textContent='✅ Parsed. Review & correct the fields below, then Save.';st.style.color='#047857';
+  }catch(err){st.textContent='Could not parse: '+err.message+'. Enter manually.';st.style.color='#B45309'}
+}
+function loadScript(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
+
+async function saveNewConsultant(){
+  var name=document.getElementById('acName').value.trim();
+  if(!name){document.getElementById('acStatus').textContent='Name is required.';document.getElementById('acStatus').style.color='#DC2626';return}
+  var consultant={
+    name:name,currentRole:document.getElementById('acRole').value.trim(),currentCompany:document.getElementById('acCompany').value.trim(),
+    location:document.getElementById('acLocation').value.trim(),country:document.getElementById('acCountry').value.trim(),
+    engagementType:document.getElementById('acType').value,email:document.getElementById('acEmail').value.trim(),
+    phone:document.getElementById('acPhone').value.trim(),linkedinUrl:document.getElementById('acLinkedin').value.trim(),
+    yearsExperience:parseInt(document.getElementById('acYears').value)||0,
+    skills:document.getElementById('acSkills').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+    certifications:document.getElementById('acCerts').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+    summary:document.getElementById('acSummary').value.trim()
+  };
+  try{
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'createConsultant',consultant:consultant})});
+    var d=await r.json();
+    if(d.error){document.getElementById('acStatus').textContent='Error: '+d.error;document.getElementById('acStatus').style.color='#DC2626';return}
+    closeAddConsultant();loadConsultants();
+  }catch(e){document.getElementById('acStatus').textContent='Error: '+e.message;document.getElementById('acStatus').style.color='#DC2626'}
+}
 // ============ END CONSULTANT DATABASE ============
 
 // ============ MATCH PROFILES ENGINE (frontend orchestration) ============
