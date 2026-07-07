@@ -408,22 +408,30 @@ body.role-viewer .edit-btn{display:none!important}
         <button onclick="loadConsultants()" style="padding:.35rem .7rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Search</button>
       </div>
       <div id="consInfo" style="font-size:.62rem;color:var(--g5);margin-bottom:.4rem"></div>
-      <div style="overflow:auto;border:1px solid var(--g2);border-radius:8px;background:var(--card)">
-        <table style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed">
+      <div style="overflow-x:auto;overflow-y:auto;max-height:60vh;border:1px solid var(--g2);border-radius:8px;background:var(--card)">
+        <table style="width:100%;border-collapse:collapse;font-size:.68rem;table-layout:fixed;min-width:1200px">
           <thead><tr style="background:var(--g1);border-bottom:1px solid var(--g2)">
-            <th onclick="sortConsultants('name')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px;cursor:pointer">Name ⇅</th>
-            <th onclick="sortConsultants('currentRole')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:120px;cursor:pointer">Role ⇅</th>
-            <th onclick="sortConsultants('location')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:100px;cursor:pointer">Location ⇅</th>
-            <th onclick="sortConsultants('country')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px;cursor:pointer">Country ⇅</th>
-            <th onclick="sortConsultants('engagementType')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px;cursor:pointer">Type ⇅</th>
-            <th onclick="sortConsultants('availability')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:90px;cursor:pointer">Availability ⇅</th>
-            <th onclick="sortConsultants('pipelineStatus')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px;cursor:pointer">Pipeline ⇅</th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:120px">Skills</th>
-            <th onclick="sortConsultants('updatedAt')" style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px;cursor:pointer">Updated ⇅</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px"><span onclick="sortConsultants('name')" style="cursor:pointer">Name ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:120px"><span onclick="sortConsultants('currentRole')" style="cursor:pointer">Role ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:100px"><span onclick="sortConsultants('currentCompany')" style="cursor:pointer">Company ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:100px"><span onclick="sortConsultants('location')" style="cursor:pointer">Location ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px"><span onclick="sortConsultants('country')" style="cursor:pointer">Country ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px"><span onclick="sortConsultants('engagementType')" style="cursor:pointer">Type ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:90px"><span onclick="sortConsultants('availability')" style="cursor:pointer">Availability ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px"><span onclick="sortConsultants('pipelineStatus')" style="cursor:pointer">Pipeline ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:130px"><span onclick="sortConsultants('email')" style="cursor:pointer">Email / Phone ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px">Skills</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px"><span onclick="sortConsultants('updatedAt')" style="cursor:pointer">Updated ⇅</span></th>
             <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4);min-width:70px">Action</th>
           </tr></thead>
-          <tbody id="consBody"><tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
+          <tbody id="consBody"><tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
         </table>
+      </div>
+      <!-- Pagination -->
+      <div id="consPag" style="display:none;justify-content:center;align-items:center;gap:.4rem;margin-top:.6rem">
+        <button onclick="consGoPage(consCurPage-1)" id="consPrevBtn" style="padding:.25rem .6rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.6rem;cursor:pointer">‹ Prev</button>
+        <span id="consPageInfo" style="font-size:.6rem;color:var(--g5)"></span>
+        <button onclick="consGoPage(consCurPage+1)" id="consNextBtn" style="padding:.25rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Next ›</button>
       </div>
     </div>
     <div class="rp" style="display:none">
@@ -3518,6 +3526,7 @@ async function loadConsultants(){
     var d=await r.json();
     if(d.error){tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:#DC2626">'+esc(d.error)+'</td></tr>';return}
     consultantsData=d.consultants||[];
+    consCurPage=1;
     document.getElementById('consInfo').textContent=d.total+' consultant(s) in database.';
     sortConsultantsData();
     renderConsultants();
@@ -3530,7 +3539,7 @@ function refreshConsultants(){loadConsultants()}
 
 function sortConsultants(col){
   if(consSortCol===col)consSortDir=-consSortDir;else{consSortCol=col;consSortDir=1}
-  sortConsultantsData();renderConsultants();
+  consCurPage=1;sortConsultantsData();renderConsultants();
 }
 function sortConsultantsData(){
   consultantsData.sort(function(a,b){
@@ -3571,30 +3580,46 @@ function pipelineBadge(s){
   if(s==='placed')(col='#4338CA',bg='#EEF2FF');
   return '<span style="font-size:.48rem;background:'+bg+';color:'+col+';padding:.1rem .3rem;border-radius:3px;font-weight:600">'+esc(PIPELINE_LABELS[s]||s)+'</span>';
 }
+var consCurPage=1,consPerPage=25;
 function renderConsultants(){
   var tb=document.getElementById('consBody');
-  if(!consultantsData.length){tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">No consultants found. Use "+ Add Profile", or (admin) "Import Cached Profiles" to test.</td></tr>';return}
+  if(!consultantsData.length){tb.innerHTML='<tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">No consultants found. Use "+ Add Profile", or (admin) "Import Cached Profiles" to test.</td></tr>';document.getElementById('consPag').style.display='none';return}
+  var tot=consultantsData.length,tp=Math.ceil(tot/consPerPage);
+  if(consCurPage>tp)consCurPage=tp;if(consCurPage<1)consCurPage=1;
+  var start=(consCurPage-1)*consPerPage,end=Math.min(start+consPerPage,tot);
+  var pageItems=consultantsData.slice(start,end);
   var h='';
-  consultantsData.forEach(function(c){
-    var skills=(c.skills||[]).slice(0,5).join(', ')+((c.skills||[]).length>5?'…':'');
+  pageItems.forEach(function(c){
+    var skills=(c.skills||[]).slice(0,4).join(', ')+((c.skills||[]).length>4?'…':'');
     var avail=c.availability||'available';
     var availDate=(avail==='busy'||avail==='placed')&&c.availableFrom?' <span style="font-size:.46rem;color:var(--g4)">till '+fmtDate(c.availableFrom)+'</span>':'';
     var claim=c.claimedBy?' <span title="Being worked by '+esc(c.claimedBy)+'" style="font-size:.45rem;color:#B45309">🔒</span>':'';
+    var contact=(c.email?esc(c.email):'')+(c.email&&c.phone?'<br>':'')+(c.phone?'<span style="color:var(--g4)">'+esc(c.phone)+'</span>':'');
+    if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
     h+='<tr style="border-bottom:1px solid var(--g1)">'
-      +'<td style="padding:.4rem .5rem;font-weight:600">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+'</td>'
-      +'<td style="padding:.4rem .5rem">'+esc(c.currentRole||c.headline||'—')+'</td>'
-      +'<td style="padding:.4rem .5rem;color:var(--g5)">'+esc(c.location||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+'</td>'
+      +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5)">'+esc(c.country||'—')+'</td>'
       +'<td style="padding:.4rem .5rem">'+typeBadgeCons(c.engagementType)+'</td>'
       +'<td style="padding:.4rem .5rem">'+availBadge(avail)+availDate+'</td>'
       +'<td style="padding:.4rem .5rem">'+pipelineBadge(c.pipelineStatus)+'</td>'
-      +'<td style="padding:.4rem .5rem;color:var(--g5)" title="'+esc((c.skills||[]).join(', '))+'">'+esc(skills||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;font-size:.55rem;overflow:hidden;text-overflow:ellipsis">'+contact+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc((c.skills||[]).join(', '))+'">'+esc(skills||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g4);font-size:.55rem">'+(c.updatedAt?fmtDate(c.updatedAt):'—')+'</td>'
       +'<td style="padding:.4rem .5rem;text-align:center"><button class="vb" onclick="openManageProfile(\''+c._id+'\')">'+(CAP.canStatus?'Manage':'View')+'</button></td>'
       +'</tr>';
   });
   tb.innerHTML=h;
+  // pager
+  var pag=document.getElementById('consPag');
+  pag.style.display=tp>1?'flex':'none';
+  document.getElementById('consPrevBtn').style.visibility=consCurPage>1?'visible':'hidden';
+  document.getElementById('consNextBtn').style.visibility=consCurPage<tp?'visible':'hidden';
+  document.getElementById('consPageInfo').textContent='Page '+consCurPage+' of '+tp+' ('+tot+' total)';
 }
+function consGoPage(p){var tp=Math.ceil(consultantsData.length/consPerPage);if(p<1||p>tp)return;consCurPage=p;renderConsultants()}
 function openManageProfile(id){alert('Manage Profile popup — built in Stage 2. ID: '+id)}
 function openAddConsultant(){alert('Add Profile form — built in Stage 2')}
 // ============ END CONSULTANT DATABASE ============

@@ -20,7 +20,7 @@ const CACHE_COLLECTION = 'consultant_profiles';
 
 // Pipeline statuses in canonical order (Phase A onboarding -> Phase B placement)
 var PIPELINE_STATUSES = [
-  'none', 'contacted', 'interested', 'not_interested', 'contacted_no_response',
+  'none', 'not_eligible', 'contacted', 'interested', 'not_interested', 'contacted_no_response',
   'screening_pending', 'screening_in_progress', 'screening_failed', 'screening_successful',
   'negotiations_in_progress', 'secvision_agreement_signing', 'secvision_agreement_signed',
   'proposed_to_client', 'interview_in_progress', 'client_interview_successful', 'client_interview_failed',
@@ -30,7 +30,7 @@ var PIPELINE_STATUSES = [
 var HARD_LOCK_STAGES = ['client_agreement_signing', 'client_agreement_signed', 'placed'];
 // Stages representing an ACTIVE working claim
 var ACTIVE_CLAIM_STAGES = PIPELINE_STATUSES.filter(function (s) {
-  return s !== 'none' && s !== 'not_interested' && s !== 'contacted_no_response' && s !== 'screening_failed' && s !== 'client_interview_failed';
+  return s !== 'none' && s !== 'not_eligible' && s !== 'not_interested' && s !== 'contacted_no_response' && s !== 'screening_failed' && s !== 'client_interview_failed';
 });
 
 const hdrs = {
@@ -80,6 +80,40 @@ function validateToken(event) {
   return { email: (c.preferred_username || c.email || c.upn || '').toLowerCase(), name: c.name || '' };
 }
 
+// Derive country from a location string (city/state/country embedded)
+function deriveCountryFromLocation(loc) {
+  if (!loc) return '';
+  var l = loc.trim();
+  // explicit country name wins
+  if (/\bunited states\b|\busa\b|\bu\.s\.\b/i.test(l)) return 'United States';
+  if (/\bcanada\b/i.test(l)) return 'Canada';
+  if (/\bunited kingdom\b|\buk\b|\bengland\b|\bscotland\b|\bwales\b/i.test(l)) return 'United Kingdom';
+  if (/\baustralia\b/i.test(l)) return 'Australia';
+  if (/\bindia\b/i.test(l)) return 'India';
+  if (/\bgermany\b/i.test(l)) return 'Germany';
+  if (/\bfrance\b/i.test(l)) return 'France';
+  if (/\bsingapore\b/i.test(l)) return 'Singapore';
+  if (/\bnetherlands\b/i.test(l)) return 'Netherlands';
+  if (/\bireland\b/i.test(l)) return 'Ireland';
+  if (/\bunited arab emirates\b|\buae\b|\bdubai\b|\babu dhabi\b/i.test(l)) return 'United Arab Emirates';
+  if (/\bsaudi arabia\b/i.test(l)) return 'Saudi Arabia';
+  // US state codes/names (a sample of common ones)
+  if (/\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/.test(l) &&
+      /\b[A-Z]{2}\b/.test(l)) return 'United States';
+  if (/\b(california|texas|new york|florida|virginia|washington|massachusetts|illinois|georgia|arizona|colorado|maryland)\b/i.test(l)) return 'United States';
+  // US metro-area labels
+  if (/\b(San Francisco|New York|Washington|Boston|Chicago|Seattle|Austin|Atlanta|Dallas|Denver|Los Angeles|Miami)\b/i.test(l)) return 'United States';
+  // Canada cities
+  if (/\b(Toronto|Vancouver|Montreal|Ottawa|Calgary|Edmonton|Winnipeg)\b/i.test(l)) return 'Canada';
+  // India cities
+  if (/\b(Bangalore|Bengaluru|Mumbai|Hyderabad|Pune|Delhi|Chennai|Kolkata|Noida|Gurgaon|Gurugram)\b/i.test(l)) return 'India';
+  // UK cities
+  if (/\b(London|Manchester|Birmingham|Leeds|Glasgow|Edinburgh|Bristol|Swansea)\b/i.test(l)) return 'United Kingdom';
+  // Australia
+  if (/\b(Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra)\b/i.test(l)) return 'Australia';
+  return '';
+}
+
 // ---- auto-availability: flip busy→available when the availableFrom / placement end has passed ----
 function applyAutoAvailability(p) {
   if (!p) return p;
@@ -92,6 +126,14 @@ function applyAutoAvailability(p) {
       p.availability = 'available';
       p.availableFrom = null;
       p._autoFreed = true; // marker so caller can persist
+    }
+  }
+  // Auto-timeout: 'contacted' with no progression for >3 days -> 'contacted_no_response'
+  if (p.pipelineStatus === 'contacted') {
+    var since = p.contactedAt ? new Date(p.contactedAt) : (p.updatedAt ? new Date(p.updatedAt) : null);
+    if (since && !isNaN(since.getTime())) {
+      var days = (now - since) / (1000 * 60 * 60 * 24);
+      if (days > 3) { p.pipelineStatus = 'contacted_no_response'; p.claimedBy = null; p.claimedAt = null; p._autoTimedOut = true; }
     }
   }
   return p;
@@ -174,7 +216,10 @@ exports.handler = async function (event) {
       var freedOps = [];
       list.forEach(function (p) {
         applyAutoAvailability(p);
-        if (p._autoFreed) { freedOps.push({ updateOne: { filter: { _id: p._id }, update: { $set: { availability: 'available', availableFrom: null } } } }); delete p._autoFreed; }
+        var setFields = {};
+        if (p._autoFreed) { setFields.availability = 'available'; setFields.availableFrom = null; delete p._autoFreed; }
+        if (p._autoTimedOut) { setFields.pipelineStatus = 'contacted_no_response'; setFields.claimedBy = null; setFields.claimedAt = null; delete p._autoTimedOut; }
+        if (Object.keys(setFields).length) freedOps.push({ updateOne: { filter: { _id: p._id }, update: { $set: setFields } } });
         p._id = p._id.toString();
       });
       if (freedOps.length) { try { await col.bulkWrite(freedOps); } catch (e) {} }
@@ -199,7 +244,7 @@ exports.handler = async function (event) {
       var doc = {
         managed: true, source: c.source || 'manual', sourceId: c.sourceId || ('manual-' + Date.now()),
         name: c.name, headline: c.headline || '', currentRole: c.currentRole || '', currentCompany: c.currentCompany || '',
-        location: c.location || '', country: c.country || '', linkedinUrl: c.linkedinUrl || '',
+        location: c.location || '', country: c.country || deriveCountryFromLocation(c.location || ''), linkedinUrl: c.linkedinUrl || '',
         email: c.email || '', phone: c.phone || '',
         skills: Array.isArray(c.skills) ? c.skills : (c.skills ? String(c.skills).split(',').map(function (s) { return s.trim(); }) : []),
         certifications: Array.isArray(c.certifications) ? c.certifications : (c.certifications ? String(c.certifications).split(',').map(function (s) { return s.trim(); }) : []),
@@ -298,6 +343,7 @@ exports.handler = async function (event) {
       }
 
       var set = { pipelineStatus: newStatus, updatedAt: new Date(), updatedBy: authUser.email };
+      if (newStatus === 'contacted') set.contactedAt = new Date();  // start the 3-day timeout clock
       set['pipelineHistory'] = undefined; // placeholder to avoid accidental overwrite
       delete set.pipelineHistory;
 
@@ -360,6 +406,14 @@ exports.handler = async function (event) {
         { managed: true, engagementType: { $exists: false } },
         { $set: { engagementType: 'Unknown' } }
       );
+      // Derive country from location for promoted profiles missing it
+      var needCountry = await col.find({ managed: true, $or: [{ country: { $exists: false } }, { country: '' }, { country: null }], location: { $nin: [null, ''] } }).limit(2000).toArray();
+      var cOps = [];
+      needCountry.forEach(function (p) {
+        var ctry = deriveCountryFromLocation(p.location || '');
+        if (ctry) cOps.push({ updateOne: { filter: { _id: p._id }, update: { $set: { country: ctry } } } });
+      });
+      if (cOps.length) { try { await col.bulkWrite(cOps); } catch (e) {} }
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ promoted: res.modifiedCount || 0 }) };
     }
 
