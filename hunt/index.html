@@ -408,6 +408,8 @@ body.role-viewer .edit-btn{display:none!important}
 <script>
 var msalConfig={auth:{clientId:'dc517c46-dcf0-4d38-80e0-3cda854a5d59',authority:'https://login.microsoftonline.com/06f8ce50-3995-4966-9e25-7cfd7cd94a81',redirectUri:location.origin+'/hunt/',postLogoutRedirectUri:location.origin+'/hunt/'},cache:{cacheLocation:'sessionStorage'}};
 var msal_=new msal.PublicClientApplication(msalConfig),curUser=null,allJobs=[],filtered=[],curPage=1,perPage=25,sortCol='',sortDir=1,colFilters={};
+// Block pagination: server-side total + how to fetch the next block of results
+var serverTotal=0,loadedBlocks=1,BLOCK_SIZE=500,lastSearchParams=null;
 var COLS=[
   {key:'idx',label:'#',w:30,num:true},
   {key:'date',label:'Date',w:68,dateSort:true},
@@ -758,10 +760,12 @@ async function searchDb(){
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Searching database...';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
+    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo};
+    loadedBlocks=1;
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,limit:500})});
+      body:JSON.stringify(Object.assign({},lastSearchParams,{limit:BLOCK_SIZE,page:1}))});
     if(!r.ok)throw new Error('Failed');var data=await r.json();
-    allJobs=data.jobs||[];
+    allJobs=data.jobs||[];serverTotal=data.total||allJobs.length;
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     document.getElementById('dbInfo').textContent='Found '+data.total+' jobs in database.';
     colFilters={};sortCol='';sortDir=1;
@@ -1307,9 +1311,14 @@ function renderTable(){
   // #323: Show DB export buttons when in DB mode with results (manager+ via role CSS)
   var dbExp=document.getElementById('dbExportBtns');
   if(dbExp)dbExp.style.display=(searchMode==='db'&&filtered.length>0)?'flex':'none';
-  var tot=filtered.length,tp=Math.ceil(tot/perPage);if(curPage>tp)curPage=tp||1;
+  // Block pagination: when no client-side column filters are active and the server has more
+  // results than we've loaded, size the pager to the SERVER total so all pages are reachable.
+  var noClientFilter=Object.keys(colFilters).length===0;
+  var useServerTotal=noClientFilter && serverTotal>filtered.length && lastSearchParams;
+  var tot=useServerTotal?serverTotal:filtered.length;
+  var tp=Math.ceil(tot/perPage);if(curPage>tp)curPage=tp||1;
   var s=(curPage-1)*perPage,e=Math.min(s+perPage,tot),pg=filtered.slice(s,e);
-  document.getElementById('rCount').innerHTML='Showing <strong>'+(s+1)+'-'+e+'</strong> of <strong>'+tot+'</strong>'+(tot!==allJobs.length?' (filtered from '+allJobs.length+')':'');
+  document.getElementById('rCount').innerHTML='Showing <strong>'+(s+1)+'-'+e+'</strong> of <strong>'+tot+'</strong>'+(!useServerTotal&&tot!==allJobs.length?' (filtered from '+allJobs.length+')':'');
   document.getElementById('pagInfo').textContent='Page '+curPage+' of '+tp;
   var tb=document.getElementById('rBody');tb.innerHTML='';
   pg.forEach(function(j){
@@ -1411,7 +1420,32 @@ function renderPag(tp){
   var nx=document.createElement('button');nx.className='pb';nx.innerHTML='&raquo;';nx.disabled=curPage===tp;nx.onclick=function(){goPage(curPage+1)};c.appendChild(nx);
 }
 function addPB(c,n){var b=document.createElement('button');b.className='pb'+(n===curPage?' act':'');b.textContent=n;b.onclick=function(){goPage(n)};c.appendChild(b)}
-function goPage(p){if(p<1)return;curPage=p;renderTable();document.getElementById('tableWrap').scrollTop=0}
+async function goPage(p){
+  if(p<1)return;
+  // Block pagination: if this page needs records beyond what's loaded, fetch the next block(s)
+  var needIndex=p*perPage; // records required to render page p
+  var noClientFilter=Object.keys(colFilters).length===0;
+  if(noClientFilter && lastSearchParams && needIndex>allJobs.length && allJobs.length<serverTotal){
+    await loadNextBlock();
+  }
+  curPage=p;renderTable();document.getElementById('tableWrap').scrollTop=0;
+}
+async function loadNextBlock(){
+  if(!lastSearchParams)return;
+  var pag=document.getElementById('rCount');if(pag)pag.innerHTML='Loading more results...';
+  try{
+    var params=Object.assign({},lastSearchParams,{page:loadedBlocks+1,limit:BLOCK_SIZE});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)});
+    var data=await r.json();
+    var more=data.jobs||[];
+    var base=allJobs.length;
+    more.forEach(function(j,i){j.idx=base+i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs=allJobs.concat(more);
+    filtered=allJobs.slice(); // no client filter active in this path
+    loadedBlocks++;
+    serverTotal=data.total||serverTotal;
+  }catch(e){/* keep what we have */}
+}
 function jumpPage(){var v=parseInt(document.getElementById('pjInput').value);if(v>=1){goPage(v);document.getElementById('pjInput').value=''}}
 
 var currentViewIdx=-1;
@@ -2864,10 +2898,12 @@ function searchDashPie(field,value){
 
   authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(params)})
   .then(function(r){return r.json()}).then(function(data){
-    allJobs=data.jobs||[];
+    allJobs=data.jobs||[];serverTotal=data.total||allJobs.length;
+    lastSearchParams=Object.assign({},params);delete lastSearchParams.limit;delete lastSearchParams.sort;lastSearchParams.sort=params.sort;
+    loadedBlocks=1;colFilters={};
     allJobs.forEach(function(j,i){j.idx=i+1;j.date=j.datePosted?fmtDate(j.datePosted):'N/A';j.dateRaw=j.datePosted||'';j.status=j.status||'new';j.companyType=j.companyType||''});
     filtered=allJobs.slice();renderTable();
-    document.getElementById('apiText').textContent='DB: '+allJobs.length+' results for '+field+'='+value;
+    document.getElementById('apiText').textContent='DB: '+data.total+' results for '+field+'='+value+(data.total>allJobs.length?' (showing '+allJobs.length+', page through for more)':'');
     document.getElementById('exportBtns').style.display=allJobs.length?'flex':'none';
   }).catch(function(e){
     document.getElementById('loadState').textContent='Error: '+e.message;

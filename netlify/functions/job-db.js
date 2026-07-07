@@ -302,6 +302,8 @@ exports.handler = async (event) => {
       var limit = body.limit || 100;
       var skip = (page - 1) * limit;
       var sort = body.sort ? (typeof body.sort === 'string' ? JSON.parse(body.sort) : body.sort) : { dateScanned: -1 };
+      // Add _id as a deterministic tiebreaker so skip/limit block pagination is stable (no dupes/gaps)
+      if (!sort._id) sort._id = -1;
 
       filter = applyScope(filter); // #330 region/country scoping
       var total = await col.countDocuments(filter);
@@ -312,18 +314,20 @@ exports.handler = async (event) => {
         .limit(limit)
         .toArray();
 
-      // Hybrid sort: jobs with datePosted first (newest), nulls at end (by dateScanned)
-      jobs.sort(function(a, b) {
-        var aDate = a.datePosted ? new Date(a.datePosted).getTime() : 0;
-        var bDate = b.datePosted ? new Date(b.datePosted).getTime() : 0;
-        if (aDate && bDate) return bDate - aDate; // both have dates: newest first
-        if (aDate && !bDate) return -1; // a has date, b doesn't: a first
-        if (!aDate && bDate) return 1;  // b has date, a doesn't: b first
-        // both null: sort by dateScanned
-        var aScan = a.dateScanned ? new Date(a.dateScanned).getTime() : 0;
-        var bScan = b.dateScanned ? new Date(b.dateScanned).getTime() : 0;
-        return bScan - aScan;
-      });
+      // Hybrid sort: only for the first block / non-paginated requests. For block pagination
+      // (page > 1), rely on the deterministic DB sort so blocks don't overlap or reorder.
+      if (page <= 1) {
+        jobs.sort(function(a, b) {
+          var aDate = a.datePosted ? new Date(a.datePosted).getTime() : 0;
+          var bDate = b.datePosted ? new Date(b.datePosted).getTime() : 0;
+          if (aDate && bDate) return bDate - aDate;
+          if (aDate && !bDate) return -1;
+          if (!aDate && bDate) return 1;
+          var aScan = a.dateScanned ? new Date(a.dateScanned).getTime() : 0;
+          var bScan = b.dateScanned ? new Date(b.dateScanned).getTime() : 0;
+          return bScan - aScan;
+        });
+      }
 
       // Map _id to string and add idx
       jobs = jobs.map(function(j, i) {
