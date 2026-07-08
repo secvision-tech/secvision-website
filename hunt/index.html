@@ -4082,7 +4082,18 @@ async function runMatch(page){
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page})});
     var d=await safeMatchJson(r);
-    if(d.error){st.innerHTML='⚠️ '+esc(d.error)+(d.retry?' <button onclick="runMatch('+page+')" style="padding:.1rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Retry</button>':'');return}
+    if(d.error){
+      // Scoring timeouts are transient — each pass saves progress, so auto-retry a few times
+      if(/timed out|too long|gateway/i.test(d.error)&&(matchState._retries||0)<6){
+        matchState._retries=(matchState._retries||0)+1;
+        st.innerHTML='⏳ Scoring is taking a while, continuing... (pass '+matchState._retries+')';
+        setTimeout(function(){runMatch(page)},600);
+        return;
+      }
+      matchState._retries=0;
+      st.innerHTML='⚠️ '+esc(d.error)+(d.retry?' <button onclick="matchState._retries=0;runMatch('+page+')" style="padding:.1rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Retry</button>':'');return;
+    }
+    matchState._retries=0;
     if(d.moreToScore){
       st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)';
       if(d.matches&&d.matches.length)renderMatches(d);

@@ -218,17 +218,14 @@ async function scoreProfilesBatch(req, profiles, weights) {
   var compact = profiles.map(function (p, i) {
     return {
       i: i,
-      name: p.name,
-      headline: p.headline,
-      currentRole: p.currentRole,
+      role: p.currentRole || p.headline,
       years: p.yearsExperience,
-      contractorLikely: p.contractorSignal ? p.contractorSignal.likely : false,
-      skills: p.skills.slice(0, 40),
-      certs: p.certifications.slice(0, 20),
-      summary: (p.summary || '').slice(0, 400),
-      education: (p.education || []).map(function (e) { return (e.degree || '') + ' ' + (e.field || ''); }).filter(function (s) { return s.trim(); }).join('; '),
-      experience: (p.experience || []).slice(0, 4).map(function (e) {
-        return e.title + ' @ ' + e.company + ' (' + e.duration + ')' + (e.description ? ': ' + e.description.slice(0, 150) : '');
+      contractor: p.contractorSignal ? p.contractorSignal.likely : false,
+      skills: (p.skills || []).slice(0, 25),
+      certs: (p.certifications || []).slice(0, 12),
+      summary: (p.summary || '').slice(0, 200),
+      exp: (p.experience || []).slice(0, 3).map(function (e) {
+        return (e.title || '') + ' @ ' + (e.company || '') + (e.description ? ': ' + e.description.slice(0, 80) : '');
       })
     };
   });
@@ -262,13 +259,13 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'CANDIDATES (JSON array):\n' + JSON.stringify(compact) + '\n\n' +
     'For EACH candidate return an object with these 0-100 scores:\n' +
     '  skills, certifications, compliance, role, experience, rate' + (scoreEducation ? ', education' : '') + '\n' +
-    '(rate: 50 if unknown. For CONTRACT roles, factor contractor-availability into the "role" score.' +
-    (scoreEducation ? ' Score "education" 0-100 on how well the candidate\'s degree/field matches the required education.' : '') + ') Also a one-sentence "reason".\n' +
-    'Respond with ONLY a JSON array like:\n' +
+    '(rate: 50 if unknown. For CONTRACT roles, factor contractor-availability into "role".' +
+    (scoreEducation ? ' Score "education" 0-100 vs required education.' : '') + ') Add a SHORT "reason" (max 12 words).\n' +
+    'Respond with ONLY a JSON array, no other text:\n' +
     '[{"i":0,"skills":85,"certifications":70,"compliance":60,"role":90,"experience":80,"rate":50' + (scoreEducation ? ',"education":75' : '') + ',"reason":"..."}]';
 
   var ctrl = new AbortController();
-  var tmo = setTimeout(function () { ctrl.abort(); }, 18000);  // hard cap under Netlify's 26s
+  var tmo = setTimeout(function () { ctrl.abort(); }, 22000);  // hard cap just under Netlify's 26s
   var resp, data;
   try {
     resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -280,7 +277,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
       },
       body: JSON.stringify({
         model: SCORING_MODEL,
-        max_tokens: 2000,
+        max_tokens: 1200,
         system: sys,
         messages: [{ role: 'user', content: prompt }]
       }),
@@ -382,28 +379,36 @@ exports.handler = async function (event) {
       });
 
       // Score the unscored ones — but CAP per request to stay under Netlify's 26s limit.
-      // Large LLM batches (e.g. 100+ profiles) time out. Score up to SCORE_CAP now; the
-      // frontend can call again to score the rest (progressive scoring).
-      var SCORE_CAP = 15;
+      // Score in small sub-batches, persisting each, so a timeout doesn't lose all progress.
+      var SCORE_CAP = 8;
       var newlyScored = [];
       var moreToScore = false;
+      var scoreError = null;
       if (toScore.length) {
         if (toScore.length > SCORE_CAP) { moreToScore = true; toScore = toScore.slice(0, SCORE_CAP); }
         var gated = toScore.map(function (p) { return { p: p, gate: applyHardGates(req, p) }; });
         var passing = gated.filter(function (g) { return g.gate.passed; }).map(function (g) { return g.p; });
-        var llmScored = passing.length ? await scoreProfilesBatch(req, passing, weights) : [];
-        for (var i = 0; i < llmScored.length; i++) {
-          var r = llmScored[i];
-          var gate = gated.find(function (g) { return g.p.sourceId === r.profile.sourceId; });
-          var entry = { overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: gate ? gate.gate.flags : [], scoredAt: new Date() };
-          newlyScored.push({ profile: r.profile, overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: entry.flags });
-          try {
-            await cacheCol.updateOne({ _id: r.profile._id }, { $set: { ['matchCache.' + req.jobId]: entry } });
-          } catch (e) {}
+        try {
+          var SUB = 4;
+          for (var b = 0; b < passing.length; b += SUB) {
+            var chunk = passing.slice(b, b + SUB);
+            var llmScored = await scoreProfilesBatch(req, chunk, weights);
+            for (var i = 0; i < llmScored.length; i++) {
+              var r = llmScored[i];
+              var gate = gated.find(function (g) { return g.p.sourceId === r.profile.sourceId; });
+              var entry = { overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: gate ? gate.gate.flags : [], scoredAt: new Date() };
+              newlyScored.push({ profile: r.profile, overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: entry.flags });
+              try { await cacheCol.updateOne({ _id: r.profile._id }, { $set: { ['matchCache.' + req.jobId]: entry } }); } catch (e) {}
+            }
+          }
+          gated.filter(function (g) { return !g.gate.passed; }).forEach(function (g) {
+            newlyScored.push({ profile: g.p, overall: 0, dimensions: {}, reason: 'Disqualified: ' + g.gate.reasons.join('; '), flags: g.gate.flags, gatedOut: true });
+          });
+        } catch (scErr) {
+          // A sub-batch failed (e.g. timeout). Earlier sub-batches are saved; signal retry.
+          scoreError = scErr.message;
+          moreToScore = true;
         }
-        gated.filter(function (g) { return !g.gate.passed; }).forEach(function (g) {
-          newlyScored.push({ profile: g.p, overall: 0, dimensions: {}, reason: 'Disqualified: ' + g.gate.reasons.join('; '), flags: g.gate.flags, gatedOut: true });
-        });
       }
 
       var all = preScored.concat(newlyScored)
