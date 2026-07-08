@@ -4064,6 +4064,15 @@ async function openMatchProfiles(idx){
   runMatch(0);
 }
 function closeMatchPopup(){document.getElementById('matchPopup').style.display='none';matchState.polling=false}
+// Gracefully handle gateway timeouts (which return HTML, not JSON)
+async function safeMatchJson(r){
+  var txt=await r.text();
+  try{return JSON.parse(txt)}
+  catch(e){
+    if(/Inactivity Timeout|<HTML/i.test(txt))return {error:'The request took too long (gateway timeout). This can happen on the first fetch for a new role — please retry.',retry:true};
+    return {error:'Unexpected server response. Please retry.',retry:true};
+  }
+}
 
 async function runMatch(page){
   matchState.page=page;
@@ -4072,8 +4081,8 @@ async function runMatch(page){
   document.getElementById('matchResults').innerHTML='';
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page})});
-    var d=await r.json();
-    if(d.error){st.textContent='⚠️ '+d.error;return}
+    var d=await safeMatchJson(r);
+    if(d.error){st.innerHTML='⚠️ '+esc(d.error)+(d.retry?' <button onclick="runMatch('+page+')" style="padding:.1rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Retry</button>':'');return}
     if(d.moreToScore){
       st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)';
       if(d.matches&&d.matches.length)renderMatches(d);
@@ -4097,7 +4106,7 @@ async function topUpProfiles(){
   st.innerHTML='🔍 Searching LinkedIn for matching consultants...';
   try{
     var sr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'startTopUp',jobId:matchState.jobId})});
-    var sd=await sr.json();
+    var sd=await safeMatchJson(sr);
     if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')<br>Search: "'+esc(sd.sentKeywords||'')+'"</div>':'');return}
     matchState.polling=true;
     pollTopUp(sd.runId,sd.datasetId,0);
@@ -4111,7 +4120,9 @@ async function pollTopUp(runId,datasetId,tries){
   st.innerHTML='🔍 Fetching &amp; scoring consultant profiles... ('+(tries*8)+'s)';
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'checkTopUp',jobId:matchState.jobId,runId:runId,datasetId:datasetId})});
-    var d=await r.json();
+    var d=await safeMatchJson(r);
+    // a transient gateway/timeout error → keep polling (the run may still be finishing)
+    if(d.error&&d.retry){setTimeout(function(){pollTopUp(runId,datasetId,tries+1)},8000);return}
     if(d.error){st.textContent='⚠️ '+d.error;matchState.polling=false;return}
     if(!d.done){setTimeout(function(){pollTopUp(runId,datasetId,tries+1)},8000);return}
     matchState.polling=false;

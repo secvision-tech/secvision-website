@@ -267,21 +267,31 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Respond with ONLY a JSON array like:\n' +
     '[{"i":0,"skills":85,"certifications":70,"compliance":60,"role":90,"experience":80,"rate":50' + (scoreEducation ? ',"education":75' : '') + ',"reason":"..."}]';
 
-  var resp = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01'
-    },
-    body: JSON.stringify({
-      model: SCORING_MODEL,
-      max_tokens: 2000,
-      system: sys,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
-  var data = await resp.json();
+  var ctrl = new AbortController();
+  var tmo = setTimeout(function () { ctrl.abort(); }, 18000);  // hard cap under Netlify's 26s
+  var resp, data;
+  try {
+    resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01'
+      },
+      body: JSON.stringify({
+        model: SCORING_MODEL,
+        max_tokens: 2000,
+        system: sys,
+        messages: [{ role: 'user', content: prompt }]
+      }),
+      signal: ctrl.signal
+    });
+    data = await resp.json();
+  } catch (e) {
+    clearTimeout(tmo);
+    throw new Error(e.name === 'AbortError' ? 'Scoring timed out — try again (fewer profiles will score per pass)' : 'Scoring request failed: ' + e.message);
+  }
+  clearTimeout(tmo);
   if (data.error) throw new Error('Anthropic: ' + (data.error.message || JSON.stringify(data.error)));
 
   var text = (data.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; }).join('');
@@ -374,7 +384,7 @@ exports.handler = async function (event) {
       // Score the unscored ones — but CAP per request to stay under Netlify's 26s limit.
       // Large LLM batches (e.g. 100+ profiles) time out. Score up to SCORE_CAP now; the
       // frontend can call again to score the rest (progressive scoring).
-      var SCORE_CAP = 25;
+      var SCORE_CAP = 15;
       var newlyScored = [];
       var moreToScore = false;
       if (toScore.length) {
@@ -454,8 +464,21 @@ exports.handler = async function (event) {
       var runId = body.runId, datasetId = body.datasetId;
       if (!runId) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No runId' }) };
 
-      var statusResp = await fetch('https://api.apify.com/v2/actor-runs/' + runId + '?token=' + APIFY_TOKEN);
-      var statusData = await statusResp.json();
+      // helper: fetch with a hard timeout so a hung Apify call can't stall the whole function
+      async function fetchWithTimeout(url, opts, ms) {
+        var ctrl = new AbortController();
+        var t = setTimeout(function () { ctrl.abort(); }, ms || 12000);
+        try { var res = await fetch(url, Object.assign({}, opts, { signal: ctrl.signal })); return res; }
+        finally { clearTimeout(t); }
+      }
+
+      var statusData;
+      try {
+        var statusResp = await fetchWithTimeout('https://api.apify.com/v2/actor-runs/' + runId + '?token=' + APIFY_TOKEN, {}, 10000);
+        statusData = await statusResp.json();
+      } catch (e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, status: 'CHECKING', note: 'status check slow, will retry' }) };
+      }
       var status = statusData.data ? statusData.data.status : 'UNKNOWN';
       if (status === 'RUNNING' || status === 'READY') {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, status: status }) };
@@ -464,35 +487,43 @@ exports.handler = async function (event) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: true, status: status, error: 'Fetch ' + status }) };
       }
 
-      // Fetch raw profiles, normalize, upsert to cache (dedupe by sourceId)
-      var resultsResp = await fetch('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN + '&format=json');
-      var raw = await resultsResp.json();
+      // Fetch raw profiles (with timeout), normalize
+      var raw;
+      try {
+        var resultsResp = await fetchWithTimeout('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN + '&format=json&limit=' + FETCH_BATCH, {}, 15000);
+        raw = await resultsResp.json();
+      } catch (e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, status: 'FETCHING', note: 'results fetch slow, will retry' }) };
+      }
       var normalized = (raw || []).map(normalizeApifyProfile).filter(function (p) { return p.sourceId; });
 
-      // Upsert into cache (don't overwrite existing matchCache)
-      for (var i = 0; i < normalized.length; i++) {
-        var np = normalized[i];
-        await cacheCol.updateOne(
-          { source: np.source, sourceId: np.sourceId },
-          {
-            $set: {
-              name: np.name, headline: np.headline, location: np.location, industry: np.industry,
-              linkedinUrl: np.linkedinUrl, profilePicture: np.profilePicture,
-              skills: np.skills, certifications: np.certifications, currentRole: np.currentRole,
-              currentCompany: np.currentCompany, yearsExperience: np.yearsExperience,
-              experience: np.experience, summary: np.summary, education: np.education, languages: np.languages,
-              contractorSignal: np.contractorSignal,
-              workAuthorization: np.workAuthorization, securityClearance: np.securityClearance,
-              availability: np.availability, rateExpectation: np.rateExpectation,
-              source: np.source, sourceId: np.sourceId, fetchedAt: np.fetchedAt
-            },
-            $setOnInsert: { createdAt: new Date(), matchCache: {} }
-          },
-          { upsert: true }
-        );
+      // Upsert into cache in a SINGLE bulkWrite (fast) instead of 50 sequential writes
+      if (normalized.length) {
+        var ops = normalized.map(function (np) {
+          return {
+            updateOne: {
+              filter: { source: np.source, sourceId: np.sourceId },
+              update: {
+                $set: {
+                  name: np.name, headline: np.headline, location: np.location, industry: np.industry,
+                  linkedinUrl: np.linkedinUrl, profilePicture: np.profilePicture,
+                  skills: np.skills, certifications: np.certifications, currentRole: np.currentRole,
+                  currentCompany: np.currentCompany, yearsExperience: np.yearsExperience,
+                  experience: np.experience, summary: np.summary, education: np.education, languages: np.languages,
+                  contractorSignal: np.contractorSignal,
+                  workAuthorization: np.workAuthorization, securityClearance: np.securityClearance,
+                  availability: np.availability, rateExpectation: np.rateExpectation,
+                  source: np.source, sourceId: np.sourceId, fetchedAt: np.fetchedAt
+                },
+                $setOnInsert: { createdAt: new Date(), matchCache: {} }
+              },
+              upsert: true
+            }
+          };
+        });
+        try { await cacheCol.bulkWrite(ops, { ordered: false }); } catch (e) {}
       }
 
-      // Re-run matchCached logic to return fresh results
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: true, status: status, fetched: normalized.length, message: 'Fetched and cached ' + normalized.length + ' profiles. Re-run match.' }) };
     }
 
