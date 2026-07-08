@@ -59,6 +59,9 @@ var ACTION_ROLES = {
   'adoptConsultant': MANAGER_UP,
   'importResume': MANAGER_UP,
   'placeConsultant': MANAGER_UP,
+  'uploadResume': MANAGER_UP,
+  'getResume': VIEW_ROLES,
+  'removeResume': MANAGER_UP,
   'promoteAllCached': ADMIN_UP           // one-time cached -> managed transfer
 };
 
@@ -220,6 +223,8 @@ exports.handler = async function (event) {
         if (p._autoFreed) { setFields.availability = 'available'; setFields.availableFrom = null; delete p._autoFreed; }
         if (p._autoTimedOut) { setFields.pipelineStatus = 'contacted_no_response'; setFields.claimedBy = null; setFields.claimedAt = null; delete p._autoTimedOut; }
         if (Object.keys(setFields).length) freedOps.push({ updateOne: { filter: { _id: p._id }, update: { $set: setFields } } });
+        p.hasResume = !!(p.resume && p.resume.data);
+        if (p.resume) delete p.resume; // keep list payload light
         p._id = p._id.toString();
       });
       if (freedOps.length) { try { await col.bulkWrite(freedOps); } catch (e) {} }
@@ -233,6 +238,9 @@ exports.handler = async function (event) {
       if (!one) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
       applyAutoAvailability(one);
       if (one._autoFreed) { await col.updateOne({ _id: one._id }, { $set: { availability: 'available', availableFrom: null } }); delete one._autoFreed; }
+      // Don't ship the heavy resume blob in the profile fetch; just flag presence + filename
+      one.hasResume = !!(one.resume && one.resume.data);
+      if (one.resume) { one.resumeFileName = one.resume.fileName; delete one.resume; }
       one._id = one._id.toString();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ consultant: one }) };
     }
@@ -384,6 +392,29 @@ exports.handler = async function (event) {
       }
       await col.updateOne({ _id: pr._id }, { $set: { claimedBy: null, claimedAt: null, updatedAt: new Date() } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ released: true }) };
+    }
+
+    // ---- RESUME upload / get / remove (base64 in Mongo) ----
+    if (action === 'uploadResume') {
+      if (!body.fileData || !body.fileName) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'File data and name required' }) };
+      // size guard: base64 ~1.37x binary; cap ~8MB base64 (~6MB file) to stay well under 16MB doc limit
+      if (body.fileData.length > 8 * 1024 * 1024) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'File too large (max ~6MB)' }) };
+      await col.updateOne({ _id: new ObjectId(body.id) }, {
+        $set: {
+          resume: { fileName: body.fileName, mimeType: body.mimeType || 'application/octet-stream', data: body.fileData, uploadedAt: new Date(), uploadedBy: authUser.email },
+          updatedAt: new Date()
+        }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ uploaded: true, fileName: body.fileName }) };
+    }
+    if (action === 'getResume') {
+      var rp = await col.findOne({ _id: new ObjectId(body.id) }, { projection: { resume: 1 } });
+      if (!rp || !rp.resume) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'No resume on file' }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ fileName: rp.resume.fileName, mimeType: rp.resume.mimeType, data: rp.resume.data }) };
+    }
+    if (action === 'removeResume') {
+      await col.updateOne({ _id: new ObjectId(body.id) }, { $unset: { resume: '' }, $set: { updatedAt: new Date() } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ removed: true }) };
     }
 
     // ---- PROMOTE ALL CACHED -> MANAGED (one-time, super/admin) ----

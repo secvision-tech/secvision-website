@@ -403,8 +403,8 @@ body.role-viewer .edit-btn{display:none!important}
         <select id="consEngagement" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Types</option><option value="Contractor">Contractor</option><option value="Permanent">Permanent</option><option value="Unknown">Unknown</option></select>
         <select id="consAvailability" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Availability</option><option value="available">Available</option><option value="busy">Busy</option><option value="placed">Placed</option><option value="do_not_contact">Do Not Contact</option></select>
         <select id="consPipeline" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Pipeline Stages</option><option value="none">Not started</option><option value="contacted">Contacted</option><option value="interested">Interested</option><option value="not_interested">Not Interested</option><option value="contacted_no_response">No Response</option><option value="screening_pending">Screening Pending</option><option value="screening_in_progress">Screening In Progress</option><option value="screening_failed">Screening Failed</option><option value="screening_successful">Screening Passed</option><option value="negotiations_in_progress">Negotiations</option><option value="secvision_agreement_signing">SecVision Agreement Signing</option><option value="secvision_agreement_signed">SecVision Agreement Signed</option><option value="proposed_to_client">Proposed to Client</option><option value="interview_in_progress">Client Interview</option><option value="client_interview_successful">Interview Passed</option><option value="client_interview_failed">Interview Failed</option><option value="client_agreement_signing">Client Agreement Signing</option><option value="client_agreement_signed">Client Agreement Signed</option><option value="placed">Placed</option></select>
-        <select id="consRegion" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Regions</option><option value="NA">North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select>
-        <select id="consPeriod" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">Any Time</option><option value="1">Last 24h</option><option value="3">Last 3 days</option><option value="7">Last week</option><option value="14">Last 2 weeks</option><option value="30">Last month</option><option value="180">Last 6 months</option><option value="365">Last 1 year</option></select>
+        <select id="consRegion" class="set-input" style="width:auto;font-size:.62rem" onchange="consRegionChange()"><option value="all">All Regions</option><option value="NA">North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select>
+        <select id="consCountry" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Countries</option></select>
         <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.2rem;cursor:pointer"><input type="checkbox" id="consCertified" onchange="renderConsultants()" style="cursor:pointer">⭐ Certified only</label>
         <button onclick="loadConsultants()" style="padding:.35rem .7rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Search</button>
       </div>
@@ -3507,21 +3507,36 @@ var cfCompany='',cfDomain='',cfLinkedin='';
 // ============ CONSULTANT DATABASE ============
 var consultantsData=[];
 var consSortCol='updatedAt',consSortDir=-1;
-var PIPELINE_LABELS={none:'Not started',contacted:'Contacted',interested:'Interested',not_interested:'Not Interested',contacted_no_response:'No Response',screening_pending:'Screening Pending',screening_in_progress:'Screening',screening_failed:'Screening Failed',screening_successful:'Screening Passed',negotiations_in_progress:'Negotiations',secvision_agreement_signing:'SV Agreement Signing',secvision_agreement_signed:'SV Agreement Signed',proposed_to_client:'Proposed to Client',interview_in_progress:'Client Interview',client_interview_successful:'Interview Passed',client_interview_failed:'Interview Failed',client_agreement_signing:'Client Agmt Signing',client_agreement_signed:'Client Agmt Signed',placed:'Placed'};
+var REGION_COUNTRIES={
+  'NA':['United States','Canada','Mexico'],
+  'EU':['United Kingdom','Germany','France','Netherlands','Ireland','Switzerland','Sweden','Spain','Italy','Poland'],
+  'AP':['India','Australia','Singapore','Japan','South Korea','New Zealand','Malaysia','Philippines'],
+  'ME':['United Arab Emirates','Saudi Arabia','Israel','Qatar'],
+  'AF':['South Africa','Nigeria','Kenya','Egypt'],
+  'SA':['Brazil','Argentina','Chile','Colombia']
+};
+function consRegionChange(){
+  var region=document.getElementById('consRegion').value;
+  var sel=document.getElementById('consCountry');
+  sel.innerHTML='<option value="all">All Countries</option>';
+  if(region!=='all'&&REGION_COUNTRIES[region]){
+    REGION_COUNTRIES[region].forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;sel.appendChild(o)});
+  }
+  loadConsultants();
+}
+var PIPELINE_LABELS={none:'Not started',not_eligible:'Not Eligible',contacted:'Contacted',interested:'Interested',not_interested:'Not Interested',contacted_no_response:'No Response',screening_pending:'Screening Pending',screening_in_progress:'Screening',screening_failed:'Screening Failed',screening_successful:'Screening Passed',negotiations_in_progress:'Negotiations',secvision_agreement_signing:'SV Agreement Signing',secvision_agreement_signed:'SV Agreement Signed',proposed_to_client:'Proposed to Client',interview_in_progress:'Client Interview',client_interview_successful:'Interview Passed',client_interview_failed:'Interview Failed',client_agreement_signing:'Client Agmt Signing',client_agreement_signed:'Client Agmt Signed',placed:'Placed'};
 
 async function loadConsultants(){
   var tb=document.getElementById('consBody');if(!tb)return;
-  tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
-  var period=document.getElementById('consPeriod').value;
-  var dateFrom='';
-  if(period!=='all'){var d=new Date();d.setDate(d.getDate()-parseInt(period));dateFrom=d.toISOString().slice(0,10);}
+  tb.innerHTML='<tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
   var params={action:'listConsultants',
     query:document.getElementById('consQuery').value.trim(),
     engagementType:document.getElementById('consEngagement').value,
     availability:document.getElementById('consAvailability').value,
     pipelineStatus:document.getElementById('consPipeline').value,
     region:document.getElementById('consRegion').value,
-    dateFrom:dateFrom,limit:300};
+    country:document.getElementById('consCountry').value,
+    limit:300};
   try{
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(params)});
     var d=await r.json();
@@ -3702,6 +3717,12 @@ function renderManageProfile(){
       +[['available','Available'],['busy','Busy'],['placed','Placed'],['do_not_contact','Do Not Contact']].map(function(a){return '<option value="'+a[0]+'"'+(c.availability===a[0]?' selected':'')+'>'+a[1]+'</option>'}).join('')+'</select></div>';
     h+='</div>';
     h+='<div id="mpAvailFromWrap" style="margin-top:.4rem;'+((c.availability==='busy')?'':'display:none')+'"><label style="font-size:.55rem;color:var(--g4)">Available from</label><input type="date" id="mpAvailFrom" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.availableFrom?new Date(c.availableFrom).toISOString().slice(0,10):'')+'"></div>';
+    // #361: citizenship, hourly rate, security clearance
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Work Auth / Citizenship</label><input id="mpWorkAuth" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')+'" placeholder="US Citizen, GC, H1B..."></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Security Clearance</label><input id="mpClearance" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.securityClearance&&c.securityClearance!=='unknown'?c.securityClearance:'')+'" placeholder="None, Secret, TS..."></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Expected Rate</label><input id="mpRate" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.rateExpectation||'')+'" placeholder="$85/hr, £450/day"></div>';
+    h+='</div>';
     h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.62rem">'
       +Object.keys(PIPELINE_LABELS).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+'>'+PIPELINE_LABELS[k]+'</option>'}).join('')+'</select></div>';
     h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileStatus()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Status</button>';
@@ -3720,6 +3741,19 @@ function renderManageProfile(){
     h+='<button onclick="enrichProfile()" id="mpEnrichBtn" style="padding:.35rem .8rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Enrich (Apollo)</button></div>';
   }else{
     h+=fld('Email',esc(c.email))+fld('Phone',esc(c.phone));
+  }
+  h+='</div>';
+
+  // ---- Resume (#363) ----
+  h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Resume / CV</div>';
+  if(c.hasResume){
+    h+='<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap"><span style="font-size:.6rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
+      +'<button onclick="viewResume()" style="padding:.25rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">View</button>';
+    if(canEdit)h+='<button onclick="removeResume()" style="padding:.25rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">Remove</button>';
+    h+='</div>';
+  }else{
+    if(canEdit)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.58rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.52rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    else h+='<span style="font-size:.6rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';
 
@@ -3749,6 +3783,12 @@ async function saveProfileStatus(){
       engagementType:document.getElementById('mpType').value,
       availability:document.getElementById('mpAvail').value,
       availableFrom:document.getElementById('mpAvail').value==='busy'?document.getElementById('mpAvailFrom').value:null})});
+    // #361: save citizenship, clearance, rate via updateConsultant
+    var extra={};
+    var wa=document.getElementById('mpWorkAuth');if(wa)extra.workAuthorization=wa.value.trim()||'unknown';
+    var cl=document.getElementById('mpClearance');if(cl)extra.securityClearance=cl.value.trim()||'unknown';
+    var rt=document.getElementById('mpRate');if(rt)extra.rateExpectation=rt.value.trim();
+    if(Object.keys(extra).length)await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:manageProfileId,updates:extra})});
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
     var d=await r.json();
     if(d.error==='claimed'){
@@ -3808,6 +3848,37 @@ async function deleteProfile(){
   if(!confirm('Delete this profile permanently?'))return;
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deleteConsultant',id:manageProfileId})});
     closeManageProfile();loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
+async function uploadResume(){
+  var fi=document.getElementById('mpResumeFile');if(!fi||!fi.files[0]){mpMsg('Choose a file first.','#B45309');return}
+  var file=fi.files[0];
+  if(file.size>6*1024*1024){mpMsg('File too large (max ~6MB).','#DC2626');return}
+  var btn=document.getElementById('mpResumeUploadBtn');btn.textContent='Uploading...';btn.disabled=true;
+  try{
+    var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result.split(',')[1])};r.onerror=rej;r.readAsDataURL(file)});
+    await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'uploadResume',id:manageProfileId,fileName:file.name,mimeType:file.type,fileData:b64})});
+    mpMsg('✅ Resume uploaded.','#047857');openManageProfile(manageProfileId);loadConsultants();
+  }catch(e){mpMsg('Upload error: '+e.message,'#DC2626');btn.textContent='Upload';btn.disabled=false}
+}
+async function viewResume(){
+  mpMsg('Loading resume...','var(--pri)');
+  try{
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'getResume',id:manageProfileId})});
+    var d=await r.json();
+    if(d.error){mpMsg(d.error,'#B45309');return}
+    // build blob and open in new tab
+    var bin=atob(d.data);var arr=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    var blob=new Blob([arr],{type:d.mimeType||'application/octet-stream'});
+    var url=URL.createObjectURL(blob);
+    window.open(url,'_blank');
+    mpMsg('','var(--pri)');
+  }catch(e){mpMsg('View error: '+e.message,'#DC2626')}
+}
+async function removeResume(){
+  if(!confirm('Remove this resume?'))return;
+  try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'removeResume',id:manageProfileId})});
+    mpMsg('✅ Resume removed.','#047857');openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 function openAddConsultant(){
