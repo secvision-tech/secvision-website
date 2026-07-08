@@ -371,15 +371,17 @@ exports.handler = async function (event) {
         else toScore.push(p);
       });
 
-      // Score the unscored ones (batched) and persist to their matchCache
+      // Score the unscored ones — but CAP per request to stay under Netlify's 26s limit.
+      // Large LLM batches (e.g. 100+ profiles) time out. Score up to SCORE_CAP now; the
+      // frontend can call again to score the rest (progressive scoring).
+      var SCORE_CAP = 25;
       var newlyScored = [];
+      var moreToScore = false;
       if (toScore.length) {
-        // gate first
+        if (toScore.length > SCORE_CAP) { moreToScore = true; toScore = toScore.slice(0, SCORE_CAP); }
         var gated = toScore.map(function (p) { return { p: p, gate: applyHardGates(req, p) }; });
         var passing = gated.filter(function (g) { return g.gate.passed; }).map(function (g) { return g.p; });
-        var llmScored = await scoreProfilesBatch(req, passing, weights);
-        // persist
-        var ObjectId = require('mongodb').ObjectId;
+        var llmScored = passing.length ? await scoreProfilesBatch(req, passing, weights) : [];
         for (var i = 0; i < llmScored.length; i++) {
           var r = llmScored[i];
           var gate = gated.find(function (g) { return g.p.sourceId === r.profile.sourceId; });
@@ -389,7 +391,6 @@ exports.handler = async function (event) {
             await cacheCol.updateOne({ _id: r.profile._id }, { $set: { ['matchCache.' + req.jobId]: entry } });
           } catch (e) {}
         }
-        // failed-gate profiles → record as gated-out (overall 0, reasons)
         gated.filter(function (g) { return !g.gate.passed; }).forEach(function (g) {
           newlyScored.push({ profile: g.p, overall: 0, dimensions: {}, reason: 'Disqualified: ' + g.gate.reasons.join('; '), flags: g.gate.flags, gatedOut: true });
         });
@@ -406,7 +407,8 @@ exports.handler = async function (event) {
           matches: pageItems.map(formatMatch),
           page: page, hasMore: all.length > start + PAGE_SIZE,
           totalMatches: all.length, cachedCount: cached.length,
-          needsTopUp: all.length < PAGE_SIZE
+          moreToScore: moreToScore,
+          needsTopUp: all.length < PAGE_SIZE && !moreToScore
         })
       };
     }

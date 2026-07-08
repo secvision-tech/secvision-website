@@ -3791,13 +3791,15 @@ function renderManageProfile(){
     var pi=c.placementInfo||{};
     h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Client</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.client||'')+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Role</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.role||'')+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Start</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">End</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
-    h+='</div><button onclick="savePlacement()" style="padding:.35rem .8rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;margin-top:.5rem">Mark as Placed</button></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Client *</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.client||'')+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Role *</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.role||'')+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Start Date *</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">End Date (optional)</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div style="grid-column:1/3"><label style="font-size:.55rem;color:var(--g4)">Rate Agreed</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
+    h+='</div><button onclick="savePlacement()" style="padding:.35rem .8rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;margin-top:.5rem">'+(isPlaced?'Update / Re-place':'Mark as Placed')+'</button>';
+    h+=placementHistoryHtml(c);
+    h+='</div>';
   }else if(isPlaced){
-    // #372: analyst/manager (frozen) sees placement details read-only
     var pir=c.placementInfo||{};
     h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem">';
@@ -3805,7 +3807,10 @@ function renderManageProfile(){
     h+=fld('Role',esc(pir.role));
     h+=fld('Start',pir.startDate?fmtDate(pir.startDate):'—');
     h+=fld('End',pir.endDate?fmtDate(pir.endDate):'—');
-    h+='</div></div>';
+    h+=fld('Rate',esc(pir.rateAgreed));
+    h+='</div>';
+    h+=placementHistoryHtml(c);
+    h+='</div>';
   }
 
   if(curUserRole==='admin'||curUserRole==='super_admin'){
@@ -3827,12 +3832,17 @@ function mpMsg(msg,color){
 }
 
 async function saveProfileStatus(){
-  var body={action:'setPipelineStatus',id:manageProfileId,pipelineStatus:document.getElementById('mpPipeline').value};
+  // #377: keep availability and pipeline consistent — if either is 'placed', both become 'placed'
+  var availVal=document.getElementById('mpAvail').value;
+  var pipeVal=document.getElementById('mpPipeline').value;
+  if(availVal==='placed')pipeVal='placed';
+  if(pipeVal==='placed')availVal='placed';
+  var body={action:'setPipelineStatus',id:manageProfileId,pipelineStatus:pipeVal};
   try{
     await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'setConsultantStatus',id:manageProfileId,
       engagementType:document.getElementById('mpType').value,
-      availability:document.getElementById('mpAvail').value,
-      availableFrom:document.getElementById('mpAvail').value==='busy'?document.getElementById('mpAvailFrom').value:null,
+      availability:availVal,
+      availableFrom:availVal==='busy'?document.getElementById('mpAvailFrom').value:null,
       yearsExperience:document.getElementById('mpYears')?document.getElementById('mpYears').value:undefined,
       country:document.getElementById('mpCountry')?document.getElementById('mpCountry').value.trim():undefined,
       linkedinUrl:document.getElementById('mpLinkedin')?document.getElementById('mpLinkedin').value.trim():undefined,
@@ -3890,10 +3900,36 @@ async function releaseProfile(){
     _pendingMpMsg={msg:'✅ Claim released.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
+function placementHistoryHtml(c){
+  var hist=c.placementHistory||[];
+  if(!hist.length)return '';
+  var h='<div style="margin-top:.7rem"><div style="font-size:.56rem;font-weight:700;color:var(--g5);margin-bottom:.3rem">Placement History</div>';
+  h+='<table style="width:100%;border-collapse:collapse;font-size:.55rem"><thead><tr style="background:var(--g1)"><th style="padding:.2rem .3rem;text-align:left">Client</th><th style="padding:.2rem .3rem;text-align:left">Role</th><th style="padding:.2rem .3rem;text-align:left">Start</th><th style="padding:.2rem .3rem;text-align:left">End</th><th style="padding:.2rem .3rem;text-align:left">Rate</th></tr></thead><tbody>';
+  var canEditEnd=CAP.canEnrichCompany;
+  hist.forEach(function(p,i){
+    var endCell;
+    if(canEditEnd){endCell='<input type="date" id="mpHistEnd'+i+'" value="'+(p.endDate?new Date(p.endDate).toISOString().slice(0,10):'')+'" style="font-size:.52rem;padding:.1rem;border:1px solid var(--g3);border-radius:3px" onchange="updatePlacementEndDate('+i+')">'}
+    else{endCell=p.endDate?fmtDate(p.endDate):'—'}
+    h+='<tr style="border-bottom:1px solid var(--g1)"><td style="padding:.2rem .3rem">'+esc(p.client||'—')+'</td><td style="padding:.2rem .3rem">'+esc(p.role||'—')+'</td><td style="padding:.2rem .3rem">'+(p.startDate?fmtDate(p.startDate):'—')+'</td><td style="padding:.2rem .3rem">'+endCell+'</td><td style="padding:.2rem .3rem">'+esc(p.rateAgreed||'—')+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  return h;
+}
+async function updatePlacementEndDate(idx){
+  var el=document.getElementById('mpHistEnd'+idx);if(!el)return;
+  try{
+    await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updatePlacementEnd',id:manageProfileId,historyIndex:idx,endDate:el.value||null})});
+    mpMsg('✅ End date updated.','#047857');loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
+}
 async function savePlacement(){
-  var pi={client:document.getElementById('mpPlaceClient').value.trim(),role:document.getElementById('mpPlaceRole').value.trim(),startDate:document.getElementById('mpPlaceStart').value||null,endDate:document.getElementById('mpPlaceEnd').value||null};
-  if(!pi.client){mpMsg('Client name required to place.','#B45309');return}
-  try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'placeConsultant',id:manageProfileId,placementInfo:pi})});
+  var pi={client:document.getElementById('mpPlaceClient').value.trim(),role:document.getElementById('mpPlaceRole').value.trim(),startDate:document.getElementById('mpPlaceStart').value||null,endDate:document.getElementById('mpPlaceEnd').value||null,rateAgreed:document.getElementById('mpPlaceRate')?document.getElementById('mpPlaceRate').value.trim():''};
+  if(!pi.client){mpMsg('Client name is required to place.','#B45309');return}
+  if(!pi.role){mpMsg('Role is required to place.','#B45309');return}
+  if(!pi.startDate){mpMsg('Start date is required to place.','#B45309');return}
+  try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'placeConsultant',id:manageProfileId,placementInfo:pi})});
+    var d=await r.json();
+    if(d.error==='placed_frozen'){mpMsg('🔒 '+d.message,'#DC2626');return}
     _pendingMpMsg={msg:'✅ Consultant marked as placed.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
@@ -4038,6 +4074,12 @@ async function runMatch(page){
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page})});
     var d=await r.json();
     if(d.error){st.textContent='⚠️ '+d.error;return}
+    if(d.moreToScore){
+      st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)';
+      if(d.matches&&d.matches.length)renderMatches(d);
+      setTimeout(function(){runMatch(page)},400);
+      return;
+    }
     if((!d.matches||!d.matches.length)&&d.needsTopUp){
       st.innerHTML='🔍 Few cached matches. Fetching fresh consultant profiles from LinkedIn (this can take 30–60s)...';
       await topUpProfiles();

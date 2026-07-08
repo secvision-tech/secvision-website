@@ -59,6 +59,7 @@ var ACTION_ROLES = {
   'adoptConsultant': MANAGER_UP,
   'importResume': MANAGER_UP,
   'placeConsultant': MANAGER_UP,
+  'updatePlacementEnd': MANAGER_UP,
   'uploadResume': STATUS_ROLES,
   'getResume': VIEW_ROLES,
   'removeResume': STATUS_ROLES,
@@ -128,6 +129,8 @@ function applyAutoAvailability(p) {
     if (freeDate && !isNaN(freeDate.getTime()) && freeDate <= now) {
       p.availability = 'available';
       p.availableFrom = null;
+      // #374: placement ended — reset pipeline so consultant can be re-placed from a clean state
+      if (p.pipelineStatus === 'placed') { p.pipelineStatus = 'none'; p._autoPipelineReset = true; }
       p._autoFreed = true; // marker so caller can persist
     }
   }
@@ -233,6 +236,7 @@ exports.handler = async function (event) {
         applyAutoAvailability(p);
         var setFields = {};
         if (p._autoFreed) { setFields.availability = 'available'; setFields.availableFrom = null; delete p._autoFreed; }
+        if (p._autoPipelineReset) { setFields.pipelineStatus = 'none'; delete p._autoPipelineReset; }
         if (p._autoTimedOut) { setFields.pipelineStatus = 'contacted_no_response'; setFields.claimedBy = null; setFields.claimedAt = null; delete p._autoTimedOut; }
         if (Object.keys(setFields).length) freedOps.push({ updateOne: { filter: { _id: p._id }, update: { $set: setFields } } });
         p.hasResume = !!(p.resume && p.resume.data);
@@ -249,7 +253,7 @@ exports.handler = async function (event) {
       var one = await col.findOne({ _id: new ObjectId(body.id) });
       if (!one) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
       applyAutoAvailability(one);
-      if (one._autoFreed) { await col.updateOne({ _id: one._id }, { $set: { availability: 'available', availableFrom: null } }); delete one._autoFreed; }
+      if (one._autoFreed) { var gset = { availability: 'available', availableFrom: null }; if (one._autoPipelineReset) { gset.pipelineStatus = 'none'; delete one._autoPipelineReset; } await col.updateOne({ _id: one._id }, { $set: gset }); delete one._autoFreed; }
       // Don't ship the heavy resume blob in the profile fetch; just flag presence + filename
       one.hasResume = !!(one.resume && one.resume.data);
       if (one.resume) { one.resumeFileName = one.resume.fileName; delete one.resume; }
@@ -336,16 +340,38 @@ exports.handler = async function (event) {
     // ---- PLACE via SecVision ----
     if (action === 'placeConsultant') {
       var pi = body.placementInfo || {};
+      var placement = { client: pi.client || '', role: pi.role || '', startDate: pi.startDate || null, endDate: pi.endDate || null, rateAgreed: pi.rateAgreed || '', placedBy: authUser.email, placedAt: new Date() };
       await col.updateOne({ _id: new ObjectId(body.id) }, {
         $set: {
           availability: 'placed',
           pipelineStatus: 'placed',
-          placementInfo: { client: pi.client || '', role: pi.role || '', startDate: pi.startDate || null, endDate: pi.endDate || null, placedBy: authUser.email, placedAt: new Date() },
+          placementInfo: placement,
           availableFrom: pi.endDate ? new Date(pi.endDate) : null,
           updatedAt: new Date()
-        }
+        },
+        $push: { placementHistory: placement }  // #374: keep a record of every placement
       });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ placed: true }) };
+    }
+
+    // ---- UPDATE PLACEMENT END DATE (for history entries) ----
+    if (action === 'updatePlacementEnd') {
+      var idx = body.historyIndex;
+      var endDate = body.endDate ? new Date(body.endDate) : null;
+      var prof2 = await col.findOne({ _id: new ObjectId(body.id) });
+      if (!prof2) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
+      var hist = prof2.placementHistory || [];
+      if (typeof idx === 'number' && hist[idx]) {
+        hist[idx].endDate = endDate;
+        var set2 = { placementHistory: hist, updatedAt: new Date() };
+        // if this is the current placement, update placementInfo + availableFrom too
+        if (prof2.placementInfo && prof2.placementInfo.startDate === hist[idx].startDate && prof2.placementInfo.client === hist[idx].client) {
+          set2.placementInfo = hist[idx];
+          set2.availableFrom = endDate;
+        }
+        await col.updateOne({ _id: prof2._id }, { $set: set2 });
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true }) };
     }
 
     // ---- DELETE ----
