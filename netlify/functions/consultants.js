@@ -169,6 +169,17 @@ exports.handler = async function (event) {
       return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Insufficient permissions for ' + action }) };
     }
 
+    // #371: When a consultant is PLACED, freeze edits for everyone except admin/super.
+    var FROZEN_WHEN_PLACED = ['setConsultantStatus', 'setPipelineStatus', 'updateConsultant', 'enrichConsultant',
+      'uploadResume', 'removeResume', 'claimConsultant', 'releaseConsultant', 'placeConsultant'];
+    var isAdminUp = ADMIN_UP.indexOf(authRole) > -1;
+    if (FROZEN_WHEN_PLACED.indexOf(action) > -1 && !isAdminUp && body.id) {
+      var frozenChk = await col.findOne({ _id: new ObjectId(body.id) }, { projection: { availability: 1, pipelineStatus: 1 } });
+      if (frozenChk && (frozenChk.availability === 'placed' || frozenChk.pipelineStatus === 'placed')) {
+        return { statusCode: 423, headers: hdrs, body: JSON.stringify({ error: 'placed_frozen', message: 'This consultant is currently placed. Their profile is frozen until the placement ends. Contact an admin to make changes.' }) };
+      }
+    }
+
     // ---- LIST / SEARCH ----
     if (action === 'listConsultants') {
       var filter = { managed: true }; // only owned CRM records in the Consultants tab
@@ -303,12 +314,16 @@ exports.handler = async function (event) {
     // ---- SET STATUS / AVAILABILITY (analyst+) ----
     if (action === 'setConsultantStatus') {
       var set = { updatedAt: new Date(), updatedBy: authUser.email };
-      if (body.availability) set.availability = body.availability;
+      if (body.availability) {
+        set.availability = body.availability;
+        // #370: auto-sync — availability=placed implies pipeline=placed; leaving placed clears it back
+        if (body.availability === 'placed') set.pipelineStatus = 'placed';
+      }
       if (body.availableFrom !== undefined) set.availableFrom = body.availableFrom ? new Date(body.availableFrom) : null;
       if (body.engagementType) set.engagementType = body.engagementType;
-      // #368/#369: analyst-editable fields (contact, experience, country, work-auth/clearance/rate)
       if (body.email !== undefined) set.email = body.email;
       if (body.phone !== undefined) set.phone = body.phone;
+      if (body.linkedinUrl !== undefined) set.linkedinUrl = body.linkedinUrl;
       if (body.country !== undefined) set.country = body.country;
       if (body.yearsExperience !== undefined) set.yearsExperience = parseInt(body.yearsExperience) || 0;
       if (body.workAuthorization !== undefined) set.workAuthorization = body.workAuthorization || 'unknown';
@@ -324,6 +339,7 @@ exports.handler = async function (event) {
       await col.updateOne({ _id: new ObjectId(body.id) }, {
         $set: {
           availability: 'placed',
+          pipelineStatus: 'placed',
           placementInfo: { client: pi.client || '', role: pi.role || '', startDate: pi.startDate || null, endDate: pi.endDate || null, placedBy: authUser.email, placedAt: new Date() },
           availableFrom: pi.endDate ? new Date(pi.endDate) : null,
           updatedAt: new Date()
@@ -361,6 +377,8 @@ exports.handler = async function (event) {
 
       var set = { pipelineStatus: newStatus, updatedAt: new Date(), updatedBy: authUser.email };
       if (newStatus === 'contacted') set.contactedAt = new Date();  // start the 3-day timeout clock
+      // #370: auto-sync — pipeline=placed implies availability=placed
+      if (newStatus === 'placed') set.availability = 'placed';
       set['pipelineHistory'] = undefined; // placeholder to avoid accidental overwrite
       delete set.pipelineHistory;
 

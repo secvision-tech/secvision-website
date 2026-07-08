@@ -3700,9 +3700,24 @@ function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="f
 
 function renderManageProfile(){
   var c=manageProfileData;if(!c)return;
-  var canStatus=CAP.canStatus, canEdit=CAP.canEnrichCompany, canContact=CAP.canStatus;
+  var isAdmin=(curUserRole==='admin'||curUserRole==='super_admin');
+  var isPlaced=(c.availability==='placed'||c.pipelineStatus==='placed');
+  var frozen=isPlaced&&!isAdmin; // #371: placed profiles frozen for non-admins
+  var canStatus=CAP.canStatus&&!frozen, canEdit=CAP.canEnrichCompany&&!frozen, canContact=CAP.canStatus&&!frozen;
   document.getElementById('mpTitle').textContent=(canStatus?'Manage: ':'View: ')+(c.name||'Profile');
   var h='';
+  // #371: frozen banner when placed
+  if(isPlaced){
+    var pi0=c.placementInfo||{};
+    h+='<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:6px;padding:.5rem .7rem;margin-bottom:.6rem;font-size:.6rem;color:#3730A3">'
+      +'<strong>🔒 Currently Placed'+(frozen?' — profile frozen':'')+'</strong>'
+      +(pi0.client?'<br>Client: <strong>'+esc(pi0.client)+'</strong>':'')
+      +(pi0.role?' &middot; Role: '+esc(pi0.role):'')
+      +(pi0.startDate?'<br>Start: '+fmtDate(pi0.startDate):'')
+      +(pi0.endDate?' &middot; Ends: '+fmtDate(pi0.endDate)+' (auto-frees then)':'')
+      +(frozen?'<br><span style="color:#6366F1">Only an admin can modify this profile while placed.</span>':'')
+      +'</div>';
+  }
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .6rem;margin-bottom:.6rem;font-size:.58rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.7rem;padding:.6rem;background:var(--g1);border-radius:6px">';
   h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.55rem">LinkedIn ↗</a>':''));
@@ -3737,6 +3752,8 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Years Experience</label><input type="number" id="mpYears" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.yearsExperience||0)+'"></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Country</label><input id="mpCountry" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.country||'')+'"></div>';
     h+='</div>';
+    // #373: LinkedIn URL editable (sometimes incorrect from scraping; enrichment needs it accurate)
+    h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">LinkedIn URL</label><input id="mpLinkedin" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.linkedinUrl||'')+'" placeholder="https://www.linkedin.com/in/..."></div>';
     h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileStatus()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Status</button>';
     if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.35rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Claim</button>';
     else h+='<button onclick="releaseProfile()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Release Claim</button>';
@@ -3769,6 +3786,7 @@ function renderManageProfile(){
   }
   h+='</div>';
 
+  // Placement section: editable for manager+ (not frozen); read-only view for analyst when placed
   if(canEdit){
     var pi=c.placementInfo||{};
     h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
@@ -3778,6 +3796,16 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Start</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">End</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
     h+='</div><button onclick="savePlacement()" style="padding:.35rem .8rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;margin-top:.5rem">Mark as Placed</button></div>';
+  }else if(isPlaced){
+    // #372: analyst/manager (frozen) sees placement details read-only
+    var pir=c.placementInfo||{};
+    h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem">';
+    h+=fld('Client',esc(pir.client));
+    h+=fld('Role',esc(pir.role));
+    h+=fld('Start',pir.startDate?fmtDate(pir.startDate):'—');
+    h+=fld('End',pir.endDate?fmtDate(pir.endDate):'—');
+    h+='</div></div>';
   }
 
   if(curUserRole==='admin'||curUserRole==='super_admin'){
@@ -3807,11 +3835,13 @@ async function saveProfileStatus(){
       availableFrom:document.getElementById('mpAvail').value==='busy'?document.getElementById('mpAvailFrom').value:null,
       yearsExperience:document.getElementById('mpYears')?document.getElementById('mpYears').value:undefined,
       country:document.getElementById('mpCountry')?document.getElementById('mpCountry').value.trim():undefined,
+      linkedinUrl:document.getElementById('mpLinkedin')?document.getElementById('mpLinkedin').value.trim():undefined,
       workAuthorization:document.getElementById('mpWorkAuth')?document.getElementById('mpWorkAuth').value.trim():undefined,
       securityClearance:document.getElementById('mpClearance')?document.getElementById('mpClearance').value.trim():undefined,
       rateExpectation:document.getElementById('mpRate')?document.getElementById('mpRate').value.trim():undefined})});
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
     var d=await r.json();
+    if(d.error==='placed_frozen'){mpMsg('🔒 '+d.message,'#DC2626');return}
     if(d.error==='claimed'){
       if(confirm('⚠️ '+d.message+'\n\nProceed anyway (override claim)?')){
         body.overrideClaim=true;
