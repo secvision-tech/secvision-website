@@ -55,13 +55,13 @@ var ACTION_ROLES = {
   'createConsultant': MANAGER_UP,
   'updateConsultant': MANAGER_UP,
   'deleteConsultant': ADMIN_UP,          // delete NOT allowed to manager
-  'enrichConsultant': MANAGER_UP,
+  'enrichConsultant': STATUS_ROLES,
   'adoptConsultant': MANAGER_UP,
   'importResume': MANAGER_UP,
   'placeConsultant': MANAGER_UP,
-  'uploadResume': MANAGER_UP,
+  'uploadResume': STATUS_ROLES,
   'getResume': VIEW_ROLES,
-  'removeResume': MANAGER_UP,
+  'removeResume': STATUS_ROLES,
   'promoteAllCached': ADMIN_UP           // one-time cached -> managed transfer
 };
 
@@ -303,9 +303,17 @@ exports.handler = async function (event) {
     // ---- SET STATUS / AVAILABILITY (analyst+) ----
     if (action === 'setConsultantStatus') {
       var set = { updatedAt: new Date(), updatedBy: authUser.email };
-      if (body.availability) set.availability = body.availability;         // available | busy | placed | do_not_contact
+      if (body.availability) set.availability = body.availability;
       if (body.availableFrom !== undefined) set.availableFrom = body.availableFrom ? new Date(body.availableFrom) : null;
-      if (body.engagementType) set.engagementType = body.engagementType;    // Contractor | Permanent | Unknown
+      if (body.engagementType) set.engagementType = body.engagementType;
+      // #368/#369: analyst-editable fields (contact, experience, country, work-auth/clearance/rate)
+      if (body.email !== undefined) set.email = body.email;
+      if (body.phone !== undefined) set.phone = body.phone;
+      if (body.country !== undefined) set.country = body.country;
+      if (body.yearsExperience !== undefined) set.yearsExperience = parseInt(body.yearsExperience) || 0;
+      if (body.workAuthorization !== undefined) set.workAuthorization = body.workAuthorization || 'unknown';
+      if (body.securityClearance !== undefined) set.securityClearance = body.securityClearance || 'unknown';
+      if (body.rateExpectation !== undefined) set.rateExpectation = body.rateExpectation;
       await col.updateOne({ _id: new ObjectId(body.id) }, { $set: set });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true }) };
     }

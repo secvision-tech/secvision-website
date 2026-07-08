@@ -3700,7 +3700,7 @@ function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="f
 
 function renderManageProfile(){
   var c=manageProfileData;if(!c)return;
-  var canStatus=CAP.canStatus, canEdit=CAP.canEnrichCompany;
+  var canStatus=CAP.canStatus, canEdit=CAP.canEnrichCompany, canContact=CAP.canStatus;
   document.getElementById('mpTitle').textContent=(canStatus?'Manage: ':'View: ')+(c.name||'Profile');
   var h='';
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .6rem;margin-bottom:.6rem;font-size:.58rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
@@ -3732,6 +3732,11 @@ function renderManageProfile(){
     h+='</div>';
     h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.62rem">'
       +Object.keys(PIPELINE_LABELS).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+'>'+PIPELINE_LABELS[k]+'</option>'}).join('')+'</select></div>';
+    // #369: Experience + Country editable (analyst+)
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem">';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Years Experience</label><input type="number" id="mpYears" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.yearsExperience||0)+'"></div>';
+    h+='<div><label style="font-size:.55rem;color:var(--g4)">Country</label><input id="mpCountry" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.country||'')+'"></div>';
+    h+='</div>';
     h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileStatus()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Status</button>';
     if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.35rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Claim</button>';
     else h+='<button onclick="releaseProfile()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Release Claim</button>';
@@ -3739,7 +3744,7 @@ function renderManageProfile(){
   }
 
   h+='<div class="mp-section"><div class="mp-section-title">Contact Details</div>';
-  if(canEdit){
+  if(canContact){
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Email</label><input id="mpEmail" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.email||'')+'"></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Phone</label><input id="mpPhone" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.phone||'')+'"></div>';
@@ -3756,10 +3761,10 @@ function renderManageProfile(){
   if(c.hasResume){
     h+='<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap"><span style="font-size:.6rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
       +'<button onclick="viewResume()" style="padding:.25rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">View</button>';
-    if(canEdit)h+='<button onclick="removeResume()" style="padding:.25rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">Remove</button>';
+    if(canContact)h+='<button onclick="removeResume()" style="padding:.25rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">Remove</button>';
     h+='</div>';
   }else{
-    if(canEdit)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.58rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.52rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.58rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.52rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
     else h+='<span style="font-size:.6rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';
@@ -3799,13 +3804,12 @@ async function saveProfileStatus(){
     await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'setConsultantStatus',id:manageProfileId,
       engagementType:document.getElementById('mpType').value,
       availability:document.getElementById('mpAvail').value,
-      availableFrom:document.getElementById('mpAvail').value==='busy'?document.getElementById('mpAvailFrom').value:null})});
-    // #361: save citizenship, clearance, rate via updateConsultant
-    var extra={};
-    var wa=document.getElementById('mpWorkAuth');if(wa)extra.workAuthorization=wa.value.trim()||'unknown';
-    var cl=document.getElementById('mpClearance');if(cl)extra.securityClearance=cl.value.trim()||'unknown';
-    var rt=document.getElementById('mpRate');if(rt)extra.rateExpectation=rt.value.trim();
-    if(Object.keys(extra).length)await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:manageProfileId,updates:extra})});
+      availableFrom:document.getElementById('mpAvail').value==='busy'?document.getElementById('mpAvailFrom').value:null,
+      yearsExperience:document.getElementById('mpYears')?document.getElementById('mpYears').value:undefined,
+      country:document.getElementById('mpCountry')?document.getElementById('mpCountry').value.trim():undefined,
+      workAuthorization:document.getElementById('mpWorkAuth')?document.getElementById('mpWorkAuth').value.trim():undefined,
+      securityClearance:document.getElementById('mpClearance')?document.getElementById('mpClearance').value.trim():undefined,
+      rateExpectation:document.getElementById('mpRate')?document.getElementById('mpRate').value.trim():undefined})});
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
     var d=await r.json();
     if(d.error==='claimed'){
@@ -3824,7 +3828,7 @@ async function saveProfileStatus(){
 }
 async function saveProfileContact(){
   try{
-    await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:manageProfileId,updates:{email:document.getElementById('mpEmail').value.trim(),phone:document.getElementById('mpPhone').value.trim()}})});
+    await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'setConsultantStatus',id:manageProfileId,email:document.getElementById('mpEmail').value.trim(),phone:document.getElementById('mpPhone').value.trim()})});
     mpMsg('✅ Contact saved.','#047857');loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
@@ -3832,13 +3836,15 @@ async function enrichProfile(){
   var btn=document.getElementById('mpEnrichBtn');btn.textContent='🔍 Searching...';btn.disabled=true;
   try{
     var c=manageProfileData;
-    var r=await authFetch('/.netlify/functions/apollo',{method:'POST',body:JSON.stringify({action:'matchPerson',name:c.name,company:c.currentCompany||''})});
+    var r=await authFetch('/.netlify/functions/apollo',{method:'POST',body:JSON.stringify({action:'matchPerson',name:c.name,company:c.currentCompany||'',linkedinUrl:c.linkedinUrl||''})});
     var d=await r.json();
     if(d.found){
-      if(d.email)document.getElementById('mpEmail').value=d.email;
-      if(d.phone)document.getElementById('mpPhone').value=d.phone;
-      mpMsg('✅ Found via Apollo — review & Save Contact.','#047857');
-    }else{mpMsg('No Apollo match found. Enter manually.','#B45309')}
+      var got=[];
+      if(d.email){document.getElementById('mpEmail').value=d.email;got.push('email')}
+      if(d.phone){document.getElementById('mpPhone').value=d.phone;got.push('phone')}
+      if(got.length)mpMsg('✅ Apollo found '+got.join(' & ')+' — review & click Save Contact.','#047857');
+      else mpMsg('⚠️ Apollo matched the person but has no email/phone on file (locked or unavailable). Try manual entry.','#B45309');
+    }else{mpMsg('⚠️ No Apollo match'+(d.detail?' ('+d.detail+')':'')+'. Enter contact manually.','#B45309')}
   }catch(e){mpMsg('Enrich error: '+e.message,'#DC2626')}
   btn.textContent='🔍 Enrich (Apollo)';btn.disabled=false;
 }
