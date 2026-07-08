@@ -163,6 +163,12 @@ tr.row-hl td{background:rgba(8,145,178,.08)!important}
 .do{position:fixed;inset:0;background:rgba(15,35,65,.6);backdrop-filter:blur(4px);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}.do.open{display:flex}
 .set-label{font-size:.65rem;font-weight:600;color:var(--g4);display:block;margin-bottom:.15rem}
 .set-input{width:100%;padding:.3rem .4rem;font-size:.7rem;border:1px solid var(--g2);border-radius:4px;font-family:'DM Sans',sans-serif;background:var(--bg)}
+/* Consultant profile popup: clearer section separation + visible field borders */
+.mp-section{border:1px solid var(--g2);border-radius:8px;padding:.7rem .8rem;margin-top:.7rem;background:var(--card)}
+.mp-section-title{font-size:.66rem;font-weight:700;color:var(--pri);margin-bottom:.55rem;padding-bottom:.35rem;border-bottom:2px solid var(--ac);display:inline-block}
+.mp-section label{display:block;font-size:.56rem;color:var(--g5);margin-bottom:.15rem;font-weight:600}
+.mp-section input,.mp-section select,.mp-section textarea{width:100%;padding:.35rem .45rem;font-size:.66rem;border:1.5px solid var(--g3);border-radius:5px;font-family:'DM Sans',sans-serif;background:#fff;box-sizing:border-box}
+.mp-section input:focus,.mp-section select:focus,.mp-section textarea:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 2px rgba(8,145,178,.12)}
 .set-hint{font-size:.55rem;color:var(--g3);display:block;margin-top:.1rem}
 /* Role-based visibility via body class */
 body.role-viewer #exportBtns,body.role-pending #exportBtns,body.role-viewer #dbExportBtns,body.role-pending #dbExportBtns{display:none!important}
@@ -3664,7 +3670,7 @@ function renderConsultants(){
 function consGoPage(p){var tp=Math.ceil(consultantsData.length/consPerPage);if(p<1||p>tp)return;consCurPage=p;renderConsultants()}
 function consRowClick(e,el){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.closest('a')||e.target.closest('button'))return;el.classList.toggle('row-hl')}
 // ---- Manage Profile popup ----
-var manageProfileId=null,manageProfileData=null;
+var manageProfileId=null,manageProfileData=null,_pendingMpMsg=null;
 async function openManageProfile(id){
   manageProfileId=id;
   var pop=document.getElementById('manageProfilePopup');
@@ -3678,6 +3684,7 @@ async function openManageProfile(id){
     if(d.error){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">'+esc(d.error)+'</div>';return}
     manageProfileData=d.consultant;
     renderManageProfile();
+    if(_pendingMpMsg){mpMsg(_pendingMpMsg.msg,_pendingMpMsg.color);_pendingMpMsg=null}
   }catch(e){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">Error: '+esc(e.message)+'</div>'}
 }
 function closeManageProfile(){var p=document.getElementById('manageProfilePopup');if(p)p.style.display='none';manageProfileId=null;manageProfileData=null}
@@ -3709,7 +3716,7 @@ function renderManageProfile(){
   if((c.certifications||[]).length)h+='<div style="margin-bottom:.6rem"><span style="font-size:.55rem;color:var(--g4)">Certs:</span> '+(c.certifications||[]).map(function(s){return '<span style="font-size:.5rem;background:#ECFDF5;color:#047857;padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block">'+esc(s)+'</span>'}).join(' ')+'</div>';
 
   if(canStatus){
-    h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.4rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Status & Pipeline</div>';
+    h+='<div class="mp-section"><div class="mp-section-title">Status & Pipeline</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="mpType" class="set-input" style="width:100%;font-size:.62rem">'
       +['Contractor','Permanent','Unknown'].map(function(t){return '<option value="'+t+'"'+(c.engagementType===t?' selected':'')+'>'+t+'</option>'}).join('')+'</select></div>';
@@ -3731,7 +3738,7 @@ function renderManageProfile(){
     h+='</div></div>';
   }
 
-  h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Contact Details</div>';
+  h+='<div class="mp-section"><div class="mp-section-title">Contact Details</div>';
   if(canEdit){
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Email</label><input id="mpEmail" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.email||'')+'"></div>';
@@ -3745,7 +3752,7 @@ function renderManageProfile(){
   h+='</div>';
 
   // ---- Resume (#363) ----
-  h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Resume / CV</div>';
+  h+='<div class="mp-section"><div class="mp-section-title">Resume / CV</div>';
   if(c.hasResume){
     h+='<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap"><span style="font-size:.6rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
       +'<button onclick="viewResume()" style="padding:.25rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">View</button>';
@@ -3759,7 +3766,7 @@ function renderManageProfile(){
 
   if(canEdit){
     var pi=c.placementInfo||{};
-    h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem"><div style="font-size:.62rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">Placement (via SecVision)</div>';
+    h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Client</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.client||'')+'"></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Role</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.role||'')+'"></div>';
@@ -3774,7 +3781,17 @@ function renderManageProfile(){
   document.getElementById('mpBody').innerHTML=h;
 }
 function mpAvailChange(){var v=document.getElementById('mpAvail').value;document.getElementById('mpAvailFromWrap').style.display=(v==='busy')?'block':'none'}
-function mpMsg(msg,color){var el=document.getElementById('mpStatus');el.textContent=msg;el.style.color=color||'var(--pri)'}
+function mpMsg(msg,color){
+  var el=document.getElementById('mpStatus');if(!el)return;
+  if(!msg){el.innerHTML='';el.style.display='none';return}
+  var c=color||'var(--pri)';
+  var bg=c==='#047857'?'#ECFDF5':(c==='#DC2626'?'#FEE2E2':(c==='#B45309'?'#FEF3C7':'#EEF2FF'));
+  el.innerHTML=msg;el.style.display='block';el.style.color=c;el.style.background=bg;
+  el.style.padding='.4rem .6rem';el.style.borderRadius='5px';el.style.fontWeight='600';el.style.border='1px solid '+c;
+  if(window._mpMsgTimer)clearTimeout(window._mpMsgTimer);
+  // auto-clear success/info after 4s; keep errors visible
+  if(c==='#047857'||c==='var(--pri)')window._mpMsgTimer=setTimeout(function(){if(el)el.style.display='none'},4000);
+}
 
 async function saveProfileStatus(){
   var body={action:'setPipelineStatus',id:manageProfileId,pipelineStatus:document.getElementById('mpPipeline').value};
@@ -3800,7 +3817,7 @@ async function saveProfileStatus(){
       }else{mpMsg('Status change cancelled (claim held by another).','#B45309');return}
     }else if(d.error==='locked'){mpMsg('🔒 '+d.message,'#DC2626');return}
     else if(d.error){mpMsg('⚠️ '+(d.message||d.error),'#DC2626');return}
-    mpMsg('✅ Status saved.','#047857');
+    _pendingMpMsg={msg:'✅ Status saved.',color:'#047857'};
     openManageProfile(manageProfileId);
     loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
@@ -3829,19 +3846,19 @@ async function claimProfile(){
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId})});
     var d=await r.json();
     if(d.error==='claimed'){if(confirm('⚠️ '+d.message+'\n\nOverride and claim?')){await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId,overrideClaim:true})})}else return}
-    mpMsg('✅ Claimed.','#047857');openManageProfile(manageProfileId);loadConsultants();
+    _pendingMpMsg={msg:'✅ Claimed by you.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 async function releaseProfile(){
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'releaseConsultant',id:manageProfileId})});
-    mpMsg('✅ Released.','#047857');openManageProfile(manageProfileId);loadConsultants();
+    _pendingMpMsg={msg:'✅ Claim released.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 async function savePlacement(){
   var pi={client:document.getElementById('mpPlaceClient').value.trim(),role:document.getElementById('mpPlaceRole').value.trim(),startDate:document.getElementById('mpPlaceStart').value||null,endDate:document.getElementById('mpPlaceEnd').value||null};
   if(!pi.client){mpMsg('Client name required to place.','#B45309');return}
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'placeConsultant',id:manageProfileId,placementInfo:pi})});
-    mpMsg('✅ Marked as placed.','#047857');openManageProfile(manageProfileId);loadConsultants();
+    _pendingMpMsg={msg:'✅ Consultant marked as placed.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 async function deleteProfile(){
@@ -3858,7 +3875,7 @@ async function uploadResume(){
   try{
     var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result.split(',')[1])};r.onerror=rej;r.readAsDataURL(file)});
     await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'uploadResume',id:manageProfileId,fileName:file.name,mimeType:file.type,fileData:b64})});
-    mpMsg('✅ Resume uploaded.','#047857');openManageProfile(manageProfileId);loadConsultants();
+    _pendingMpMsg={msg:'✅ Resume uploaded.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Upload error: '+e.message,'#DC2626');btn.textContent='Upload';btn.disabled=false}
 }
 async function viewResume(){
@@ -3878,7 +3895,7 @@ async function viewResume(){
 async function removeResume(){
   if(!confirm('Remove this resume?'))return;
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'removeResume',id:manageProfileId})});
-    mpMsg('✅ Resume removed.','#047857');openManageProfile(manageProfileId);loadConsultants();
+    _pendingMpMsg={msg:'✅ Resume removed.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 function openAddConsultant(){

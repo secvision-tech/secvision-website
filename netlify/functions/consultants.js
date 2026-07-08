@@ -187,10 +187,11 @@ exports.handler = async function (event) {
       if (body.engagementType && body.engagementType !== 'all') filter.engagementType = body.engagementType;
       if (body.availability && body.availability !== 'all') filter.availability = body.availability;
       if (body.pipelineStatus && body.pipelineStatus !== 'all') filter.pipelineStatus = body.pipelineStatus;
-      if (body.country && body.country !== 'all') filter.country = body.country;
       if (body.location) filter.location = { $regex: body.location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-      // region → countries
-      if (body.region && body.region !== 'all') {
+      // Country/region: a specific country (if chosen) wins; otherwise expand region to its countries
+      if (body.country && body.country !== 'all') {
+        filter.country = body.country;
+      } else if (body.region && body.region !== 'all') {
         var REGION_MAP = {
           'NA': ['United States', 'Canada', 'Mexico'],
           'EU': ['United Kingdom', 'Germany', 'France', 'Netherlands', 'Ireland', 'Switzerland', 'Sweden', 'Spain', 'Italy', 'Poland'],
