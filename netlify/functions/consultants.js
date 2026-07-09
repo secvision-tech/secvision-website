@@ -60,6 +60,8 @@ var ACTION_ROLES = {
   'importResume': MANAGER_UP,
   'placeConsultant': MANAGER_UP,
   'updatePlacementEnd': MANAGER_UP,
+  'deletePlacementHistory': ADMIN_UP,
+  'countCached': VIEW_ROLES,
   'uploadResume': STATUS_ROLES,
   'getResume': VIEW_ROLES,
   'removeResume': STATUS_ROLES,
@@ -317,12 +319,13 @@ exports.handler = async function (event) {
 
     // ---- SET STATUS / AVAILABILITY (analyst+) ----
     if (action === 'setConsultantStatus') {
-      var set = { updatedAt: new Date(), updatedBy: authUser.email };
-      if (body.availability) {
-        set.availability = body.availability;
-        // #370: auto-sync — availability=placed implies pipeline=placed; leaving placed clears it back
-        if (body.availability === 'placed') set.pipelineStatus = 'placed';
+      // #379: 'placed' cannot be set directly — it is a consequence of the Mark-as-Placed action,
+      // which requires client/role/start/rate. This keeps availability+pipeline+placementInfo consistent.
+      if (body.availability === 'placed') {
+        return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'use_place_action', message: 'To place a consultant, fill in Client, Role, Start Date and Rate, then use "Mark as Placed".' }) };
       }
+      var set = { updatedAt: new Date(), updatedBy: authUser.email };
+      if (body.availability) set.availability = body.availability;
       if (body.availableFrom !== undefined) set.availableFrom = body.availableFrom ? new Date(body.availableFrom) : null;
       if (body.engagementType) set.engagementType = body.engagementType;
       if (body.email !== undefined) set.email = body.email;
@@ -340,7 +343,11 @@ exports.handler = async function (event) {
     // ---- PLACE via SecVision ----
     if (action === 'placeConsultant') {
       var pi = body.placementInfo || {};
-      var placement = { client: pi.client || '', role: pi.role || '', startDate: pi.startDate || null, endDate: pi.endDate || null, rateAgreed: pi.rateAgreed || '', placedBy: authUser.email, placedAt: new Date() };
+      // #379: all four are compulsory — placement is the only way to reach 'placed' state
+      if (!pi.client || !pi.role || !pi.startDate || !pi.rateAgreed) {
+        return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'missing_fields', message: 'Client, Role, Start Date and Rate are all required to mark a consultant as placed.' }) };
+      }
+      var placement = { client: pi.client, role: pi.role, startDate: pi.startDate, endDate: pi.endDate || null, rateAgreed: pi.rateAgreed, placedBy: authUser.email, placedAt: new Date() };
       await col.updateOne({ _id: new ObjectId(body.id) }, {
         $set: {
           availability: 'placed',
@@ -384,6 +391,10 @@ exports.handler = async function (event) {
     if (action === 'setPipelineStatus') {
       var newStatus = body.pipelineStatus;
       if (PIPELINE_STATUSES.indexOf(newStatus) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Invalid pipeline status' }) };
+      // #379: 'placed' cannot be selected directly — use the Mark-as-Placed action
+      if (newStatus === 'placed') {
+        return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'use_place_action', message: 'To place a consultant, fill in Client, Role, Start Date and Rate, then use "Mark as Placed".' }) };
+      }
       var prof = await col.findOne({ _id: new ObjectId(body.id) });
       if (!prof) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
 
@@ -468,6 +479,24 @@ exports.handler = async function (event) {
     if (action === 'removeResume') {
       await col.updateOne({ _id: new ObjectId(body.id) }, { $unset: { resume: '' }, $set: { updatedAt: new Date() } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ removed: true }) };
+    }
+
+    // ---- #378: DELETE a placement history entry (admin/super only) ----
+    if (action === 'deletePlacementHistory') {
+      var dp = await col.findOne({ _id: new ObjectId(body.id) });
+      if (!dp) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
+      var dhist = dp.placementHistory || [];
+      var didx = body.historyIndex;
+      if (typeof didx !== 'number' || !dhist[didx]) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Invalid history index' }) };
+      dhist.splice(didx, 1);
+      await col.updateOne({ _id: dp._id }, { $set: { placementHistory: dhist, updatedAt: new Date() } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: true, remaining: dhist.length }) };
+    }
+
+    // ---- #380: how many unmanaged (cached) profiles are available to import ----
+    if (action === 'countCached') {
+      var cnt = await col.countDocuments({ $or: [{ managed: { $exists: false } }, { managed: false }] });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ pending: cnt }) };
     }
 
     // ---- PROMOTE ALL CACHED -> MANAGED (one-time, super/admin) ----

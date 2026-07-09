@@ -3506,7 +3506,7 @@ function fmtDate(date){return formatDateWithSettings(date)}
 loadSettings();
 
 var scopeDialogHtml='<div id="scopeDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1100;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div id="scopeDialogBody"></div></div></div>';
-var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
+var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div><div id="jobCandidates"></div></div></div>';
 document.addEventListener("DOMContentLoaded",function(){document.body.insertAdjacentHTML("beforeend",contactPopupHtml);document.body.insertAdjacentHTML("beforeend",scopeDialogHtml);document.body.insertAdjacentHTML("beforeend",matchPopupHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
@@ -3554,7 +3554,17 @@ async function loadConsultants(){
     renderConsultants();
     var addBtn=document.getElementById('addConsultantBtn');if(addBtn)addBtn.style.display=CAP.canEnrichCompany?'inline-block':'none';
     // Promote-cached button only for admin/super
-    var pcBtn=document.getElementById('promoteCachedBtn');if(pcBtn)pcBtn.style.display=(curUserRole==='admin'||curUserRole==='super_admin')?'inline-block':'none';
+    var pcBtn=document.getElementById('promoteCachedBtn');
+    if(pcBtn){
+      pcBtn.style.display='none';
+      if(curUserRole==='admin'||curUserRole==='super_admin'){
+        try{
+          var cr=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'countCached'})});
+          var cd=await cr.json();
+          if((cd.pending||0)>0){pcBtn.style.display='inline-block';pcBtn.textContent='⬆️ Import '+cd.pending+' Cached Profile'+(cd.pending>1?'s':'')}
+        }catch(e){}
+      }
+    }
   }catch(e){tb.innerHTML='<tr><td colspan="10" style="padding:1rem;text-align:center;color:#DC2626">Error: '+esc(e.message)+'</td></tr>'}
 }
 function refreshConsultants(){loadConsultants()}
@@ -3736,7 +3746,7 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="mpType" class="set-input" style="width:100%;font-size:.62rem">'
       +['Contractor','Permanent','Unknown'].map(function(t){return '<option value="'+t+'"'+(c.engagementType===t?' selected':'')+'>'+t+'</option>'}).join('')+'</select></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Availability</label><select id="mpAvail" class="set-input" style="width:100%;font-size:.62rem" onchange="mpAvailChange()">'
-      +[['available','Available'],['busy','Busy'],['placed','Placed'],['do_not_contact','Do Not Contact']].map(function(a){return '<option value="'+a[0]+'"'+(c.availability===a[0]?' selected':'')+'>'+a[1]+'</option>'}).join('')+'</select></div>';
+      +[['available','Available'],['busy','Busy'],['do_not_contact','Do Not Contact']].concat(c.availability==='placed'?[['placed','Placed (via placement)']]:[]).map(function(a){return '<option value="'+a[0]+'"'+(c.availability===a[0]?' selected':'')+(a[0]==='placed'?' disabled':'')+'>'+a[1]+'</option>'}).join('')+'</select></div>';
     h+='</div>';
     h+='<div id="mpAvailFromWrap" style="margin-top:.4rem;'+((c.availability==='busy')?'':'display:none')+'"><label style="font-size:.55rem;color:var(--g4)">Available from</label><input type="date" id="mpAvailFrom" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.availableFrom?new Date(c.availableFrom).toISOString().slice(0,10):'')+'"></div>';
     // #361: citizenship, hourly rate, security clearance
@@ -3746,7 +3756,8 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Expected Rate</label><input id="mpRate" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.rateExpectation||'')+'" placeholder="$85/hr, £450/day"></div>';
     h+='</div>';
     h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.62rem">'
-      +Object.keys(PIPELINE_LABELS).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+'>'+PIPELINE_LABELS[k]+'</option>'}).join('')+'</select></div>';
+      +Object.keys(PIPELINE_LABELS).filter(function(k){return k!=='placed'||c.pipelineStatus==='placed'}).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+(k==='placed'?' disabled':'')+'>'+PIPELINE_LABELS[k]+(k==='placed'?' (via placement)':'')+'</option>'}).join('')+'</select>'
+      +'<div style="font-size:.5rem;color:var(--g4);margin-top:.15rem">To place a consultant, fill the Placement section below and press "Mark as Placed".</div></div>';
     // #369: Experience + Country editable (analyst+)
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem">';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Years Experience</label><input type="number" id="mpYears" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.yearsExperience||0)+'"></div>';
@@ -3795,7 +3806,7 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Role *</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.role||'')+'"></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Start Date *</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">End Date (optional)</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
-    h+='<div style="grid-column:1/3"><label style="font-size:.55rem;color:var(--g4)">Rate Agreed</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
+    h+='<div style="grid-column:1/3"><label style="font-size:.55rem;color:var(--g4)">Rate Agreed *</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
     h+='</div><button onclick="savePlacement()" style="padding:.35rem .8rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;margin-top:.5rem">'+(isPlaced?'Update / Re-place':'Mark as Placed')+'</button>';
     h+=placementHistoryHtml(c);
     h+='</div>';
@@ -3832,11 +3843,10 @@ function mpMsg(msg,color){
 }
 
 async function saveProfileStatus(){
-  // #377: keep availability and pipeline consistent — if either is 'placed', both become 'placed'
+  // #379: 'placed' is never set from these dropdowns — it comes only from Mark-as-Placed.
   var availVal=document.getElementById('mpAvail').value;
   var pipeVal=document.getElementById('mpPipeline').value;
-  if(availVal==='placed')pipeVal='placed';
-  if(pipeVal==='placed')availVal='placed';
+  if(availVal==='placed'||pipeVal==='placed'){mpMsg('To place a consultant, use the Placement section and press "Mark as Placed".','#B45309');return}
   var body={action:'setPipelineStatus',id:manageProfileId,pipelineStatus:pipeVal};
   try{
     await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'setConsultantStatus',id:manageProfileId,
@@ -3903,17 +3913,29 @@ async function releaseProfile(){
 function placementHistoryHtml(c){
   var hist=c.placementHistory||[];
   if(!hist.length)return '';
+  var isAdminRole=(curUserRole==='admin'||curUserRole==='super_admin');
   var h='<div style="margin-top:.7rem"><div style="font-size:.56rem;font-weight:700;color:var(--g5);margin-bottom:.3rem">Placement History</div>';
-  h+='<table style="width:100%;border-collapse:collapse;font-size:.55rem"><thead><tr style="background:var(--g1)"><th style="padding:.2rem .3rem;text-align:left">Client</th><th style="padding:.2rem .3rem;text-align:left">Role</th><th style="padding:.2rem .3rem;text-align:left">Start</th><th style="padding:.2rem .3rem;text-align:left">End</th><th style="padding:.2rem .3rem;text-align:left">Rate</th></tr></thead><tbody>';
+  h+='<table style="width:100%;border-collapse:collapse;font-size:.55rem"><thead><tr style="background:var(--g1)"><th style="padding:.2rem .3rem;text-align:left">Client</th><th style="padding:.2rem .3rem;text-align:left">Role</th><th style="padding:.2rem .3rem;text-align:left">Start</th><th style="padding:.2rem .3rem;text-align:left">End</th><th style="padding:.2rem .3rem;text-align:left">Rate</th>'+(isAdminRole?'<th style="padding:.2rem .3rem;text-align:center">Del</th>':'')+'</tr></thead><tbody>';
   var canEditEnd=CAP.canEnrichCompany;
   hist.forEach(function(p,i){
     var endCell;
     if(canEditEnd){endCell='<input type="date" id="mpHistEnd'+i+'" value="'+(p.endDate?new Date(p.endDate).toISOString().slice(0,10):'')+'" style="font-size:.52rem;padding:.1rem;border:1px solid var(--g3);border-radius:3px" onchange="updatePlacementEndDate('+i+')">'}
     else{endCell=p.endDate?fmtDate(p.endDate):'—'}
-    h+='<tr style="border-bottom:1px solid var(--g1)"><td style="padding:.2rem .3rem">'+esc(p.client||'—')+'</td><td style="padding:.2rem .3rem">'+esc(p.role||'—')+'</td><td style="padding:.2rem .3rem">'+(p.startDate?fmtDate(p.startDate):'—')+'</td><td style="padding:.2rem .3rem">'+endCell+'</td><td style="padding:.2rem .3rem">'+esc(p.rateAgreed||'—')+'</td></tr>';
+    h+='<tr style="border-bottom:1px solid var(--g1)"><td style="padding:.2rem .3rem">'+esc(p.client||'—')+'</td><td style="padding:.2rem .3rem">'+esc(p.role||'—')+'</td><td style="padding:.2rem .3rem">'+(p.startDate?fmtDate(p.startDate):'—')+'</td><td style="padding:.2rem .3rem">'+endCell+'</td><td style="padding:.2rem .3rem">'+esc(p.rateAgreed||'—')+'</td>'
+      +(isAdminRole?'<td style="padding:.2rem .3rem;text-align:center"><button onclick="deletePlacementHistory('+i+')" title="Delete this placement record" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.6rem">✕</button></td>':'')
+      +'</tr>';
   });
   h+='</tbody></table></div>';
   return h;
+}
+async function deletePlacementHistory(idx){
+  if(!confirm('Delete this placement history record permanently?'))return;
+  try{
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deletePlacementHistory',id:manageProfileId,historyIndex:idx})});
+    var d=await r.json();
+    if(d.error){mpMsg('⚠️ '+(d.message||d.error),'#DC2626');return}
+    _pendingMpMsg={msg:'✅ Placement record deleted.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
+  }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 async function updatePlacementEndDate(idx){
   var el=document.getElementById('mpHistEnd'+idx);if(!el)return;
@@ -3927,9 +3949,11 @@ async function savePlacement(){
   if(!pi.client){mpMsg('Client name is required to place.','#B45309');return}
   if(!pi.role){mpMsg('Role is required to place.','#B45309');return}
   if(!pi.startDate){mpMsg('Start date is required to place.','#B45309');return}
+  if(!pi.rateAgreed){mpMsg('Rate is required to place.','#B45309');return}
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'placeConsultant',id:manageProfileId,placementInfo:pi})});
     var d=await r.json();
     if(d.error==='placed_frozen'){mpMsg('🔒 '+d.message,'#DC2626');return}
+    if(d.error){mpMsg('⚠️ '+(d.message||d.error),'#DC2626');return}
     _pendingMpMsg={msg:'✅ Consultant marked as placed.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
@@ -4061,6 +4085,8 @@ async function openMatchProfiles(idx){
   document.getElementById('matchSub').innerHTML='<strong>'+esc(matchState.jobTitle)+'</strong> at '+esc(matchState.company)+' &middot; consultants scoring ≥60% shown, best first';
   document.getElementById('matchResults').innerHTML='';
   document.getElementById('matchPager').style.display='none';
+  var jc=document.getElementById('jobCandidates');if(jc)jc.innerHTML='';
+  loadJobCandidates();
   runMatch(0);
 }
 function closeMatchPopup(){document.getElementById('matchPopup').style.display='none';matchState.polling=false}
@@ -4118,24 +4144,26 @@ async function topUpProfiles(){
   try{
     var sr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'startTopUp',jobId:matchState.jobId})});
     var sd=await safeMatchJson(sr);
-    if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')<br>Search: "'+esc(sd.sentKeywords||'')+'"</div>':'');return}
+    if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')</div>':'');return}
+    var runs=sd.runs||[];
+    if(!runs.length){st.textContent='⚠️ No profile searches could be started.';return}
+    st.innerHTML='🔍 Searching LinkedIn ('+runs.map(function(r){return esc(r.keyword)}).join(' + ')+')...';
     matchState.polling=true;
-    pollTopUp(sd.runId,sd.datasetId,0);
+    pollTopUp(runs,0);
   }catch(e){st.textContent='⚠️ Error: '+e.message}
 }
 
-async function pollTopUp(runId,datasetId,tries){
+async function pollTopUp(runs,tries){
   if(!matchState.polling)return;
-  if(tries>20){document.getElementById('matchStatus').textContent='⚠️ Profile fetch timed out. Try again.';return}
+  if(tries>20){document.getElementById('matchStatus').textContent='⚠️ Profile fetch timed out. Try again.';matchState.polling=false;return}
   var st=document.getElementById('matchStatus');
-  st.innerHTML='🔍 Fetching &amp; scoring consultant profiles... ('+(tries*8)+'s)';
+  st.innerHTML='🔍 Fetching consultant profiles from LinkedIn... ('+(tries*8)+'s)';
   try{
-    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'checkTopUp',jobId:matchState.jobId,runId:runId,datasetId:datasetId})});
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'checkTopUp',jobId:matchState.jobId,runs:runs})});
     var d=await safeMatchJson(r);
-    // a transient gateway/timeout error → keep polling (the run may still be finishing)
-    if(d.error&&d.retry){setTimeout(function(){pollTopUp(runId,datasetId,tries+1)},8000);return}
+    if(d.error&&d.retry){setTimeout(function(){pollTopUp(runs,tries+1)},8000);return}
     if(d.error){st.textContent='⚠️ '+d.error;matchState.polling=false;return}
-    if(!d.done){setTimeout(function(){pollTopUp(runId,datasetId,tries+1)},8000);return}
+    if(!d.done){setTimeout(function(){pollTopUp(runs,tries+1)},8000);return}
     matchState.polling=false;
     st.innerHTML='✅ Fetched '+d.fetched+' profiles. Scoring against job...';
     runMatch(0);
@@ -4144,7 +4172,7 @@ async function pollTopUp(runId,datasetId,tries){
 
 function renderMatches(d){
   var el=document.getElementById('matchResults');
-  if(!d.matches||!d.matches.length){el.innerHTML='<div style="font-size:.7rem;color:var(--g5);padding:1rem;text-align:center">No consultants scored ≥60% for this role yet. Try "Fetch More from LinkedIn".</div>';document.getElementById('matchPager').style.display='none';return}
+  if(!d.matches||!d.matches.length){el.innerHTML='<div style="font-size:.7rem;color:var(--g5);padding:1rem;text-align:center">No consultants scored ≥60% for this role yet. Try "Fetch More from LinkedIn".</div>';document.getElementById('matchPager').style.display='none';loadJobCandidates();return}
   var h='';
   d.matches.forEach(function(m,i){h+=matchCard(m,d.page*10+i+1)});
   el.innerHTML=h;
@@ -4153,6 +4181,54 @@ function renderMatches(d){
   document.getElementById('matchPrevBtn').style.visibility=d.page>0?'visible':'hidden';
   document.getElementById('matchNextBtn').style.visibility=d.hasMore?'visible':'hidden';
   document.getElementById('matchPageInfo').textContent='Page '+(d.page+1)+' · '+d.totalMatches+' total matches';
+  // #381: persist these matches as candidates for this job (deduped server-side), then show the table
+  autoAddCandidates(d.matches);
+}
+// #381 — Job candidates: matched profiles saved against this job
+async function autoAddCandidates(matches){
+  if(!matches||!matches.length)return;
+  var cands=matches.filter(function(m){return m.sourceId}).map(function(m){return {sourceId:m.sourceId,overall:m.overall}});
+  if(!cands.length){loadJobCandidates();return}
+  try{
+    await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'addCandidates',jobId:matchState.jobId,candidates:cands})});
+  }catch(e){}
+  loadJobCandidates();
+}
+async function loadJobCandidates(){
+  var wrap=document.getElementById('jobCandidates');if(!wrap)return;
+  try{
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'listCandidates',jobId:matchState.jobId})});
+    var d=await r.json();
+    var list=d.candidates||[];
+    if(!list.length){wrap.innerHTML='';return}
+    var h='<div style="margin-top:1rem;border-top:2px solid var(--g2);padding-top:.7rem">'
+      +'<div style="font-size:.68rem;font-weight:700;color:var(--pri);margin-bottom:.4rem">📋 Candidates for this Job ('+list.length+')</div>'
+      +'<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.6rem">'
+      +'<thead><tr style="background:var(--g1)"><th style="padding:.25rem .4rem;text-align:left">Match</th><th style="padding:.25rem .4rem;text-align:left">Name</th><th style="padding:.25rem .4rem;text-align:left">Role</th><th style="padding:.25rem .4rem;text-align:left">Type</th><th style="padding:.25rem .4rem;text-align:left">Pipeline</th><th style="padding:.25rem .4rem;text-align:center">Action</th></tr></thead><tbody>';
+    list.forEach(function(c){
+      var pct=Math.round(c.overall||0);
+      var col=pct>=80?'#047857':(pct>=70?'#0891B2':'#B45309');
+      h+='<tr style="border-bottom:1px solid var(--g1)">'
+        +'<td style="padding:.25rem .4rem"><span style="font-weight:700;color:'+col+'">'+pct+'%</span></td>'
+        +'<td style="padding:.25rem .4rem;font-weight:600">'+esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
+        +'<td style="padding:.25rem .4rem;color:var(--g5)">'+esc(c.currentRole||'—')+'</td>'
+        +'<td style="padding:.25rem .4rem">'+typeBadgeCons(c.engagementType)+'</td>'
+        +'<td style="padding:.25rem .4rem">'+pipelineBadge(c.pipelineStatus)+'</td>'
+        +'<td style="padding:.25rem .4rem;text-align:center">'
+        +(c._id?'<button class="vb" onclick="openManageProfile(\''+c._id+'\')" style="font-size:.55rem">'+(CAP.canStatus?'Manage':'View')+'</button> ':'')
+        +(CAP.canStatus?'<button onclick="removeJobCandidate(\''+esc(c.sourceId)+'\')" title="Remove from this job" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.62rem">✕</button>':'')
+        +'</td></tr>';
+    });
+    h+='</tbody></table></div></div>';
+    wrap.innerHTML=h;
+  }catch(e){wrap.innerHTML=''}
+}
+async function removeJobCandidate(sourceId){
+  if(!confirm('Remove this candidate from the job? (The consultant profile itself is kept.)'))return;
+  try{
+    await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'removeCandidate',jobId:matchState.jobId,sourceId:sourceId})});
+    loadJobCandidates();
+  }catch(e){}
 }
 
 function matchColor(pct){if(pct>=80)return'#047857';if(pct>=70)return'#0F766E';if(pct>=60)return'#B45309';return'#DC2626'}

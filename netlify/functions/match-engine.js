@@ -318,13 +318,39 @@ function clamp(n) { n = parseInt(n); if (isNaN(n)) return 0; return Math.max(0, 
 // ---------------------------------------------------------------------------
 // Build Apify search keywords from job requirements
 // ---------------------------------------------------------------------------
-function buildSearchKeywords(req) {
-  // #354: use the ROLE only — adding tools/contract words returned too many out-of-context
-  // results. A clean role keyword ("Security Architect") yields far more relevant profiles.
+// Default sourcing config — how many profiles to fetch per keyword variant.
+// LinkedIn headlines say "Consultant" far more often than "Contractor" (~70/30),
+// so we weight the fetch accordingly. Tunable via the settings collection.
+const DEFAULT_SOURCING = {
+  variants: [
+    { suffix: 'Consultant', limit: 35 },
+    { suffix: 'Contractor', limit: 15 }
+  ]
+};
+
+async function getSourcingConfig(db) {
+  try {
+    var s = await db.collection('settings').findOne({ _id: 'match_sourcing' });
+    if (s && Array.isArray(s.variants) && s.variants.length) return { variants: s.variants };
+  } catch (e) {}
+  return DEFAULT_SOURCING;
+}
+
+function buildSearchRole(req) {
+  // #354: use the ROLE only as the base term — adding tools/compliance words hurt recall.
   var role = (req.role || '').trim();
-  // strip seniority/level noise that hurts search recall
   role = role.replace(/\b(senior|junior|lead|principal|staff|sr\.?|jr\.?|l[1-4]|level\s*[1-4])\b/gi, '').replace(/\s+/g, ' ').trim();
   return role || 'cybersecurity engineer';
+}
+
+// Build the per-variant search targets, e.g.
+//   [{ keyword: 'Security Architect Consultant', limit: 35 }, { keyword: '... Contractor', limit: 15 }]
+// NOTE: the Apify actor applies `limit` PER KEYWORD, so each variant is fetched separately.
+function buildSearchTargets(req, sourcing) {
+  var role = buildSearchRole(req);
+  return (sourcing.variants || DEFAULT_SOURCING.variants).map(function (v) {
+    return { keyword: (role + ' ' + v.suffix).trim(), limit: v.limit };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -428,48 +454,55 @@ exports.handler = async function (event) {
       };
     }
 
-    // ---- ACTION: startTopUp — kick off Apify fetch of fresh profiles ----
+    // ---- ACTION: startTopUp — kick off one Apify run PER keyword variant ----
     if (action === 'startTopUp') {
       var req2 = await getReq(body.jobId);
       if (!req2) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
       if (!APIFY_TOKEN) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'APIFY_API_TOKEN not configured' }) };
 
-      var keywords = buildSearchKeywords(req2);
+      var sourcing = await getSourcingConfig(db);
+      var targets = buildSearchTargets(req2, sourcing);
       var locations = req2.country ? [req2.country] : [];
+      var runs = [];
       try {
-        var resp = await fetch('https://api.apify.com/v2/acts/' + PROFILE_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'get-profiles',
-            keywords: [keywords],
-            limit: FETCH_BATCH,
-            location: locations,
-            profileFields: ['about', 'experience', 'skills', 'languages', 'organizations']
-          })
-        });
-        var run = await resp.json();
-        if (!run.data || !run.data.id) {
-          return { statusCode: 200, headers: hdrs, body: JSON.stringify({
-            error: 'Failed to start profile fetch',
-            apifyStatus: resp.status,
-            detail: run && run.error ? (run.error.message || run.error.type || JSON.stringify(run.error)) : JSON.stringify(run).slice(0, 400),
-            sentKeywords: keywords, sentLocation: locations
-          }) };
+        for (var t = 0; t < targets.length; t++) {
+          var tgt = targets[t];
+          var resp = await fetch('https://api.apify.com/v2/acts/' + PROFILE_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'get-profiles',
+              keywords: [tgt.keyword],       // one keyword per run — actor applies limit PER keyword
+              limit: tgt.limit,
+              location: locations,
+              profileFields: ['about', 'experience', 'skills', 'languages', 'organizations']
+            })
+          });
+          var run = await resp.json();
+          if (run.data && run.data.id) {
+            runs.push({ runId: run.data.id, datasetId: run.data.defaultDatasetId, keyword: tgt.keyword, limit: tgt.limit });
+          } else if (!runs.length && t === targets.length - 1) {
+            return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+              error: 'Failed to start profile fetch',
+              apifyStatus: resp.status,
+              detail: run && run.error ? (run.error.message || run.error.type || JSON.stringify(run.error)) : JSON.stringify(run).slice(0, 400),
+              sentTargets: targets, sentLocation: locations
+            }) };
+          }
         }
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ runId: run.data.id, datasetId: run.data.defaultDatasetId, keywords: keywords }) };
+        if (!runs.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No Apify runs could be started' }) };
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ runs: runs, targets: targets }) };
       } catch (e) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Start error: ' + e.message }) };
       }
     }
 
-    // ---- ACTION: checkTopUp — poll Apify; when done, cache + score + return ----
+    // ---- ACTION: checkTopUp — poll ALL runs; when all done, cache their profiles ----
     if (action === 'checkTopUp') {
       var req3 = await getReq(body.jobId);
       if (!req3) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
-      var runId = body.runId, datasetId = body.datasetId;
-      if (!runId) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No runId' }) };
+      var runs = body.runs || (body.runId ? [{ runId: body.runId, datasetId: body.datasetId }] : []);
+      if (!runs.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No runs to check' }) };
 
-      // helper: fetch with a hard timeout so a hung Apify call can't stall the whole function
       async function fetchWithTimeout(url, opts, ms) {
         var ctrl = new AbortController();
         var t = setTimeout(function () { ctrl.abort(); }, ms || 12000);
@@ -477,34 +510,41 @@ exports.handler = async function (event) {
         finally { clearTimeout(t); }
       }
 
-      var statusData;
-      try {
-        var statusResp = await fetchWithTimeout('https://api.apify.com/v2/actor-runs/' + runId + '?token=' + APIFY_TOKEN, {}, 10000);
-        statusData = await statusResp.json();
-      } catch (e) {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, status: 'CHECKING', note: 'status check slow, will retry' }) };
+      // Poll every run's status
+      var allDone = true, anyFailed = [], statuses = [];
+      for (var ri = 0; ri < runs.length; ri++) {
+        try {
+          var sResp = await fetchWithTimeout('https://api.apify.com/v2/actor-runs/' + runs[ri].runId + '?token=' + APIFY_TOKEN, {}, 8000);
+          var sData = await sResp.json();
+          var st = sData.data ? sData.data.status : 'UNKNOWN';
+          statuses.push({ keyword: runs[ri].keyword || '', status: st });
+          if (st === 'RUNNING' || st === 'READY') allDone = false;
+          else if (st !== 'SUCCEEDED') anyFailed.push({ keyword: runs[ri].keyword, status: st });
+        } catch (e) {
+          allDone = false; // status check slow — keep polling
+          statuses.push({ keyword: runs[ri].keyword || '', status: 'CHECKING' });
+        }
       }
-      var status = statusData.data ? statusData.data.status : 'UNKNOWN';
-      if (status === 'RUNNING' || status === 'READY') {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, status: status }) };
-      }
-      if (status !== 'SUCCEEDED') {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: true, status: status, error: 'Fetch ' + status }) };
+      if (!allDone) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, statuses: statuses }) };
+
+      // All runs finished — collect results from each successful dataset
+      var allNormalized = [];
+      for (var rj = 0; rj < runs.length; rj++) {
+        if (!runs[rj].datasetId) continue;
+        try {
+          var rResp = await fetchWithTimeout('https://api.apify.com/v2/datasets/' + runs[rj].datasetId + '/items?token=' + APIFY_TOKEN + '&format=json', {}, 12000);
+          var raw = await rResp.json();
+          var norm = (raw || []).map(normalizeApifyProfile).filter(function (p) { return p.sourceId; });
+          allNormalized = allNormalized.concat(norm);
+        } catch (e) { /* skip this dataset; others may still yield */ }
       }
 
-      // Fetch raw profiles (with timeout), normalize
-      var raw;
-      try {
-        var resultsResp = await fetchWithTimeout('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN + '&format=json&limit=' + FETCH_BATCH, {}, 15000);
-        raw = await resultsResp.json();
-      } catch (e) {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, status: 'FETCHING', note: 'results fetch slow, will retry' }) };
-      }
-      var normalized = (raw || []).map(normalizeApifyProfile).filter(function (p) { return p.sourceId; });
+      // Dedupe by sourceId across both variant runs (someone may match both keywords)
+      var seen = {}, deduped = [];
+      allNormalized.forEach(function (p) { if (!seen[p.sourceId]) { seen[p.sourceId] = 1; deduped.push(p); } });
 
-      // Upsert into cache in a SINGLE bulkWrite (fast) instead of 50 sequential writes
-      if (normalized.length) {
-        var ops = normalized.map(function (np) {
+      if (deduped.length) {
+        var ops = deduped.map(function (np) {
           return {
             updateOne: {
               filter: { source: np.source, sourceId: np.sourceId },
@@ -529,7 +569,98 @@ exports.handler = async function (event) {
         try { await cacheCol.bulkWrite(ops, { ordered: false }); } catch (e) {}
       }
 
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: true, status: status, fetched: normalized.length, message: 'Fetched and cached ' + normalized.length + ' profiles. Re-run match.' }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        done: true, fetched: deduped.length, failedRuns: anyFailed,
+        message: 'Fetched and cached ' + deduped.length + ' profiles across ' + runs.length + ' searches.'
+      }) };
+    }
+
+    // ---- #381: JOB CANDIDATES — matched profiles saved against a job ----
+    // Stored on the job record as candidateProfiles: [{ profileId, sourceId, overall, addedAt }]
+    if (action === 'addCandidates') {
+      var jobsCol = db.collection('jobs');
+      var ObjectId = require('mongodb').ObjectId;
+      var cands = body.candidates || [];
+      if (!cands.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ added: 0 }) };
+
+      // Adopt each matched profile into the managed consultant DB (so it can enter the pipeline)
+      var adoptOps = cands.map(function (c) {
+        return {
+          updateOne: {
+            filter: { sourceId: c.sourceId },
+            update: {
+              $set: { managed: true, updatedAt: new Date() },
+              $setOnInsert: { availability: 'available', pipelineStatus: 'none', createdAt: new Date() }
+            }
+          }
+        };
+      });
+      try { await cacheCol.bulkWrite(adoptOps, { ordered: false }); } catch (e) {}
+      // Fill engagementType from the contractor signal where it's not already set
+      try {
+        await cacheCol.updateMany(
+          { sourceId: { $in: cands.map(function (c) { return c.sourceId; }) }, engagementType: { $exists: false }, 'contractorSignal.likely': true },
+          { $set: { engagementType: 'Contractor' } }
+        );
+        await cacheCol.updateMany(
+          { sourceId: { $in: cands.map(function (c) { return c.sourceId; }) }, engagementType: { $exists: false } },
+          { $set: { engagementType: 'Unknown' } }
+        );
+      } catch (e) {}
+
+      // Attach to the job (dedupe by sourceId)
+      var jobDoc = await jobsCol.findOne({ _id: new ObjectId(body.jobId) });
+      var existing = (jobDoc && jobDoc.candidateProfiles) || [];
+      var have = {}; existing.forEach(function (e) { have[e.sourceId] = 1; });
+      var toAdd = cands.filter(function (c) { return !have[c.sourceId]; })
+        .map(function (c) { return { sourceId: c.sourceId, overall: c.overall || 0, addedAt: new Date(), addedBy: authUser ? authUser.email : '' }; });
+      if (toAdd.length) await jobsCol.updateOne({ _id: new ObjectId(body.jobId) }, { $push: { candidateProfiles: { $each: toAdd } } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ added: toAdd.length, total: existing.length + toAdd.length }) };
+    }
+
+    if (action === 'listCandidates') {
+      var jobsCol2 = db.collection('jobs');
+      var ObjectId2 = require('mongodb').ObjectId;
+      var jd = await jobsCol2.findOne({ _id: new ObjectId2(body.jobId) }, { projection: { candidateProfiles: 1 } });
+      var cps = (jd && jd.candidateProfiles) || [];
+      if (!cps.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ candidates: [] }) };
+      var ids = cps.map(function (c) { return c.sourceId; });
+      var profs = await cacheCol.find({ sourceId: { $in: ids } }).toArray();
+      var byId = {}; profs.forEach(function (p) { byId[p.sourceId] = p; });
+      var out = cps.map(function (c) {
+        var p = byId[c.sourceId] || {};
+        return {
+          _id: p._id ? p._id.toString() : '', sourceId: c.sourceId, overall: c.overall, addedAt: c.addedAt,
+          name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',
+          currentCompany: p.currentCompany || '', location: p.location || '', country: p.country || '',
+          engagementType: p.engagementType || (p.contractorSignal && p.contractorSignal.likely ? 'Contractor' : 'Unknown'),
+          availability: p.availability || 'available', pipelineStatus: p.pipelineStatus || 'none',
+          certifications: p.certifications || [], linkedinUrl: p.linkedinUrl || ''
+        };
+      }).sort(function (a, b) { return (b.overall || 0) - (a.overall || 0); });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ candidates: out }) };
+    }
+
+    if (action === 'removeCandidate') {
+      var jobsCol3 = db.collection('jobs');
+      var ObjectId3 = require('mongodb').ObjectId;
+      await jobsCol3.updateOne({ _id: new ObjectId3(body.jobId) }, { $pull: { candidateProfiles: { sourceId: body.sourceId } } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ removed: true }) };
+    }
+
+    // ---- ACTION: getSourcing / setSourcing (keyword variants + per-variant fetch limits) ----
+    if (action === 'getSourcing') {
+      var sc = await getSourcingConfig(db);
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ variants: sc.variants, defaults: DEFAULT_SOURCING.variants }) };
+    }
+    if (action === 'setSourcing') {
+      if (!Array.isArray(body.variants) || !body.variants.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'variants array required' }) };
+      var clean = body.variants
+        .filter(function (v) { return v && v.suffix; })
+        .map(function (v) { return { suffix: String(v.suffix).trim(), limit: Math.max(1, parseInt(v.limit) || 10) }; });
+      if (!clean.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'No valid variants' }) };
+      await db.collection('settings').updateOne({ _id: 'match_sourcing' }, { $set: { variants: clean, updatedAt: new Date() } }, { upsert: true });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: true, variants: clean }) };
     }
 
     // ---- ACTION: getWeights / setWeights (super admin later) ----
@@ -545,6 +676,7 @@ exports.handler = async function (event) {
 
 function formatMatch(m) {
   return {
+    sourceId: m.profile.sourceId,
     name: m.profile.name,
     headline: m.profile.headline,
     location: m.profile.location,
