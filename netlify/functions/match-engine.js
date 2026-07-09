@@ -576,12 +576,23 @@ exports.handler = async function (event) {
     }
 
     // ---- #381: JOB CANDIDATES — matched profiles saved against a job ----
-    // Stored on the job record as candidateProfiles: [{ profileId, sourceId, overall, addedAt }]
+    // Stored on the job record as candidateProfiles: [{ sourceId, overall, addedAt }]
+    // NOTE: jobId may be a Mongo _id OR the external jobId string — resolve both (like getReq).
+    async function findJobDoc(jobId) {
+      var ObjectId = require('mongodb').ObjectId;
+      var jobsColL = db.collection('jobs');
+      var j = null;
+      try { j = await jobsColL.findOne({ _id: new ObjectId(jobId) }); } catch (e) {}
+      if (!j) j = await jobsColL.findOne({ jobId: jobId });
+      return j;
+    }
+
     if (action === 'addCandidates') {
       var jobsCol = db.collection('jobs');
-      var ObjectId = require('mongodb').ObjectId;
       var cands = body.candidates || [];
       if (!cands.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ added: 0 }) };
+      var jobDoc = await findJobDoc(body.jobId);
+      if (!jobDoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
 
       // Adopt each matched profile into the managed consultant DB (so it can enter the pipeline)
       var adoptOps = cands.map(function (c) {
@@ -596,33 +607,25 @@ exports.handler = async function (event) {
         };
       });
       try { await cacheCol.bulkWrite(adoptOps, { ordered: false }); } catch (e) {}
-      // Fill engagementType from the contractor signal where it's not already set
       try {
-        await cacheCol.updateMany(
-          { sourceId: { $in: cands.map(function (c) { return c.sourceId; }) }, engagementType: { $exists: false }, 'contractorSignal.likely': true },
-          { $set: { engagementType: 'Contractor' } }
-        );
-        await cacheCol.updateMany(
-          { sourceId: { $in: cands.map(function (c) { return c.sourceId; }) }, engagementType: { $exists: false } },
-          { $set: { engagementType: 'Unknown' } }
-        );
+        var sids = cands.map(function (c) { return c.sourceId; });
+        await cacheCol.updateMany({ sourceId: { $in: sids }, engagementType: { $exists: false }, 'contractorSignal.likely': true }, { $set: { engagementType: 'Contractor' } });
+        await cacheCol.updateMany({ sourceId: { $in: sids }, engagementType: { $exists: false } }, { $set: { engagementType: 'Unknown' } });
       } catch (e) {}
 
       // Attach to the job (dedupe by sourceId)
-      var jobDoc = await jobsCol.findOne({ _id: new ObjectId(body.jobId) });
-      var existing = (jobDoc && jobDoc.candidateProfiles) || [];
+      var existing = jobDoc.candidateProfiles || [];
       var have = {}; existing.forEach(function (e) { have[e.sourceId] = 1; });
-      var toAdd = cands.filter(function (c) { return !have[c.sourceId]; })
+      var toAdd = cands.filter(function (c) { return c.sourceId && !have[c.sourceId]; })
         .map(function (c) { return { sourceId: c.sourceId, overall: c.overall || 0, addedAt: new Date(), addedBy: authUser ? authUser.email : '' }; });
-      if (toAdd.length) await jobsCol.updateOne({ _id: new ObjectId(body.jobId) }, { $push: { candidateProfiles: { $each: toAdd } } });
+      if (toAdd.length) await jobsCol.updateOne({ _id: jobDoc._id }, { $push: { candidateProfiles: { $each: toAdd } } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ added: toAdd.length, total: existing.length + toAdd.length }) };
     }
 
     if (action === 'listCandidates') {
-      var jobsCol2 = db.collection('jobs');
-      var ObjectId2 = require('mongodb').ObjectId;
-      var jd = await jobsCol2.findOne({ _id: new ObjectId2(body.jobId) }, { projection: { candidateProfiles: 1 } });
-      var cps = (jd && jd.candidateProfiles) || [];
+      var jd = await findJobDoc(body.jobId);
+      if (!jd) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ candidates: [] }) };
+      var cps = jd.candidateProfiles || [];
       if (!cps.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ candidates: [] }) };
       var ids = cps.map(function (c) { return c.sourceId; });
       var profs = await cacheCol.find({ sourceId: { $in: ids } }).toArray();
@@ -642,9 +645,9 @@ exports.handler = async function (event) {
     }
 
     if (action === 'removeCandidate') {
-      var jobsCol3 = db.collection('jobs');
-      var ObjectId3 = require('mongodb').ObjectId;
-      await jobsCol3.updateOne({ _id: new ObjectId3(body.jobId) }, { $pull: { candidateProfiles: { sourceId: body.sourceId } } });
+      var jr = await findJobDoc(body.jobId);
+      if (!jr) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      await db.collection('jobs').updateOne({ _id: jr._id }, { $pull: { candidateProfiles: { sourceId: body.sourceId } } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ removed: true }) };
     }
 

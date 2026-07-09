@@ -347,18 +347,54 @@ exports.handler = async function (event) {
       if (!pi.client || !pi.role || !pi.startDate || !pi.rateAgreed) {
         return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'missing_fields', message: 'Client, Role, Start Date and Rate are all required to mark a consultant as placed.' }) };
       }
+      var pdoc = await col.findOne({ _id: new ObjectId(body.id) });
+      if (!pdoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Not found' }) };
+
       var placement = { client: pi.client, role: pi.role, startDate: pi.startDate, endDate: pi.endDate || null, rateAgreed: pi.rateAgreed, placedBy: authUser.email, placedAt: new Date() };
-      await col.updateOne({ _id: new ObjectId(body.id) }, {
-        $set: {
-          availability: 'placed',
-          pipelineStatus: 'placed',
-          placementInfo: placement,
-          availableFrom: pi.endDate ? new Date(pi.endDate) : null,
-          updatedAt: new Date()
-        },
-        $push: { placementHistory: placement }  // #374: keep a record of every placement
-      });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ placed: true }) };
+      var hist = pdoc.placementHistory || [];
+      var cur = pdoc.placementInfo || null;
+      var isCurrentlyPlaced = (pdoc.availability === 'placed' || pdoc.pipelineStatus === 'placed');
+
+      // #384: Decide UPDATE-in-place vs NEW placement.
+      // Same client+role+start as the active placement => the user is editing it (e.g. adding an
+      // end date), so update the last history row rather than appending a duplicate.
+      function sameKey(a, b) {
+        if (!a || !b) return false;
+        var da = a.startDate ? new Date(a.startDate).toISOString().slice(0, 10) : '';
+        var db_ = b.startDate ? new Date(b.startDate).toISOString().slice(0, 10) : '';
+        return (a.client || '').trim().toLowerCase() === (b.client || '').trim().toLowerCase()
+          && (a.role || '').trim().toLowerCase() === (b.role || '').trim().toLowerCase()
+          && da === db_;
+      }
+      var isUpdateOfCurrent = isCurrentlyPlaced && sameKey(cur, placement);
+
+      var setFields = {
+        availability: 'placed',
+        pipelineStatus: 'placed',
+        placementInfo: placement,
+        availableFrom: pi.endDate ? new Date(pi.endDate) : null,
+        updatedAt: new Date()
+      };
+
+      if (isUpdateOfCurrent && hist.length) {
+        // Update the matching (latest) history row in place — preserve original placedAt/placedBy
+        var li = -1;
+        for (var hI = hist.length - 1; hI >= 0; hI--) { if (sameKey(hist[hI], placement)) { li = hI; break; } }
+        if (li === -1) li = hist.length - 1;
+        hist[li] = Object.assign({}, hist[li], {
+          client: placement.client, role: placement.role, startDate: placement.startDate,
+          endDate: placement.endDate, rateAgreed: placement.rateAgreed
+        });
+        setFields.placementHistory = hist;
+        // keep the original placedAt/placedBy on the live placementInfo too
+        setFields.placementInfo = Object.assign({}, placement, { placedAt: hist[li].placedAt || placement.placedAt, placedBy: hist[li].placedBy || placement.placedBy });
+        await col.updateOne({ _id: pdoc._id }, { $set: setFields });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ placed: true, updated: true }) };
+      }
+
+      // Genuinely new placement → append a history row
+      await col.updateOne({ _id: pdoc._id }, { $set: setFields, $push: { placementHistory: placement } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ placed: true, created: true }) };
     }
 
     // ---- UPDATE PLACEMENT END DATE (for history entries) ----
