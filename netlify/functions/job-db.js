@@ -1589,8 +1589,13 @@ exports.handler = async (event) => {
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       var contracts = await col.find(applyScope({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] }))
         .sort({ datePosted: -1, dateScanned: -1 })
-        .project({ title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
+        .project({ title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1, candidateProfiles: 1 })
         .toArray();
+      // #395: expose matched-consultant count, drop the heavy array
+      contracts.forEach(function (c) {
+        c.candidateCount = Array.isArray(c.candidateProfiles) ? c.candidateProfiles.length : 0;
+        delete c.candidateProfiles;
+      });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contracts: contracts }) };
     }
 
