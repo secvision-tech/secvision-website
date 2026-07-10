@@ -314,6 +314,12 @@ exports.handler = async (event) => {
         .limit(limit)
         .toArray();
 
+      // #387: expose how many matched consultants are saved against each job (light payload)
+      jobs.forEach(function (j) {
+        j.candidateCount = Array.isArray(j.candidateProfiles) ? j.candidateProfiles.length : 0;
+        delete j.candidateProfiles;
+      });
+
       // Hybrid sort: only for the first block / non-paginated requests. For block pagination
       // (page > 1), rely on the deterministic DB sort so blocks don't overlap or reorder.
       if (page <= 1) {
