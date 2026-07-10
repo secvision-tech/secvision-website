@@ -1686,6 +1686,7 @@ async function viewDet(i){
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
   // load the saved candidates for this job
   jobCandidatesJobId=j._id||j.jobId||'';
+  _selectedCandidates={};  // #403: selections are per-job
   _currentJobForMatch={skills:j.skills||'',certifications:j.certifications||'',tools:j.tools||'',compliance:j.compliance||'',title:j.title||''};
   loadJobCandidates();
 }
@@ -3580,7 +3581,7 @@ function fmtDate(date){return formatDateWithSettings(date)}
 loadSettings();
 
 var scopeDialogHtml='<div id="scopeDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1100;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div id="scopeDialogBody"></div></div></div>';
-var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
+var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchActions" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap"><button id="fetchMoreBtn" onclick="topUpProfiles()" style="padding:.3rem .7rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button><span id="cacheInfo" style="font-size:.56rem;color:var(--g5)"></span></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
 document.addEventListener("DOMContentLoaded",function(){document.body.insertAdjacentHTML("beforeend",contactPopupHtml);document.body.insertAdjacentHTML("beforeend",scopeDialogHtml);document.body.insertAdjacentHTML("beforeend",matchPopupHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
@@ -4221,6 +4222,8 @@ async function openMatchProfiles(idx){
   document.getElementById('matchSub').innerHTML='<strong>'+esc(matchState.jobTitle)+'</strong> at '+esc(matchState.company)+' &middot; consultants scoring ≥60% shown, best first';
   document.getElementById('matchResults').innerHTML='';
   document.getElementById('matchPager').style.display='none';
+  var ci=document.getElementById('cacheInfo');if(ci)ci.textContent='';
+  resetFetchMoreBtn();
   runMatch(0);
 }
 function closeMatchPopup(){
@@ -4266,47 +4269,60 @@ async function runMatch(page){
       return;
     }
     if((!d.matches||!d.matches.length)&&d.needsTopUp){
-      st.innerHTML='🔍 Few cached matches. Fetching fresh consultant profiles from LinkedIn (this can take 30–60s)...';
+      st.innerHTML='🔍 No cached matches. Fetching fresh consultant profiles from LinkedIn (this can take 30–60s)...';
       await topUpProfiles();
       return;
     }
     renderMatches(d);
-    if(d.needsTopUp&&page===0){
-      st.innerHTML='ℹ️ Showing '+d.totalMatches+' cached match(es). <button onclick="topUpProfiles()" style="padding:.15rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button>';
-    }else{st.textContent=''}
+    // #404: the Fetch More button lives in its own action bar and is always available.
+    // Here we just report what the local cache produced.
+    var ci=document.getElementById('cacheInfo');
+    if(ci&&page===0){
+      ci.textContent='Scored '+(d.cachedCount||0)+' cached profile'+((d.cachedCount||0)===1?'':'s')+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.';
+    }
   }catch(e){st.textContent='⚠️ Error: '+e.message}
 }
 
+// #404: re-enable the always-present Fetch More button after a fetch finishes or fails
+function resetFetchMoreBtn(){
+  var fb=document.getElementById('fetchMoreBtn');
+  if(fb){fb.disabled=false;fb.style.opacity='1';fb.textContent='🔍 Fetch More from LinkedIn'}
+}
 async function topUpProfiles(){
   var st=document.getElementById('matchStatus');
+  var fb=document.getElementById('fetchMoreBtn');
+  if(fb){fb.disabled=true;fb.style.opacity='.5';fb.textContent='🔍 Fetching...'}
   st.innerHTML='🔍 Searching LinkedIn for matching consultants...';
   try{
     var sr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'startTopUp',jobId:matchState.jobId})});
     var sd=await safeMatchJson(sr);
-    if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')</div>':'');return}
+    if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')</div>':'');resetFetchMoreBtn();return}
     var runs=sd.runs||[];
-    if(!runs.length){st.textContent='⚠️ No profile searches could be started.';return}
+    if(!runs.length){st.textContent='⚠️ No profile searches could be started.';resetFetchMoreBtn();return}
     st.innerHTML='🔍 Searching LinkedIn ('+runs.map(function(r){return esc(r.keyword)}).join(' + ')+')...';
     matchState.polling=true;
     pollTopUp(runs,0);
-  }catch(e){st.textContent='⚠️ Error: '+e.message}
+  }catch(e){st.textContent='⚠️ Error: '+e.message;resetFetchMoreBtn()}
 }
 
 async function pollTopUp(runs,tries){
-  if(!matchState.polling)return;
-  if(tries>20){document.getElementById('matchStatus').textContent='⚠️ Profile fetch timed out. Try again.';matchState.polling=false;return}
+  if(!matchState.polling){resetFetchMoreBtn();return}
+  if(tries>20){document.getElementById('matchStatus').textContent='⚠️ Profile fetch timed out. Try again.';matchState.polling=false;resetFetchMoreBtn();return}
   var st=document.getElementById('matchStatus');
   st.innerHTML='🔍 Fetching consultant profiles from LinkedIn... ('+(tries*8)+'s)';
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'checkTopUp',jobId:matchState.jobId,runs:runs})});
     var d=await safeMatchJson(r);
     if(d.error&&d.retry){setTimeout(function(){pollTopUp(runs,tries+1)},8000);return}
-    if(d.error){st.textContent='⚠️ '+d.error;matchState.polling=false;return}
+    if(d.error){st.textContent='⚠️ '+d.error;matchState.polling=false;resetFetchMoreBtn();return}
     if(!d.done){setTimeout(function(){pollTopUp(runs,tries+1)},8000);return}
     matchState.polling=false;
-    st.innerHTML='✅ Fetched '+d.fetched+' profiles. Scoring against job...';
+    resetFetchMoreBtn();
+    var failNote=(d.failedRuns&&d.failedRuns.length)?' ('+d.failedRuns.length+' search(es) failed)':'';
+    if(!d.fetched){st.innerHTML='ℹ️ LinkedIn returned no new profiles for this role'+failNote+'. All results may already be cached.';return}
+    st.innerHTML='✅ Fetched '+d.fetched+' profile'+(d.fetched>1?'s':'')+failNote+'. Scoring against job...';
     runMatch(0);
-  }catch(e){st.textContent='⚠️ Error: '+e.message;matchState.polling=false}
+  }catch(e){st.textContent='⚠️ Error: '+e.message;matchState.polling=false;resetFetchMoreBtn()}
 }
 
 function renderMatches(d){
@@ -4326,6 +4342,7 @@ function renderMatches(d){
 }
 // #381 — Job candidates: matched profiles saved against this job (rendered in the JOB popup)
 var jobCandidatesJobId='';
+var _selectedCandidates={};  // #403: sourceId -> true, survives table re-renders
 async function autoAddCandidates(refs){
   if(!refs||!refs.length)return;
   try{
@@ -4379,7 +4396,8 @@ async function loadJobCandidates(){
       var pct=Math.round(c.overall||0);
       var col=pct>=80?'#047857':(pct>=70?'#0891B2':'#B45309');
       var loc=c.location||c.country||'';
-      h+='<tr style="border-bottom:1px solid var(--g1)">'
+      var selCls=_selectedCandidates[c.sourceId]?' class="row-hl"':'';
+      h+='<tr'+selCls+' data-sid="'+esc(c.sourceId)+'" style="border-bottom:1px solid var(--g1)">'
         +'<td style="padding:.3rem .35rem;color:var(--g4);font-weight:600;text-align:right;white-space:nowrap">'+(i+1)+'</td>'
         +'<td style="padding:.3rem .35rem;text-align:right;white-space:nowrap"><span style="font-weight:700;color:'+col+'">'+pct+'%</span></td>'
         +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
@@ -4398,12 +4416,15 @@ async function loadJobCandidates(){
     wrap.querySelectorAll('.cand-del').forEach(function(btn){
       btn.onclick=function(e){e.stopPropagation();removeJobCandidate(this.dataset.sid,this.dataset.name)};
     });
-    // #393: click a row to toggle highlight/select
+    // #393/#403: click a row to toggle highlight; selection survives re-renders
     wrap.querySelectorAll('tbody tr').forEach(function(tr){
       tr.style.cursor='pointer';
       tr.onclick=function(e){
         if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.closest('a')||e.target.closest('button'))return;
         this.classList.toggle('row-hl');
+        var sid=this.dataset.sid;
+        if(this.classList.contains('row-hl'))_selectedCandidates[sid]=true;
+        else delete _selectedCandidates[sid];
       };
     });
   }catch(e){wrap.innerHTML='<div style="font-size:.62rem;color:#DC2626">Could not load candidates: '+esc(e.message)+'</div>'}
@@ -4456,6 +4477,7 @@ async function removeJobCandidate(sourceId,name){
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'removeCandidate',jobId:jobCandidatesJobId,sourceId:sourceId})});
     var d=await r.json();
     if(d.error){alert('Could not remove: '+(d.message||d.error));return}
+    delete _selectedCandidates[sourceId];  // #403
     // keep the jobs-table indicator in sync
     var jm=allJobs.find(function(x){return (x._id||x.jobId||'')===jobCandidatesJobId});
     if(jm&&jm.candidateCount>0){jm.candidateCount--;viewDirty=true}
