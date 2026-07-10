@@ -1408,6 +1408,60 @@ function addTooltips(text){
     return trimmed;
   }).join(', ');
 }
+// #399: highlight the job's own extracted terms (skills, tools, certs, compliance) inside
+// its description. Operates only on text nodes so it can't corrupt links or existing markup.
+function buildJobHighlightTerms(j){
+  if(!j)return [];
+  var raw=[j.skills,j.tools,j.certifications,j.compliance].filter(function(s){return s&&s!=='See details'&&s!=='N/A'}).join(', ');
+  if(!raw.trim())return [];
+  var seen={},terms=[];
+  raw.split(/[,;|]+/).forEach(function(t){
+    t=t.trim();
+    if(t.length<2)return;                 // skip noise like "C"
+    var k=t.toLowerCase();
+    if(seen[k])return; seen[k]=1;
+    terms.push(t);
+  });
+  // longest first so "NIST 800-53" wins over "NIST"
+  terms.sort(function(a,b){return b.length-a.length});
+  return terms;
+}
+function highlightTermsInHtml(html,terms){
+  if(!terms||!terms.length||!html)return html;
+  var wrap=document.createElement('div');
+  wrap.innerHTML=html;
+  var esc_=function(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')};
+  // (^|non-word-char) TERM (non-word-char|$) — avoids lookbehind for broader browser support
+  var body='('+terms.map(esc_).join('|')+')';
+  var re=new RegExp('(^|[^\\w-])'+body+'(?![\\w-])','gi');
+  var walker=document.createTreeWalker(wrap,NodeFilter.SHOW_TEXT,null);
+  var nodes=[],n;
+  while(n=walker.nextNode()){
+    if(n.parentNode&&/^(A|MARK|SCRIPT|STYLE)$/.test(n.parentNode.nodeName))continue;
+    re.lastIndex=0;
+    if(re.test(n.nodeValue))nodes.push(n);
+  }
+  re.lastIndex=0;
+  nodes.forEach(function(node){
+    var safe=node.nodeValue.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    var span=document.createElement('span');
+    span.innerHTML=safe.replace(re,function(m,pre,term){
+      return pre+'<mark style="background:#FEF08A;color:#713F12;padding:0 .1rem;border-radius:2px;font-weight:600">'+term+'</mark>';
+    });
+    node.parentNode.replaceChild(span,node);
+  });
+  return wrap.innerHTML;
+}
+
+// #399: toggle key-term highlighting in the job description
+function toggleDescHighlight(i){
+  var j=allJobs[i];if(!j)return;
+  var el=document.getElementById('descContent');if(!el)return;
+  var on=document.getElementById('descHighlightChk').checked;
+  var base=formatDesc((j.description||'No description available.').slice(0,5000));
+  el.innerHTML=on?highlightTermsInHtml(base,buildJobHighlightTerms(j)):base;
+}
+
 function formatDesc(text){
   if(!text)return'No description available.';
   var h = text
@@ -1621,7 +1675,7 @@ async function viewDet(i){
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
   var isNonEnglish=/[\u0600-\u06FF\u0750-\u077F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0900-\u097F\u0980-\u09FF\u0C00-\u0C7F\u0B80-\u0BFF\u00C0-\u024F\u1E00-\u1EFF]/.test(desc.slice(0,500));
   var translateBtnHtml=isNonEnglish?' <button onclick="toggleTranslate('+i+')" id="translateBtn" style="font-size:.6rem;padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600">🌐 Translate to English</button>':'';
-  h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center">Full Description'+translateBtnHtml+'</h4><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+formatDesc(desc.slice(0,5000))+'</div></div>';
+  h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center">Full Description<span style="display:flex;gap:.4rem;align-items:center"><label style="font-size:.6rem;font-weight:400;color:var(--g5);display:flex;align-items:center;gap:.2rem;cursor:pointer"><input type="checkbox" id="descHighlightChk" checked onchange="toggleDescHighlight('+i+')" style="cursor:pointer"><mark style="background:#FEF08A;color:#713F12;padding:0 .15rem;border-radius:2px">Highlight</mark> key terms</label>'+translateBtnHtml+'</span></h4><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+highlightTermsInHtml(formatDesc(desc.slice(0,5000)),buildJobHighlightTerms(j))+'</div></div>';
   // Match Profiles is the primary action (supply-side matching). Apply link kept as secondary.
   h+='<div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;flex-wrap:wrap">';
   if(CAP.canContacts)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
@@ -3697,8 +3751,8 @@ function consRowClick(e,el){if(e.target.tagName==='A'||e.target.tagName==='BUTTO
 var manageProfileId=null,manageProfileData=null,_pendingMpMsg=null,_refreshCandidatesOnClose=false;
 async function openManageProfile(id){
   manageProfileId=id;
-  // if not opened via the job candidates table, there's no job context to highlight against
-  if(!_refreshCandidatesOnClose)_matchJobContext=null;
+  // if not opened via the job candidates table, there's no job context or candidate navigation
+  if(!_refreshCandidatesOnClose){_matchJobContext=null;_candidateNavIdx=-1}
   var pop=document.getElementById('manageProfilePopup');
   if(!pop){document.body.insertAdjacentHTML('beforeend',manageProfileHtml());pop=document.getElementById('manageProfilePopup')}
   pop.style.display='flex';
@@ -3710,6 +3764,7 @@ async function openManageProfile(id){
     if(d.error){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">'+esc(d.error)+'</div>';return}
     manageProfileData=d.consultant;
     renderManageProfile();
+    updateCandidateNavUI();
     if(_pendingMpMsg){mpMsg(_pendingMpMsg.msg,_pendingMpMsg.color);_pendingMpMsg=null}
   }catch(e){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">Error: '+esc(e.message)+'</div>'}
 }
@@ -3717,6 +3772,7 @@ function closeManageProfile(){
   var p=document.getElementById('manageProfilePopup');if(p)p.style.display='none';
   manageProfileId=null;manageProfileData=null;
   _matchJobContext=null; // #398: don't carry job-skill highlighting into the next popup
+  _candidateNavIdx=-1;   // #400: reset candidate navigation
   // #390: if this popup was opened from the job's Matched Candidates table, refresh it
   if(_refreshCandidatesOnClose){
     _refreshCandidatesOnClose=false;
@@ -3726,10 +3782,29 @@ function closeManageProfile(){
 function manageProfileHtml(){
   return '<div id="manageProfilePopup" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,.85);z-index:1200;justify-content:center;align-items:center">'
     +'<div style="background:#fff;border-radius:8px;width:96%;max-width:640px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 id="mpTitle" style="margin:0;font-size:.85rem;color:var(--pri)">Manage Profile</h3><button onclick="closeManageProfile()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;gap:.5rem">'
+    +'<h3 id="mpTitle" style="margin:0;font-size:.85rem;color:var(--pri);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Manage Profile</h3>'
+    +'<div id="mpNav" style="display:none;align-items:center;gap:.3rem;white-space:nowrap">'
+    +'<button id="mpPrevBtn" onclick="candidateNavGo(-1)" style="padding:.2rem .5rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">‹ Prev</button>'
+    +'<span id="mpNavInfo" style="font-size:.55rem;color:var(--g5)"></span>'
+    +'<button id="mpNextBtn" onclick="candidateNavGo(1)" style="padding:.2rem .5rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">Next ›</button>'
+    +'</div>'
+    +'<button onclick="closeManageProfile()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
     +'<div id="mpStatus" style="font-size:.62rem;margin-bottom:.5rem"></div>'
     +'<div id="mpBody"></div>'
     +'</div></div>';
+}
+// #400: show/refresh the prev/next controls based on the candidate list position
+function updateCandidateNavUI(){
+  var nav=document.getElementById('mpNav');if(!nav)return;
+  var active=(_candidateNav.length>1&&_candidateNavIdx>=0);
+  nav.style.display=active?'flex':'none';
+  if(!active)return;
+  document.getElementById('mpPrevBtn').disabled=(_candidateNavIdx===0);
+  document.getElementById('mpPrevBtn').style.opacity=(_candidateNavIdx===0)?'.4':'1';
+  document.getElementById('mpNextBtn').disabled=(_candidateNavIdx===_candidateNav.length-1);
+  document.getElementById('mpNextBtn').style.opacity=(_candidateNavIdx===_candidateNav.length-1)?'.4':'1';
+  document.getElementById('mpNavInfo').textContent=(_candidateNavIdx+1)+' of '+_candidateNav.length;
 }
 function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="font-size:.55rem;color:var(--g4);display:block">'+label+'</span><span style="font-size:.68rem">'+(val||'—')+'</span></div>'}
 
@@ -4271,7 +4346,9 @@ async function loadJobCandidates(){
       +'<div style="font-size:.72rem;font-weight:700;color:var(--pri)">📋 Matched Candidates'+(list.length?' ('+list.length+')':'')+'</div>'
       +'<button onclick="loadJobCandidates()" title="Refresh matched candidates" style="padding:.25rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">🔄 Refresh</button>'
       +'</div>';
-    if(!list.length){wrap.innerHTML=header+'<div style="font-size:.62rem;color:var(--g4);padding:.4rem 0">No matched candidates saved for this job yet. Run <strong>Match Profiles</strong> to find some.</div></div>';return}
+    if(!list.length){wrap.innerHTML=header+'<div style="font-size:.62rem;color:var(--g4);padding:.4rem 0">No matched candidates saved for this job yet. Run <strong>Match Profiles</strong> to find some.</div></div>';_candidateNav=[];return}
+    // #400: remember the on-screen order so the Manage popup can navigate prev/next
+    _candidateNav=list.filter(function(c){return c._id}).map(function(c){return {_id:c._id,name:c.name}});
     var h=header
       +'<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px">'
       +'<table style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:auto"><thead><tr style="background:var(--g1)">'
@@ -4340,13 +4417,24 @@ function chip(text,matched,baseBg,baseFg){
   return '<span style="font-size:.5rem;background:'+baseBg+';color:'+baseFg+';padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block">'+esc(text)+'</span>';
 }
 
-// #390/#398: opening Manage from the candidates table — remember the job so we can
-// highlight matching skills, and refresh the table when the popup closes.
+// #390/#398/#400: opening Manage from the candidates table — remember the job so we can
+// highlight matching skills, enable prev/next navigation, and refresh the table on close.
 var _matchJobContext=null;
+var _candidateNav=[];      // ordered list of {_id, name} as shown in the table
+var _candidateNavIdx=-1;   // current position within that list
 function openManageProfileFromJob(id){
   _refreshCandidatesOnClose=true;
   _matchJobContext=_currentJobForMatch||null;
+  _candidateNavIdx=_candidateNav.findIndex(function(c){return c._id===id});
   openManageProfile(id);
+}
+function candidateNavGo(delta){
+  if(!_candidateNav.length||_candidateNavIdx<0)return;
+  var next=_candidateNavIdx+delta;
+  if(next<0||next>=_candidateNav.length)return;
+  _candidateNavIdx=next;
+  _refreshCandidatesOnClose=true; // stay in "from job" mode so highlighting persists
+  openManageProfile(_candidateNav[next]._id);
 }
 async function removeJobCandidate(sourceId,name){
   if(!confirm('Remove "'+(name||'this candidate')+'" from this job?\n\nThe consultant profile itself will be kept in the Consultant Database — only their link to this job is removed.\n\nThis cannot be undone.'))return;
@@ -4768,8 +4856,10 @@ async function toggleTranslate(idx){
   var key='t_'+idx;
 
   if(translateState[key]==='translated'){
-    // Switch back to original
-    descDiv.innerHTML=formatDesc(desc.slice(0,5000));
+    // Switch back to original (re-apply key-term highlighting if enabled)
+    var origHtml=formatDesc(desc.slice(0,5000));
+    var hlChk=document.getElementById('descHighlightChk');
+    descDiv.innerHTML=(hlChk&&hlChk.checked)?highlightTermsInHtml(origHtml,buildJobHighlightTerms(j)):origHtml;
     btn.textContent='🌐 Translate to English';
     translateState[key]='original';
     return;
