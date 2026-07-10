@@ -351,6 +351,27 @@ function resolveSearchCountry(req) {
   return detected || (looksUS ? 'United States' : '');
 }
 
+// #406: Firms that bill their employees out to clients. Someone permanently employed here is
+// not "unavailable" — they're reachable via a SUB-CONTRACT with their employer.
+const CONSULTING_FIRM_HINTS = /\b(consult|consulting|consultancy|advisory|staffing|recruit|resourcing|talent|solutions|services|technologies|technology|systems|infotech|softech|labs|partners|associates|group|global|outsourc|managed services|msp|mssp|systems integrator|si\b)\b/i;
+const KNOWN_CONSULTANCIES = /\b(accenture|deloitte|kpmg|pwc|pricewaterhouse|ey\b|ernst\s*&?\s*young|mckinsey|bain|bcg|capgemini|cognizant|infosys|wipro|tcs|tata consultancy|hcl|tech mahindra|ltimindtree|mindtree|mphasis|persistent|zensar|birlasoft|coforge|hexaware|virtusa|ust global|globant|epam|luxoft|thoughtworks|slalom|booz allen|leidos|caci|saic|mantech|peraton|optiv|kudelski|nccgroup|ncc group|trustwave|secureworks|kroll|stroz|mandiant|crowdstrike services|ibm|dxc|atos|ntt data|fujitsu|unisys|cgi\b|sopra|inetum)\b/i;
+
+function detectEngagementType(profile) {
+  var sig = profile.contractorSignal || {};
+  if (sig.likely) return 'Contractor';                       // self-declared independent
+
+  var co = (profile.currentCompany || '').trim();
+  var headline = (profile.headline || '') + ' ' + (profile.currentRole || '');
+  if (co) {
+    // Employed at a consultancy/services firm → sub-contractable through that firm
+    if (KNOWN_CONSULTANCIES.test(co) || CONSULTING_FIRM_HINTS.test(co)) return 'Sub-Contractor';
+  }
+  // Headline says "Consultant at X" but X isn't obviously a firm — still likely billable
+  if (/\bconsultant\b/i.test(headline) && co) return 'Sub-Contractor';
+  if (co) return 'Permanent';
+  return 'Unknown';
+}
+// Analyst" wins over "Security Analyst", and "Cloud Security Architect" over "Security Architect".
 // Canonical cybersecurity roles we source for. Longest first so "Security Operations Center
 // Analyst" wins over "Security Analyst", and "Cloud Security Architect" over "Security Architect".
 const CANONICAL_ROLES = [
@@ -693,9 +714,16 @@ exports.handler = async function (event) {
         };
       });
       try { await cacheCol.bulkWrite(adoptOps, { ordered: false }); } catch (e) {}
+      // #406: classify engagement type (Contractor / Sub-Contractor / Permanent) where unset.
+      // Sub-Contractor = employed by a consultancy or staffing firm, so reachable via their employer.
       try {
-        await cacheCol.updateMany({ sourceId: { $in: pickedIds }, engagementType: { $exists: false }, 'contractorSignal.likely': true }, { $set: { engagementType: 'Contractor' } });
-        await cacheCol.updateMany({ sourceId: { $in: pickedIds }, engagementType: { $exists: false } }, { $set: { engagementType: 'Unknown' } });
+        var unset = await cacheCol.find({ sourceId: { $in: pickedIds }, engagementType: { $exists: false } }).toArray();
+        if (unset.length) {
+          var typeOps = unset.map(function (p) {
+            return { updateOne: { filter: { _id: p._id }, update: { $set: { engagementType: detectEngagementType(p) } } } };
+          });
+          await cacheCol.bulkWrite(typeOps, { ordered: false });
+        }
       } catch (e) {}
 
       var toAdd = fresh.map(function (c) { return { sourceId: c.sourceId, overall: c.overall || 0, addedAt: new Date(), addedBy: authUser ? authUser.email : '' }; });

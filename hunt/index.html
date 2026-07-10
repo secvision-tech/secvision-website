@@ -85,6 +85,11 @@ a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
 .ctype-dd-item.active{font-weight:700;color:var(--ac)}
 .dash-table th[style*="resize"]{overflow:hidden;cursor:pointer}
 .dash-table th[style*="resize"]:hover{background:var(--g1)}
+/* #401/#405: cjTable uses table-layout:fixed with ch widths — keep padding tight so the
+   declared character widths are close to what actually fits, and always ellipsize overflow. */
+#cjTable th,#cjTable td{padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis}
+#candTable th,#candTable td{padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#candTable td:last-child{overflow:visible;text-overflow:clip}
 .cj-highlight{background:#EBF5FF !important}
 .cj-highlight td{background:#EBF5FF !important}
 .db-info{font-size:.62rem;color:var(--g3);margin-top:.3rem}
@@ -406,7 +411,7 @@ body.role-viewer .edit-btn{display:none!important}
       <!-- Filters -->
       <div style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.6rem;align-items:center">
         <input id="consQuery" placeholder="Search name, role, skills, certs..." style="flex:1;min-width:180px;padding:.35rem .5rem;border:1px solid var(--g2);border-radius:4px;font-size:.65rem" onkeydown="if(event.key==='Enter')loadConsultants()">
-        <select id="consEngagement" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Types</option><option value="Contractor">Contractor</option><option value="Permanent">Permanent</option><option value="Unknown">Unknown</option></select>
+        <select id="consEngagement" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Types</option><option value="Contractor">Contractor</option><option value="Sub-Contractor">Sub-Contractor</option><option value="Permanent">Permanent</option><option value="Unknown">Unknown</option></select>
         <select id="consAvailability" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Availability</option><option value="available">Available</option><option value="busy">Busy</option><option value="placed">Placed</option><option value="do_not_contact">Do Not Contact</option></select>
         <select id="consPipeline" class="set-input" style="width:auto;font-size:.62rem" onchange="loadConsultants()"><option value="all">All Pipeline Stages</option><option value="none">Not started</option><option value="contacted">Contacted</option><option value="interested">Interested</option><option value="not_interested">Not Interested</option><option value="contacted_no_response">No Response</option><option value="screening_pending">Screening Pending</option><option value="screening_in_progress">Screening In Progress</option><option value="screening_failed">Screening Failed</option><option value="screening_successful">Screening Passed</option><option value="negotiations_in_progress">Negotiations</option><option value="secvision_agreement_signing">SecVision Agreement Signing</option><option value="secvision_agreement_signed">SecVision Agreement Signed</option><option value="proposed_to_client">Proposed to Client</option><option value="interview_in_progress">Client Interview</option><option value="client_interview_successful">Interview Passed</option><option value="client_interview_failed">Interview Failed</option><option value="client_agreement_signing">Client Agreement Signing</option><option value="client_agreement_signed">Client Agreement Signed</option><option value="placed">Placed</option></select>
         <select id="consRegion" class="set-input" style="width:auto;font-size:.62rem" onchange="consRegionChange()"><option value="all">All Regions</option><option value="NA">North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select>
@@ -2849,18 +2854,25 @@ function renderContractTable(data){
 }
 
 var cjData=[],cjSortCol='',cjSortDir=1,cjPage=1,cjPerPage=25,cjMouseX=0;
+// #401/#405: `w` is now a character-count width (ch units) used with table-layout:fixed,
+// which makes width authoritative (auto-layout treats it as a mere suggestion, so long
+// nowrap values like Tools kept demanding their full unwrapped width and squeezed others).
+// Narrow numeric/badge columns get just enough ch for their content; text columns get ~20-26ch
+// and ellipsize. All remain drag-resizable.
 var CJ_COLS=[
-  {key:'idx',label:'#',w:30,shrink:true},{key:'date',label:'Date',w:70,shrink:true},
-  {key:'title',label:'Title',w:200,pct:20,minW:150},
-  {key:'company',label:'Company',w:130,pct:12,minW:100},
-  {key:'companyType',label:'Type',w:80,shrink:true},
-  {key:'location',label:'Job Location',w:110,pct:11,minW:90},
-  {key:'detectedCountry',label:'Country',w:80,shrink:true},
-  {key:'salary',label:'Salary/Rate',w:90,shrink:true},
-  {key:'certifications',label:'Certs',w:100,pct:13,minW:110},
-  {key:'tools',label:'Tools',w:120,pct:20,minW:160},
-  {key:'status',label:'Status',w:70,shrink:true},
-  {key:'source',label:'Source',w:70,shrink:true},{key:'action',label:'Action',w:55,shrink:true}
+  {key:'idx',label:'#',ch:4},
+  {key:'date',label:'Date',ch:10},
+  {key:'title',label:'Title',ch:26},
+  {key:'company',label:'Company',ch:20},
+  {key:'companyType',label:'Type',ch:11},
+  {key:'location',label:'Job Location',ch:18},
+  {key:'detectedCountry',label:'Country',ch:10},
+  {key:'salary',label:'Salary/Rate',ch:13},
+  {key:'certifications',label:'Certs',ch:20},
+  {key:'tools',label:'Tools',ch:26},
+  {key:'status',label:'Status',ch:10},
+  {key:'source',label:'Source',ch:9},
+  {key:'action',label:'Action',ch:8}
 ];
 
 async function fetchRecentContracts(){
@@ -2903,17 +2915,16 @@ function renderContractJobs(){
   if(cjPage>totalPages)cjPage=totalPages||1;
   var start=(cjPage-1)*cjPerPage,pageData=sorted.slice(start,start+cjPerPage);
 
-  var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:auto"><thead><tr>';
+  // table-layout:fixed makes the declared widths authoritative. width:max-content lets the
+  // table grow past the container so the wrapper's overflow-x scrolls instead of squeezing.
+  var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:'+CJ_COLS.reduce(function(s,c){return s+c.ch},0)+'ch"><thead><tr>';
   CJ_COLS.forEach(function(c){
     var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
-    // #394/#397/#401: narrow columns shrink to content (width:1%); content-heavy columns
-    // claim an explicit share (pct) so long values like Tools aren't squeezed away.
-    var sz=c.shrink?'width:1%;white-space:nowrap;':(c.pct?('width:'+c.pct+'%;'):'');
-    var mw=c.minW?('min-width:'+c.minW+'px;'):'min-width:32px;';
+    var wid='width:'+c.ch+'ch;';
     if(c.key!=='action'){
-      html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;'+sz+mw+'overflow:hidden;resize:horizontal">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
+      html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;'+wid+'overflow:hidden;resize:horizontal">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
     }else{
-      html+='<th style="white-space:nowrap;padding:.3rem .4rem;'+sz+'">'+c.label+'</th>';
+      html+='<th style="white-space:nowrap;padding:.3rem .4rem;'+wid+'">'+c.label+'</th>';
     }
   });
   html+='</tr></thead><tbody>';
@@ -2931,14 +2942,14 @@ function renderContractJobs(){
     var cjMatchInd=(j.candidateCount>0)?' <span title="'+j.candidateCount+' matched consultant'+(j.candidateCount>1?'s':'')+' saved" style="font-size:.5rem;background:#EDE9FE;color:#6C3FBF;padding:.05rem .28rem;border-radius:3px;font-weight:700;white-space:nowrap">🎯 '+j.candidateCount+'</span>':'';
     // #218: Click to highlight row
     html+='<tr onclick="this.classList.toggle(\'cj-highlight\')" style="cursor:pointer">';
-    html+='<td style="text-align:right;white-space:nowrap">'+globalIdx+'</td>';
+    html+='<td style="text-align:right;white-space:nowrap;overflow:hidden">'+globalIdx+'</td>';
     html+='<td style="white-space:nowrap">'+j.date+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+titleText.replace(/"/g,'&quot;')+'">'+titleHtml+cjMatchInd+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.company||'')+'">'+j.company+'</td>';
     html+='<td>'+typeBadge+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.location||'')+'">'+(j.location||'')+'</td>';
-    html+='<td>'+(j.detectedCountry||'')+'</td>';
-    html+='<td style="white-space:nowrap">'+(j.salary||'N/A')+'</td>';
+    html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.detectedCountry||'')+'">'+(j.detectedCountry||'')+'</td>';
+    html+='<td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+(j.salary||'N/A')+'">'+(j.salary||'N/A')+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.certifications||'').replace(/"/g,'&quot;')+'">'+(j.certifications||'')+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.tools||'').replace(/"/g,'&quot;')+'">'+(j.tools||'')+'</td>';
     html+='<td>'+statusHtml+'</td>';
@@ -3674,8 +3685,10 @@ function availBadge(a){
   return '<span style="font-size:.5rem;background:'+m[1]+';color:'+m[0]+';padding:.1rem .35rem;border-radius:3px;font-weight:600">'+m[2]+'</span>';
 }
 function typeBadgeCons(t){
-  if(t==='Contractor')return '<span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.1rem .35rem;border-radius:3px;font-weight:600">Contractor</span>';
-  if(t==='Permanent')return '<span style="font-size:.5rem;background:#E0E7FF;color:#3730A3;padding:.1rem .35rem;border-radius:3px">Permanent</span>';
+  if(t==='Contractor')return '<span title="Independent — contract directly with the consultant" style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.1rem .35rem;border-radius:3px;font-weight:600">Contractor</span>';
+  // #406: employed by a consultancy/staffing firm — reachable via sub-contract with their employer
+  if(t==='Sub-Contractor')return '<span title="Employed by a consulting/staffing firm — engage via sub-contract with their employer" style="font-size:.5rem;background:#DBEAFE;color:#1E40AF;padding:.1rem .35rem;border-radius:3px;font-weight:600">Sub-Contract</span>';
+  if(t==='Permanent')return '<span title="Permanent employee at an end-user company" style="font-size:.5rem;background:#E0E7FF;color:#3730A3;padding:.1rem .35rem;border-radius:3px">Permanent</span>';
   return '<span style="font-size:.5rem;color:var(--g4)">'+esc(t||'—')+'</span>';
 }
 function pipelineBadge(s){
@@ -3860,7 +3873,7 @@ function renderManageProfile(){
     h+='<div class="mp-section"><div class="mp-section-title">Status & Pipeline</div>';
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="mpType" class="set-input" style="width:100%;font-size:.62rem">'
-      +['Contractor','Permanent','Unknown'].map(function(t){return '<option value="'+t+'"'+(c.engagementType===t?' selected':'')+'>'+t+'</option>'}).join('')+'</select></div>';
+      +['Contractor','Sub-Contractor','Permanent','Unknown'].map(function(t){return '<option value="'+t+'"'+(c.engagementType===t?' selected':'')+'>'+(t==='Sub-Contractor'?'Sub-Contractor (via their firm)':t)+'</option>'}).join('')+'</select></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Availability</label><select id="mpAvail" class="set-input" style="width:100%;font-size:.62rem" onchange="mpAvailChange()">'
       +[['available','Available'],['busy','Busy'],['do_not_contact','Do Not Contact']].concat(c.availability==='placed'?[['placed','Placed (via placement)']]:[]).map(function(a){return '<option value="'+a[0]+'"'+(c.availability===a[0]?' selected':'')+(a[0]==='placed'?' disabled':'')+'>'+a[1]+'</option>'}).join('')+'</select></div>';
     h+='</div>';
@@ -4384,15 +4397,15 @@ async function loadJobCandidates(){
     _candidateNav=list.filter(function(c){return c._id}).map(function(c){return {_id:c._id,name:c.name}});
     var h=header
       +'<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px">'
-      +'<table style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:auto"><thead><tr style="background:var(--g1)">'
-      +'<th style="padding:.3rem .35rem;text-align:right;resize:horizontal;overflow:hidden;width:1%;white-space:nowrap">#</th>'
-      +'<th style="padding:.3rem .35rem;text-align:right;resize:horizontal;overflow:hidden;width:1%;white-space:nowrap">Match</th>'
-      +'<th style="padding:.3rem .4rem;text-align:left;resize:horizontal;overflow:hidden">Name</th>'
-      +'<th style="padding:.3rem .4rem;text-align:left;resize:horizontal;overflow:hidden">Role</th>'
-      +'<th style="padding:.3rem .4rem;text-align:left;resize:horizontal;overflow:hidden">Location</th>'
-      +'<th style="padding:.3rem .35rem;text-align:left;resize:horizontal;overflow:hidden;width:1%;white-space:nowrap">Type</th>'
-      +'<th style="padding:.3rem .35rem;text-align:left;resize:horizontal;overflow:hidden;width:1%;white-space:nowrap">Pipeline</th>'
-      +'<th style="padding:.3rem .35rem;text-align:center;width:1%;white-space:nowrap">Action</th>'
+      +'<table id="candTable" style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:fixed;min-width:104ch"><thead><tr style="background:var(--g1)">'
+      +'<th style="text-align:right;resize:horizontal;overflow:hidden;width:4ch">#</th>'
+      +'<th style="text-align:right;resize:horizontal;overflow:hidden;width:8ch">Match</th>'
+      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:22ch">Name</th>'
+      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:24ch">Role</th>'
+      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:18ch">Location</th>'
+      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:12ch">Type</th>'
+      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:14ch">Pipeline</th>'
+      +'<th style="text-align:center;width:16ch">Action</th>'
       +'</tr></thead><tbody>';
     list.forEach(function(c,i){
       var pct=Math.round(c.overall||0);
@@ -4400,14 +4413,14 @@ async function loadJobCandidates(){
       var loc=c.location||c.country||'';
       var selCls=_selectedCandidates[c.sourceId]?' class="row-hl"':'';
       h+='<tr'+selCls+' data-sid="'+esc(c.sourceId)+'" style="border-bottom:1px solid var(--g1)">'
-        +'<td style="padding:.3rem .35rem;color:var(--g4);font-weight:600;text-align:right;white-space:nowrap">'+(i+1)+'</td>'
-        +'<td style="padding:.3rem .35rem;text-align:right;white-space:nowrap"><span style="font-weight:700;color:'+col+'">'+pct+'%</span></td>'
-        +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
-        +'<td style="padding:.3rem .4rem;color:var(--g5)" title="'+esc(c.currentRole||'')+'">'+esc(c.currentRole||'—')+'</td>'
-        +'<td style="padding:.3rem .4rem;color:var(--g5)" title="'+esc(loc)+'">'+esc(loc||'—')+'</td>'
-        +'<td style="padding:.3rem .35rem;white-space:nowrap">'+typeBadgeCons(c.engagementType)+'</td>'
-        +'<td style="padding:.3rem .35rem;white-space:nowrap">'+pipelineBadge(c.pipelineStatus)+'</td>'
-        +'<td style="padding:.3rem .4rem;text-align:center;white-space:nowrap">'
+        +'<td style="color:var(--g4);font-weight:600;text-align:right">'+(i+1)+'</td>'
+        +'<td style="text-align:right"><span style="font-weight:700;color:'+col+'">'+pct+'%</span></td>'
+        +'<td style="font-weight:600" title="'+esc(c.name)+'">'+esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
+        +'<td style="color:var(--g5)" title="'+esc(c.currentRole||'')+'">'+esc(c.currentRole||'—')+'</td>'
+        +'<td style="color:var(--g5)" title="'+esc(loc)+'">'+esc(loc||'—')+'</td>'
+        +'<td>'+typeBadgeCons(c.engagementType)+'</td>'
+        +'<td>'+pipelineBadge(c.pipelineStatus)+'</td>'
+        +'<td style="text-align:center;white-space:nowrap;overflow:visible">'
         +(c._id?'<button class="vb" onclick="openManageProfileFromJob(\''+c._id+'\')" style="font-size:.58rem">'+(CAP.canStatus?'Manage':'View')+'</button> ':'')
         +(CAP.canStatus?'<button class="cand-del" data-sid="'+esc(c.sourceId)+'" data-name="'+esc(c.name)+'" style="padding:.15rem .5rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Delete</button>':'')
         +'</td></tr>';
