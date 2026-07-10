@@ -331,7 +331,16 @@ exports.handler = async function (event) {
       if (body.email !== undefined) set.email = body.email;
       if (body.phone !== undefined) set.phone = body.phone;
       if (body.linkedinUrl !== undefined) set.linkedinUrl = body.linkedinUrl;
-      if (body.country !== undefined) set.country = body.country;
+      // #396: location is editable (Apify sometimes returns it localized, e.g. "Nowy Jork, Stany Zjednoczone")
+      if (body.location !== undefined) {
+        set.location = body.location;
+        // if the caller didn't also send an explicit country, try to re-derive it from the new location
+        if (body.country === undefined || body.country === '') {
+          var derived = deriveCountryFromLocation(body.location || '');
+          if (derived) set.country = derived;
+        }
+      }
+      if (body.country !== undefined && body.country !== '') set.country = body.country;
       if (body.yearsExperience !== undefined) set.yearsExperience = parseInt(body.yearsExperience) || 0;
       if (body.workAuthorization !== undefined) set.workAuthorization = body.workAuthorization || 'unknown';
       if (body.securityClearance !== undefined) set.securityClearance = body.securityClearance || 'unknown';

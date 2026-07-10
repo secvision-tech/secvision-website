@@ -1632,6 +1632,7 @@ async function viewDet(i){
   document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
   // load the saved candidates for this job
   jobCandidatesJobId=j._id||j.jobId||'';
+  _currentJobForMatch={skills:j.skills||'',certifications:j.certifications||'',tools:j.tools||'',compliance:j.compliance||'',title:j.title||''};
   loadJobCandidates();
 }
 var viewDirty=false;
@@ -2794,11 +2795,11 @@ function renderContractTable(data){
 
 var cjData=[],cjSortCol='',cjSortDir=1,cjPage=1,cjPerPage=25,cjMouseX=0;
 var CJ_COLS=[
-  {key:'idx',label:'#',w:30,shrink:true},{key:'date',label:'Date',w:70,shrink:true},{key:'title',label:'Title',w:200},
-  {key:'company',label:'Company',w:130},{key:'companyType',label:'Type',w:80,shrink:true},
-  {key:'location',label:'Job Location',w:110},{key:'detectedCountry',label:'Country',w:80,shrink:true},
-  {key:'salary',label:'Salary/Rate',w:90,shrink:true},{key:'certifications',label:'Certs',w:100},
-  {key:'tools',label:'Tools',w:120},{key:'status',label:'Status',w:70,shrink:true},
+  {key:'idx',label:'#',w:30,shrink:true},{key:'date',label:'Date',w:70,shrink:true},{key:'title',label:'Title',w:200,minW:160},
+  {key:'company',label:'Company',w:130,minW:110},{key:'companyType',label:'Type',w:80,shrink:true},
+  {key:'location',label:'Job Location',w:110,minW:95},{key:'detectedCountry',label:'Country',w:80,shrink:true},
+  {key:'salary',label:'Salary/Rate',w:90,shrink:true},{key:'certifications',label:'Certs',w:100,minW:110},
+  {key:'tools',label:'Tools',w:120,minW:150},{key:'status',label:'Status',w:70,shrink:true},
   {key:'source',label:'Source',w:70,shrink:true},{key:'action',label:'Action',w:55,shrink:true}
 ];
 
@@ -2845,10 +2846,11 @@ function renderContractJobs(){
   var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:auto"><thead><tr>';
   CJ_COLS.forEach(function(c){
     var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
-    // #394: narrow columns shrink to their content (width:1% + nowrap); wide ones share the rest
+    // #394/#397: narrow columns shrink to content; content-heavy ones keep a wider minimum
     var sz=c.shrink?'width:1%;white-space:nowrap;':'';
+    var mw=c.minW?('min-width:'+c.minW+'px;'):'min-width:32px;';
     if(c.key!=='action'){
-      html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;'+sz+'min-width:32px;overflow:hidden;resize:horizontal">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
+      html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;'+sz+mw+'overflow:hidden;resize:horizontal">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
     }else{
       html+='<th style="white-space:nowrap;padding:.3rem .4rem;'+sz+'">'+c.label+'</th>';
     }
@@ -3695,6 +3697,8 @@ function consRowClick(e,el){if(e.target.tagName==='A'||e.target.tagName==='BUTTO
 var manageProfileId=null,manageProfileData=null,_pendingMpMsg=null,_refreshCandidatesOnClose=false;
 async function openManageProfile(id){
   manageProfileId=id;
+  // if not opened via the job candidates table, there's no job context to highlight against
+  if(!_refreshCandidatesOnClose)_matchJobContext=null;
   var pop=document.getElementById('manageProfilePopup');
   if(!pop){document.body.insertAdjacentHTML('beforeend',manageProfileHtml());pop=document.getElementById('manageProfilePopup')}
   pop.style.display='flex';
@@ -3712,6 +3716,7 @@ async function openManageProfile(id){
 function closeManageProfile(){
   var p=document.getElementById('manageProfilePopup');if(p)p.style.display='none';
   manageProfileId=null;manageProfileData=null;
+  _matchJobContext=null; // #398: don't carry job-skill highlighting into the next popup
   // #390: if this popup was opened from the job's Matched Candidates table, refresh it
   if(_refreshCandidatesOnClose){
     _refreshCandidatesOnClose=false;
@@ -3757,8 +3762,17 @@ function renderManageProfile(){
   h+=fld('Experience',(c.yearsExperience||0)+' yrs');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual')));
   h+='</div>';
-  if((c.skills||[]).length)h+='<div style="margin-bottom:.5rem"><span style="font-size:.55rem;color:var(--g4)">Skills:</span> '+(c.skills||[]).map(function(s){return '<span style="font-size:.5rem;background:#EEF2FF;color:#4338CA;padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block">'+esc(s)+'</span>'}).join(' ')+'</div>';
-  if((c.certifications||[]).length)h+='<div style="margin-bottom:.6rem"><span style="font-size:.55rem;color:var(--g4)">Certs:</span> '+(c.certifications||[]).map(function(s){return '<span style="font-size:.5rem;background:#ECFDF5;color:#047857;padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block">'+esc(s)+'</span>'}).join(' ')+'</div>';
+  // #398: when opened from a job's candidate table, highlight skills/certs that match that job
+  var reqToks=jobRequirementTokens(_matchJobContext);
+  if(reqToks){
+    var matchedCount=(c.skills||[]).filter(function(s){return matchesJobReq(s,reqToks)}).length
+      + (c.certifications||[]).filter(function(s){return matchesJobReq(s,reqToks)}).length;
+    h+='<div style="background:#FEFCE8;border:1px solid #FDE68A;border-radius:5px;padding:.35rem .55rem;margin-bottom:.5rem;font-size:.56rem;color:#713F12">'
+      +'<span style="background:#FEF08A;padding:0 .2rem;border-radius:2px;font-weight:700">Highlighted</span> skills &amp; certs match the requirements for '
+      +'<strong>'+esc(_matchJobContext.title||'this job')+'</strong>'+(matchedCount?' — '+matchedCount+' match'+(matchedCount>1?'es':''):'')+'.</div>';
+  }
+  if((c.skills||[]).length)h+='<div style="margin-bottom:.5rem"><span style="font-size:.55rem;color:var(--g4)">Skills:</span> '+(c.skills||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#EEF2FF','#4338CA')}).join(' ')+'</div>';
+  if((c.certifications||[]).length)h+='<div style="margin-bottom:.6rem"><span style="font-size:.55rem;color:var(--g4)">Certs:</span> '+(c.certifications||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#ECFDF5','#047857')}).join(' ')+'</div>';
 
   if(canStatus){
     h+='<div class="mp-section"><div class="mp-section-title">Status & Pipeline</div>';
@@ -3778,11 +3792,12 @@ function renderManageProfile(){
     h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.62rem">'
       +Object.keys(PIPELINE_LABELS).filter(function(k){return k!=='placed'||c.pipelineStatus==='placed'}).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+(k==='placed'?' disabled':'')+'>'+PIPELINE_LABELS[k]+(k==='placed'?' (via placement)':'')+'</option>'}).join('')+'</select>'
       +'<div style="font-size:.5rem;color:var(--g4);margin-top:.15rem">To place a consultant, fill the Placement section below and press "Mark as Placed".</div></div>';
-    // #369: Experience + Country editable (analyst+)
+    // #369/#396: Experience, Location + Country editable (analyst+)
     h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem">';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Years Experience</label><input type="number" id="mpYears" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.yearsExperience||0)+'"></div>';
     h+='<div><label style="font-size:.55rem;color:var(--g4)">Country</label><input id="mpCountry" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.country||'')+'"></div>';
     h+='</div>';
+    h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Location <span style="font-weight:400;color:var(--g4)">(scraped values may be localized — correct if needed)</span></label><input id="mpLocation" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.location||'')+'" placeholder="New York, United States"></div>';
     // #373: LinkedIn URL editable (sometimes incorrect from scraping; enrichment needs it accurate)
     h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">LinkedIn URL</label><input id="mpLinkedin" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.linkedinUrl||'')+'" placeholder="https://www.linkedin.com/in/..."></div>';
     h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileStatus()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Status</button>';
@@ -3881,6 +3896,7 @@ async function saveProfileStatus(){
       availability:availVal,
       availableFrom:availVal==='busy'?document.getElementById('mpAvailFrom').value:null,
       yearsExperience:document.getElementById('mpYears')?document.getElementById('mpYears').value:undefined,
+      location:document.getElementById('mpLocation')?document.getElementById('mpLocation').value.trim():undefined,
       country:document.getElementById('mpCountry')?document.getElementById('mpCountry').value.trim():undefined,
       linkedinUrl:document.getElementById('mpLinkedin')?document.getElementById('mpLinkedin').value.trim():undefined,
       workAuthorization:document.getElementById('mpWorkAuth')?document.getElementById('mpWorkAuth').value.trim():undefined,
@@ -4301,9 +4317,35 @@ async function loadJobCandidates(){
     });
   }catch(e){wrap.innerHTML='<div style="font-size:.62rem;color:#DC2626">Could not load candidates: '+esc(e.message)+'</div>'}
 }
-// #390: opening Manage from the candidates table — refresh the table when the popup closes
+var _currentJobForMatch=null;
+// #398: build a normalized token set of what the job asks for (skills, tools, certs, compliance)
+function jobRequirementTokens(job){
+  if(!job)return null;
+  var raw=[job.skills,job.tools,job.certifications,job.compliance].filter(Boolean).join(', ');
+  if(!raw.trim())return null;
+  var toks=raw.split(/[,;|/]+/).map(function(s){return s.trim().toLowerCase()}).filter(function(s){return s.length>1});
+  return toks.length?toks:null;
+}
+// Does a consultant skill/cert match any job requirement? (substring both ways, so
+// "Microsoft Sentinel" matches a job asking for "Sentinel", and vice versa)
+function matchesJobReq(item,toks){
+  if(!toks||!item)return false;
+  var s=item.trim().toLowerCase();
+  if(!s)return false;
+  return toks.some(function(t){return s===t||s.indexOf(t)>-1||t.indexOf(s)>-1});
+}
+// Yellow-highlighter chip when it matches the job requirement
+function chip(text,matched,baseBg,baseFg){
+  if(matched)return '<span title="Matches this job\'s requirements" style="font-size:.5rem;background:#FEF08A;color:#713F12;padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block;font-weight:700;box-shadow:0 0 0 1px #FACC15">'+esc(text)+'</span>';
+  return '<span style="font-size:.5rem;background:'+baseBg+';color:'+baseFg+';padding:.05rem .3rem;border-radius:3px;margin:1px;display:inline-block">'+esc(text)+'</span>';
+}
+
+// #390/#398: opening Manage from the candidates table — remember the job so we can
+// highlight matching skills, and refresh the table when the popup closes.
+var _matchJobContext=null;
 function openManageProfileFromJob(id){
   _refreshCandidatesOnClose=true;
+  _matchJobContext=_currentJobForMatch||null;
   openManageProfile(id);
 }
 async function removeJobCandidate(sourceId,name){
