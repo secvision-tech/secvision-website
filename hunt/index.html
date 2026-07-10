@@ -2849,11 +2849,16 @@ function renderContractTable(data){
 
 var cjData=[],cjSortCol='',cjSortDir=1,cjPage=1,cjPerPage=25,cjMouseX=0;
 var CJ_COLS=[
-  {key:'idx',label:'#',w:30,shrink:true},{key:'date',label:'Date',w:70,shrink:true},{key:'title',label:'Title',w:200,minW:160},
-  {key:'company',label:'Company',w:130,minW:110},{key:'companyType',label:'Type',w:80,shrink:true},
-  {key:'location',label:'Job Location',w:110,minW:95},{key:'detectedCountry',label:'Country',w:80,shrink:true},
-  {key:'salary',label:'Salary/Rate',w:90,shrink:true},{key:'certifications',label:'Certs',w:100,minW:110},
-  {key:'tools',label:'Tools',w:120,minW:150},{key:'status',label:'Status',w:70,shrink:true},
+  {key:'idx',label:'#',w:30,shrink:true},{key:'date',label:'Date',w:70,shrink:true},
+  {key:'title',label:'Title',w:200,pct:20,minW:150},
+  {key:'company',label:'Company',w:130,pct:12,minW:100},
+  {key:'companyType',label:'Type',w:80,shrink:true},
+  {key:'location',label:'Job Location',w:110,pct:11,minW:90},
+  {key:'detectedCountry',label:'Country',w:80,shrink:true},
+  {key:'salary',label:'Salary/Rate',w:90,shrink:true},
+  {key:'certifications',label:'Certs',w:100,pct:13,minW:110},
+  {key:'tools',label:'Tools',w:120,pct:20,minW:160},
+  {key:'status',label:'Status',w:70,shrink:true},
   {key:'source',label:'Source',w:70,shrink:true},{key:'action',label:'Action',w:55,shrink:true}
 ];
 
@@ -2900,8 +2905,9 @@ function renderContractJobs(){
   var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:auto"><thead><tr>';
   CJ_COLS.forEach(function(c){
     var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
-    // #394/#397: narrow columns shrink to content; content-heavy ones keep a wider minimum
-    var sz=c.shrink?'width:1%;white-space:nowrap;':'';
+    // #394/#397/#401: narrow columns shrink to content (width:1%); content-heavy columns
+    // claim an explicit share (pct) so long values like Tools aren't squeezed away.
+    var sz=c.shrink?'width:1%;white-space:nowrap;':(c.pct?('width:'+c.pct+'%;'):'');
     var mw=c.minW?('min-width:'+c.minW+'px;'):'min-width:32px;';
     if(c.key!=='action'){
       html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;'+sz+mw+'overflow:hidden;resize:horizontal">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
@@ -4314,22 +4320,30 @@ function renderMatches(d){
   document.getElementById('matchPrevBtn').style.visibility=d.page>0?'visible':'hidden';
   document.getElementById('matchNextBtn').style.visibility=d.hasMore?'visible':'hidden';
   document.getElementById('matchPageInfo').textContent='Page '+(d.page+1)+' · '+d.totalMatches+' total matches';
-  // #381: persist these matches as candidates for this job (deduped server-side), then show the table
-  autoAddCandidates(d.matches);
+  // #402: persist the next batch of up to 10 unsaved candidates (only on the initial page —
+  // paging through results shouldn't keep adding).
+  if(d.page===0&&d.allMatchRefs&&d.allMatchRefs.length)autoAddCandidates(d.allMatchRefs);
 }
 // #381 — Job candidates: matched profiles saved against this job (rendered in the JOB popup)
 var jobCandidatesJobId='';
-async function autoAddCandidates(matches){
-  if(!matches||!matches.length)return;
-  var cands=matches.filter(function(m){return m.sourceId}).map(function(m){return {sourceId:m.sourceId,overall:m.overall}});
-  if(!cands.length)return;
+async function autoAddCandidates(refs){
+  if(!refs||!refs.length)return;
   try{
-    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'addCandidates',jobId:matchState.jobId,candidates:cands})});
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'addCandidates',jobId:matchState.jobId,candidates:refs})});
     var d=await r.json();
-    // #387: reflect the new count on the in-memory job so the table indicator updates without a re-search
     if(d&&typeof d.total==='number'){
       var jm=allJobs.find(function(x){return (x._id||x.jobId||'')===matchState.jobId});
       if(jm){jm.candidateCount=d.total;viewDirty=true}
+    }
+    // #402: tell the user what happened — 10 added per run, repeated runs accumulate
+    var st=document.getElementById('matchStatus');
+    if(st&&d){
+      if(d.added>0){
+        st.innerHTML='✅ Added <strong>'+d.added+'</strong> candidate'+(d.added>1?'s':'')+' to this job (total '+d.total+').'
+          +(d.moreAvailable>0?' <span style="color:var(--g5)">'+d.moreAvailable+' more match'+(d.moreAvailable>1?'es':'')+' available — run Match Profiles again to add the next '+Math.min(10,d.moreAvailable)+'.</span>':'');
+      }else{
+        st.innerHTML='ℹ️ All matching consultants (≥60%) are already saved to this job'+(d.total?' ('+d.total+' total)':'')+'.';
+      }
     }
   }catch(e){}
   if(jobCandidatesJobId)loadJobCandidates();

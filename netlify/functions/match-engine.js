@@ -446,6 +446,9 @@ exports.handler = async function (event) {
       return {
         statusCode: 200, headers: hdrs, body: JSON.stringify({
           matches: pageItems.map(formatMatch),
+          // #402: the full ranked set (id + score only) so the client can ask the server to
+          // add the next batch of 10 unsaved candidates without re-scoring.
+          allMatchRefs: all.map(function (m) { return { sourceId: m.profile.sourceId, overall: m.overall }; }),
           page: page, hasMore: all.length > start + PAGE_SIZE,
           totalMatches: all.length, cachedCount: cached.length,
           moreToScore: moreToScore,
@@ -594,11 +597,27 @@ exports.handler = async function (event) {
       var jobDoc = await findJobDoc(body.jobId);
       if (!jobDoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
 
-      // Adopt each matched profile into the managed consultant DB (so it can enter the pipeline)
-      var adoptOps = cands.map(function (c) {
+      // Attach to the job (dedupe by sourceId)
+      var existing = jobDoc.candidateProfiles || [];
+      var have = {}; existing.forEach(function (e) { have[e.sourceId] = 1; });
+      var fresh = cands.filter(function (c) { return c.sourceId && !have[c.sourceId]; })
+        .sort(function (a, b) { return (b.overall || 0) - (a.overall || 0); });
+
+      // #402: add at most ADD_BATCH new candidates per Match run — repeated runs accumulate
+      // (10, then 20, then 30 ...). Only ever the best-scoring unsaved ones.
+      var ADD_BATCH = body.addBatch || PAGE_SIZE;
+      var remaining = fresh.length - ADD_BATCH;
+      fresh = fresh.slice(0, ADD_BATCH);
+      if (!fresh.length) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ added: 0, total: existing.length, moreAvailable: 0 }) };
+      }
+
+      // Adopt the selected profiles into the managed consultant DB (so they can enter the pipeline)
+      var pickedIds = fresh.map(function (c) { return c.sourceId; });
+      var adoptOps = pickedIds.map(function (sid) {
         return {
           updateOne: {
-            filter: { sourceId: c.sourceId },
+            filter: { sourceId: sid },
             update: {
               $set: { managed: true, updatedAt: new Date() },
               $setOnInsert: { availability: 'available', pipelineStatus: 'none', createdAt: new Date() }
@@ -608,18 +627,17 @@ exports.handler = async function (event) {
       });
       try { await cacheCol.bulkWrite(adoptOps, { ordered: false }); } catch (e) {}
       try {
-        var sids = cands.map(function (c) { return c.sourceId; });
-        await cacheCol.updateMany({ sourceId: { $in: sids }, engagementType: { $exists: false }, 'contractorSignal.likely': true }, { $set: { engagementType: 'Contractor' } });
-        await cacheCol.updateMany({ sourceId: { $in: sids }, engagementType: { $exists: false } }, { $set: { engagementType: 'Unknown' } });
+        await cacheCol.updateMany({ sourceId: { $in: pickedIds }, engagementType: { $exists: false }, 'contractorSignal.likely': true }, { $set: { engagementType: 'Contractor' } });
+        await cacheCol.updateMany({ sourceId: { $in: pickedIds }, engagementType: { $exists: false } }, { $set: { engagementType: 'Unknown' } });
       } catch (e) {}
 
-      // Attach to the job (dedupe by sourceId)
-      var existing = jobDoc.candidateProfiles || [];
-      var have = {}; existing.forEach(function (e) { have[e.sourceId] = 1; });
-      var toAdd = cands.filter(function (c) { return c.sourceId && !have[c.sourceId]; })
-        .map(function (c) { return { sourceId: c.sourceId, overall: c.overall || 0, addedAt: new Date(), addedBy: authUser ? authUser.email : '' }; });
-      if (toAdd.length) await jobsCol.updateOne({ _id: jobDoc._id }, { $push: { candidateProfiles: { $each: toAdd } } });
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ added: toAdd.length, total: existing.length + toAdd.length }) };
+      var toAdd = fresh.map(function (c) { return { sourceId: c.sourceId, overall: c.overall || 0, addedAt: new Date(), addedBy: authUser ? authUser.email : '' }; });
+      await jobsCol.updateOne({ _id: jobDoc._id }, { $push: { candidateProfiles: { $each: toAdd } } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        added: toAdd.length,
+        total: existing.length + toAdd.length,
+        moreAvailable: remaining > 0 ? remaining : 0
+      }) };
     }
 
     if (action === 'listCandidates') {
