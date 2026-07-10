@@ -336,11 +336,75 @@ async function getSourcingConfig(db) {
   return DEFAULT_SOURCING;
 }
 
+// US state abbreviations + names, used to sanity-check a job's detectedCountry.
+const US_STATE_CODES = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
+const US_STATE_NAMES = /\b(California|Texas|New York|Florida|Illinois|Virginia|Washington|Georgia|Massachusetts|Colorado|Arizona|Ohio|Michigan|Pennsylvania|Maryland|Minnesota|Oregon|Nevada|Utah|Missouri|Indiana|Wisconsin|Tennessee|Alabama|Connecticut|New Jersey|North Carolina|South Carolina)\b/i;
+
+// A "CA" in "Santa Ana, CA" means California, not Canada. When the job's own location text
+// clearly names a US state, prefer United States over a contradicting detectedCountry.
+function resolveSearchCountry(req) {
+  var detected = (req.country || '').trim();
+  var loc = (req.location || '').trim();
+  if (!loc) return detected;
+  var looksUS = US_STATE_NAMES.test(loc) || US_STATE_CODES.test(loc.toUpperCase()) || /\b(USA|U\.S\.A?\.?|United States)\b/i.test(loc);
+  if (looksUS && /^canada$/i.test(detected)) return 'United States';
+  return detected || (looksUS ? 'United States' : '');
+}
+
+// Canonical cybersecurity roles we source for. Longest first so "Security Operations Center
+// Analyst" wins over "Security Analyst", and "Cloud Security Architect" over "Security Architect".
+const CANONICAL_ROLES = [
+  'Security Operations Center Analyst', 'Security Operations Engineer', 'Security Operations Analyst',
+  'Cloud Security Architect', 'Cloud Security Engineer', 'Application Security Engineer',
+  'Information Security Analyst', 'Information Security Engineer', 'Information Security Manager',
+  'Cyber Security Architect', 'Cyber Security Engineer', 'Cyber Security Analyst', 'Cyber Security Consultant',
+  'Cybersecurity Architect', 'Cybersecurity Engineer', 'Cybersecurity Analyst', 'Cybersecurity Consultant',
+  'Incident Response Analyst', 'Incident Response Engineer', 'Threat Intelligence Analyst',
+  'Threat Detection Engineer', 'Detection Engineer', 'Vulnerability Management Analyst',
+  'Penetration Tester', 'Security Architect', 'Security Engineer', 'Security Analyst',
+  'Security Consultant', 'Security Administrator', 'SOC Analyst', 'SOC Engineer',
+  'Network Security Engineer', 'Identity and Access Management Engineer', 'IAM Engineer',
+  'GRC Analyst', 'Compliance Analyst', 'Risk Analyst', 'Security Manager', 'Security Specialist',
+  'DevSecOps Engineer', 'Malware Analyst', 'Forensics Analyst', 'Digital Forensics Analyst',
+  'Security Researcher', 'Red Team Operator', 'Blue Team Analyst', 'Purple Team Engineer'
+].sort(function (a, b) { return b.length - a.length; });
+
+// Job-board titles are noisy: ". Security Architect- On Site- Santa Ana, CA", "Sr. SOC Analyst (Remote) - W2".
+// Pull the canonical role out rather than trying to scrub arbitrary junk.
 function buildSearchRole(req) {
-  // #354: use the ROLE only as the base term — adding tools/compliance words hurt recall.
-  var role = (req.role || '').trim();
-  role = role.replace(/\b(senior|junior|lead|principal|staff|sr\.?|jr\.?|l[1-4]|level\s*[1-4])\b/gi, '').replace(/\s+/g, ' ').trim();
-  return role || 'cybersecurity engineer';
+  var raw = (req.role || '').trim();
+  if (!raw) return 'Cybersecurity Engineer';
+
+  // Normalize separators/punctuation so "Architect-" and "Architect," both tokenize cleanly
+  var norm = raw
+    .replace(/[\u2010-\u2015]/g, '-')            // unicode dashes → hyphen
+    .replace(/[(){}\[\]]/g, ' ')                  // brackets → space
+    .replace(/[-–—/|,;:]+/g, ' ')                 // separators → space
+    .replace(/[^\w\s.+#]/g, ' ')                  // strip other punctuation
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // 1) Exact canonical role match (case-insensitive, whole-phrase)
+  for (var i = 0; i < CANONICAL_ROLES.length; i++) {
+    var cr = CANONICAL_ROLES[i];
+    var re = new RegExp('(^|\\s)' + cr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '($|\\s)', 'i');
+    if (re.test(norm)) return cr;
+  }
+
+  // 2) Fallback: strip common noise, then keep the first 2-4 meaningful words
+  var NOISE = /\b(on\s?site|onsite|remote|hybrid|contract|contractor|consultant|freelance|full\s?time|part\s?time|w2|c2c|1099|corp\s?to\s?corp|urgent|hiring|immediate|opening|position|role|job|opportunity|needed|required|us|usa|united states|canada|uk|senior|junior|lead|principal|staff|sr|jr|i{1,3}|iv|v|l[1-4]|level\s*[1-4]|ii|iii)\b/gi;
+  var STATE = /\b(a[klrz]|c[aot]|d[ce]|fl|ga|hi|i[adln]|k[sy]|la|m[adeinost]|n[cdehjmvy]|o[hkr]|pa|ri|s[cd]|t[nx]|ut|v[at]|w[aivy])\b/gi;
+  var cleaned = norm
+    .replace(NOISE, ' ')
+    .replace(STATE, ' ')                          // drop trailing state codes like "CA"
+    .replace(/\b\d+\b/g, ' ')                     // drop bare numbers
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!cleaned) return 'Cybersecurity Engineer';
+  var words = cleaned.split(' ').filter(function (w) { return w.length > 1; });
+  if (!words.length) return 'Cybersecurity Engineer';
+  return words.slice(0, 4).join(' ');
 }
 
 // Build the per-variant search targets, e.g.
@@ -465,7 +529,10 @@ exports.handler = async function (event) {
 
       var sourcing = await getSourcingConfig(db);
       var targets = buildSearchTargets(req2, sourcing);
-      var locations = req2.country ? [req2.country] : [];
+      // The job's detectedCountry is occasionally wrong (e.g. "Santa Ana, CA" read as Canada).
+      // If the job's own location text names a US state or "United States", trust that instead.
+      var searchCountry = resolveSearchCountry(req2);
+      var locations = searchCountry ? [searchCountry] : [];
       var runs = [];
       try {
         for (var t = 0; t < targets.length; t++) {
@@ -493,7 +560,7 @@ exports.handler = async function (event) {
           }
         }
         if (!runs.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No Apify runs could be started' }) };
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ runs: runs, targets: targets }) };
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ runs: runs, targets: targets, searchCountry: searchCountry }) };
       } catch (e) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Start error: ' + e.message }) };
       }

@@ -4299,7 +4299,9 @@ async function topUpProfiles(){
     if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')</div>':'');resetFetchMoreBtn();return}
     var runs=sd.runs||[];
     if(!runs.length){st.textContent='⚠️ No profile searches could be started.';resetFetchMoreBtn();return}
-    st.innerHTML='🔍 Searching LinkedIn ('+runs.map(function(r){return esc(r.keyword)}).join(' + ')+')...';
+    st.innerHTML='🔍 Searching LinkedIn for:<div style="font-size:.56rem;color:var(--g5);margin-top:.2rem">'
+      +runs.map(function(r){return '&bull; "'+esc(r.keyword)+'" <span style="color:var(--g4)">(up to '+r.limit+')</span>'}).join('<br>')
+      +(sd.searchCountry?'<br>&bull; Location: '+esc(sd.searchCountry):'')+'</div>';
     matchState.polling=true;
     pollTopUp(runs,0);
   }catch(e){st.textContent='⚠️ Error: '+e.message;resetFetchMoreBtn()}
