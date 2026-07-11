@@ -2953,7 +2953,12 @@ function renderContractJobs(){
   var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:'+CJ_COLS.reduce(function(s,c){return s+c.ch},0)+'ch"><thead><tr>';
   CJ_COLS.forEach(function(c){
     var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
-
+    var wid='width:'+c.ch+'ch;';
+    if(c.key!=='action'){
+      html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;'+wid+'overflow:hidden">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
+    }else{
+      html+='<th style="white-space:nowrap;padding:.3rem .4rem;'+wid+'">'+c.label+'</th>';
+    }
   });
   html+='</tr></thead><tbody>';
   pageData.forEach(function(j,i){
