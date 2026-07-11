@@ -421,20 +421,21 @@ body.role-viewer .edit-btn{display:none!important}
       </div>
       <div id="consInfo" style="font-size:.62rem;color:var(--g5);margin-bottom:.4rem"></div>
       <div style="overflow-x:auto;overflow-y:auto;max-height:60vh;border:1px solid var(--g2);border-radius:8px;background:var(--card)">
-        <table style="width:100%;border-collapse:collapse;font-size:.68rem;table-layout:fixed;min-width:1200px">
+        <table id="consTable" style="width:100%;border-collapse:collapse;font-size:.68rem;table-layout:fixed;min-width:1240px">
           <thead><tr style="background:var(--g1);border-bottom:1px solid var(--g2)">
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px"><span onclick="sortConsultants('name')" style="cursor:pointer">Name ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:120px"><span onclick="sortConsultants('currentRole')" style="cursor:pointer">Role ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:100px"><span onclick="sortConsultants('currentCompany')" style="cursor:pointer">Company ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:100px"><span onclick="sortConsultants('location')" style="cursor:pointer">Location ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px"><span onclick="sortConsultants('country')" style="cursor:pointer">Country ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px"><span onclick="sortConsultants('engagementType')" style="cursor:pointer">Type ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:90px"><span onclick="sortConsultants('availability')" style="cursor:pointer">Availability ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px"><span onclick="sortConsultants('pipelineStatus')" style="cursor:pointer">Pipeline ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:130px"><span onclick="sortConsultants('email')" style="cursor:pointer">Email / Phone ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:110px">Skills</th>
-            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);resize:horizontal;overflow:hidden;min-width:80px"><span onclick="sortConsultants('updatedAt')" style="cursor:pointer">Updated ⇅</span></th>
-            <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4);min-width:70px">Action</th>
+            <th style="padding:.4rem .3rem;text-align:right;font-weight:600;color:var(--g4);overflow:hidden;width:4ch">#</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:26ch"><span onclick="sortConsultants('name')" style="cursor:pointer">Name ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:28ch"><span onclick="sortConsultants('currentRole')" style="cursor:pointer">Role ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:18ch"><span onclick="sortConsultants('currentCompany')" style="cursor:pointer">Company ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:16ch"><span onclick="sortConsultants('location')" style="cursor:pointer">Location ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:11ch"><span onclick="sortConsultants('country')" style="cursor:pointer">Country ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:12ch"><span onclick="sortConsultants('engagementType')" style="cursor:pointer">Type ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:12ch"><span onclick="sortConsultants('availability')" style="cursor:pointer">Availability ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:14ch"><span onclick="sortConsultants('pipelineStatus')" style="cursor:pointer">Pipeline ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:18ch"><span onclick="sortConsultants('email')" style="cursor:pointer">Email / Phone ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:16ch">Skills</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:11ch"><span onclick="sortConsultants('updatedAt')" style="cursor:pointer">Updated ⇅</span></th>
+            <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4);width:12ch">Action</th>
           </tr></thead>
           <tbody id="consBody"><tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
         </table>
@@ -719,6 +720,38 @@ function buildTableHeader(){
 }
 
 var wasResizing=false;
+// #408: generic drag-to-resize for tables that build their <th> as HTML strings
+// (contract jobs, matched candidates). Attach after render via attachColResizers(tableId).
+function attachColResizers(tableId){
+  var tbl=document.getElementById(tableId);if(!tbl)return;
+  var ths=tbl.querySelectorAll('thead th');
+  ths.forEach(function(th){
+    if(th.querySelector('.rh-gen'))return;
+    th.style.position='relative';
+    var h=document.createElement('div');
+    h.className='rh-gen';
+    h.style.cssText='position:absolute;top:0;right:0;width:7px;height:100%;cursor:col-resize;user-select:none;z-index:2';
+    h.onmousedown=function(e){startGenericResize(e,th,tbl)};
+    // clicking the handle must not trigger the header's sort
+    h.onclick=function(e){e.stopPropagation()};
+    th.appendChild(h);
+  });
+}
+function startGenericResize(e,th,tbl){
+  e.preventDefault();e.stopPropagation();wasResizing=true;
+  var s=e.pageX,sw=th.offsetWidth,idx=Array.from(th.parentNode.children).indexOf(th);
+  // switch the table to fixed layout during resize so column widths are honoured
+  tbl.style.tableLayout='fixed';
+  var mv=function(ev){
+    var w=Math.max(28,sw+(ev.pageX-s));
+    th.style.width=w+'px';
+  };
+  var up=function(){
+    document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);
+    setTimeout(function(){wasResizing=false},100);
+  };
+  document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+}
 function startResize(e,th){
   e.preventDefault();e.stopPropagation();wasResizing=true;var s=e.pageX,sw=th.offsetWidth,idx=Array.from(th.parentNode.children).indexOf(th);
   var mv=function(ev){var w=Math.max(30,sw+(ev.pageX-s));th.style.width=w+'px';th.style.minWidth=w+'px';
@@ -1169,7 +1202,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
       if(!existingTitles[key]){
         var merged={idx:allJobs.length+newCount+1,title:aj.title,titleClean:aj.title,company:aj.company,
           companyUrl:aj.companyUrl,location:aj.location,salary:aj.salary||'Not disclosed',
-          date:aj.datePosted||'',dateRaw:aj.datePosted,source:'LinkedIn',sourceApi:'apify-bebity',
+          date:aj.datePosted?fmtDate(aj.datePosted):'',dateRaw:aj.datePosted,datePosted:aj.datePosted,source:'LinkedIn',sourceApi:'apify-bebity',
           applyLink:aj.applyLink,jobUrl:aj.jobUrl,status:'new',companyType:'',
           experience:aj.experienceLevel||'',skills:'See details',certifications:'See details',
           compliance:'See details',tools:'See details',contact:aj.posterFullName||'',
@@ -2920,12 +2953,7 @@ function renderContractJobs(){
   var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:'+CJ_COLS.reduce(function(s,c){return s+c.ch},0)+'ch"><thead><tr>';
   CJ_COLS.forEach(function(c){
     var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
-    var wid='width:'+c.ch+'ch;';
-    if(c.key!=='action'){
-      html+='<th onmousedown="cjHeaderMouseDown(event)" onclick="cjHeaderClick(\''+c.key+'\',event)" style="cursor:pointer;white-space:nowrap;padding:.3rem .4rem;'+wid+'overflow:hidden;resize:horizontal">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>';
-    }else{
-      html+='<th style="white-space:nowrap;padding:.3rem .4rem;'+wid+'">'+c.label+'</th>';
-    }
+
   });
   html+='</tr></thead><tbody>';
   pageData.forEach(function(j,i){
@@ -2973,6 +3001,7 @@ function renderContractJobs(){
     html+='</div></div>';
   }
   el.innerHTML=html;
+  attachColResizers('cjTable');
 }
 
 async function viewContractJob(jobId){
@@ -3735,7 +3764,8 @@ function renderConsultants(){
   var start=(consCurPage-1)*consPerPage,end=Math.min(start+consPerPage,tot);
   var pageItems=data.slice(start,end);
   var h='';
-  pageItems.forEach(function(c){
+  pageItems.forEach(function(c,ri){
+    var rowNum=start+ri+1;
     var skills=(c.skills||[]).slice(0,4).join(', ')+((c.skills||[]).length>4?'…':'');
     var avail=c.availability||'available';
     var availDate=(avail==='busy'||avail==='placed')&&c.availableFrom?' <span style="font-size:.46rem;color:var(--g4)">till '+fmtDate(c.availableFrom)+'</span>':'';
@@ -3743,7 +3773,8 @@ function renderConsultants(){
     var contact=(c.email?esc(c.email):'')+(c.email&&c.phone?'<br>':'')+(c.phone?'<span style="color:var(--g4)">'+esc(c.phone)+'</span>':'');
     if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
     h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
-      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
+      +'<td style="padding:.4rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+rowNum+'</td>'
+      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
       +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
@@ -3758,6 +3789,7 @@ function renderConsultants(){
       +'</tr>';
   });
   tb.innerHTML=h;
+  attachColResizers('consTable');
   // pager
   var pag=document.getElementById('consPag');
   pag.style.display=tp>1?'flex':'none';
@@ -4398,13 +4430,13 @@ async function loadJobCandidates(){
     var h=header
       +'<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px">'
       +'<table id="candTable" style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:fixed;min-width:104ch"><thead><tr style="background:var(--g1)">'
-      +'<th style="text-align:right;resize:horizontal;overflow:hidden;width:4ch">#</th>'
-      +'<th style="text-align:right;resize:horizontal;overflow:hidden;width:8ch">Match</th>'
-      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:22ch">Name</th>'
-      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:24ch">Role</th>'
-      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:18ch">Location</th>'
-      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:12ch">Type</th>'
-      +'<th style="text-align:left;resize:horizontal;overflow:hidden;width:14ch">Pipeline</th>'
+      +'<th style="text-align:right;overflow:hidden;width:4ch">#</th>'
+      +'<th style="text-align:right;overflow:hidden;width:8ch">Match</th>'
+      +'<th style="text-align:left;overflow:hidden;width:22ch">Name</th>'
+      +'<th style="text-align:left;overflow:hidden;width:24ch">Role</th>'
+      +'<th style="text-align:left;overflow:hidden;width:18ch">Location</th>'
+      +'<th style="text-align:left;overflow:hidden;width:12ch">Type</th>'
+      +'<th style="text-align:left;overflow:hidden;width:14ch">Pipeline</th>'
       +'<th style="text-align:center;width:16ch">Action</th>'
       +'</tr></thead><tbody>';
     list.forEach(function(c,i){
@@ -4427,6 +4459,7 @@ async function loadJobCandidates(){
     });
     h+='</tbody></table></div></div>';
     wrap.innerHTML=h;
+    attachColResizers('candTable');
     // Bind delete buttons (data attributes avoid inline-quote breakage on names like O'Brien)
     wrap.querySelectorAll('.cand-del').forEach(function(btn){
       btn.onclick=function(e){e.stopPropagation();removeJobCandidate(this.dataset.sid,this.dataset.name)};
