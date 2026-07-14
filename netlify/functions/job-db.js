@@ -906,7 +906,7 @@ exports.handler = async (event) => {
     }
 
     // Collections that participate in backup/restore (add future data collections here)
-    var BACKUP_COLLECTIONS = ['jobs', 'contacts'];
+    var BACKUP_COLLECTIONS = ['jobs', 'contacts', 'consultant_profiles', 'settings'];
 
     // ACTION: backupJobs - snapshot all data collections into timestamped backups, keep last 5 sets
     if (action === 'backupJobs') {
