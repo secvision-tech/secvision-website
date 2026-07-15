@@ -696,40 +696,22 @@ exports.handler = async function (event) {
         finally { clearTimeout(t); }
       }
 
-      // Poll every run's status
-      var allDone = true, anyFailed = [], statuses = [];
-      for (var ri = 0; ri < runs.length; ri++) {
-        try {
-          var sResp = await fetchWithTimeout('https://api.apify.com/v2/actor-runs/' + runs[ri].runId + '?token=' + APIFY_TOKEN, {}, 8000);
-          var sData = await sResp.json();
-          var st = sData.data ? sData.data.status : 'UNKNOWN';
-          statuses.push({ keyword: runs[ri].keyword || '', status: st });
-          if (st === 'RUNNING' || st === 'READY') allDone = false;
-          else if (st !== 'SUCCEEDED') anyFailed.push({ keyword: runs[ri].keyword, status: st });
-        } catch (e) {
-          allDone = false; // status check slow — keep polling
-          statuses.push({ keyword: runs[ri].keyword || '', status: 'CHECKING' });
+      // Pull a set of finished runs' datasets into the cache. Idempotent: profiles are
+      // upserted by {source,sourceId}, so harvesting the same run twice is harmless.
+      async function harvestRuns(runList) {
+        var allNormalized = [];
+        for (var rj = 0; rj < runList.length; rj++) {
+          if (!runList[rj].datasetId) continue;
+          try {
+            var rResp = await fetchWithTimeout('https://api.apify.com/v2/datasets/' + runList[rj].datasetId + '/items?token=' + APIFY_TOKEN + '&format=json', {}, 12000);
+            var raw = await rResp.json();
+            var norm = (raw || []).map(normalizeApifyProfile).filter(function (p) { return p.sourceId; });
+            allNormalized = allNormalized.concat(norm);
+          } catch (e) { /* skip this dataset; others may still yield */ }
         }
-      }
-      if (!allDone) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, statuses: statuses }) };
-
-      // All runs finished — collect results from each successful dataset
-      var allNormalized = [];
-      for (var rj = 0; rj < runs.length; rj++) {
-        if (!runs[rj].datasetId) continue;
-        try {
-          var rResp = await fetchWithTimeout('https://api.apify.com/v2/datasets/' + runs[rj].datasetId + '/items?token=' + APIFY_TOKEN + '&format=json', {}, 12000);
-          var raw = await rResp.json();
-          var norm = (raw || []).map(normalizeApifyProfile).filter(function (p) { return p.sourceId; });
-          allNormalized = allNormalized.concat(norm);
-        } catch (e) { /* skip this dataset; others may still yield */ }
-      }
-
-      // Dedupe by sourceId across both variant runs (someone may match both keywords)
-      var seen = {}, deduped = [];
-      allNormalized.forEach(function (p) { if (!seen[p.sourceId]) { seen[p.sourceId] = 1; deduped.push(p); } });
-
-      if (deduped.length) {
+        var seen = {}, deduped = [];
+        allNormalized.forEach(function (p) { if (!seen[p.sourceId]) { seen[p.sourceId] = 1; deduped.push(p); } });
+        if (!deduped.length) return 0;
         var ops = deduped.map(function (np) {
           return {
             updateOne: {
@@ -753,11 +735,42 @@ exports.handler = async function (event) {
           };
         });
         try { await cacheCol.bulkWrite(ops, { ordered: false }); } catch (e) {}
+        return deduped.length;
       }
 
+      // Poll every run's status
+      var allDone = true, anyFailed = [], statuses = [], doneRuns = [];
+      for (var ri = 0; ri < runs.length; ri++) {
+        try {
+          var sResp = await fetchWithTimeout('https://api.apify.com/v2/actor-runs/' + runs[ri].runId + '?token=' + APIFY_TOKEN, {}, 8000);
+          var sData = await sResp.json();
+          var st = sData.data ? sData.data.status : 'UNKNOWN';
+          statuses.push({ keyword: runs[ri].keyword || '', status: st });
+          if (st === 'RUNNING' || st === 'READY') allDone = false;
+          else if (st !== 'SUCCEEDED') anyFailed.push({ keyword: runs[ri].keyword, status: st });
+          else doneRuns.push(runs[ri]);   // SUCCEEDED — safe to harvest now
+        } catch (e) {
+          allDone = false; // status check slow — keep polling
+          statuses.push({ keyword: runs[ri].keyword || '', status: 'CHECKING' });
+        }
+      }
+
+      // If some runs are still going, harvest whatever HAS finished so their profiles land
+      // in the cache now. One slow run shouldn't block the other's results.
+      if (!allDone) {
+        var partial = 0;
+        if (doneRuns.length) partial = await harvestRuns(doneRuns);
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+          done: false, statuses: statuses, partialFetched: partial
+        }) };
+      }
+
+      // All runs finished — harvest every successful dataset (shared, idempotent helper)
+      var fetchedCount = await harvestRuns(runs);
+
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
-        done: true, fetched: deduped.length, failedRuns: anyFailed,
-        message: 'Fetched and cached ' + deduped.length + ' profiles across ' + runs.length + ' searches.'
+        done: true, fetched: fetchedCount, failedRuns: anyFailed,
+        message: 'Fetched and cached ' + fetchedCount + ' profiles across ' + runs.length + ' searches.'
       }) };
     }
 

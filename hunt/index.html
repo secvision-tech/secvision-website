@@ -4365,19 +4365,42 @@ async function topUpProfiles(){
 
 async function pollTopUp(runs,tries){
   if(!matchState.polling){resetFetchMoreBtn();return}
-  if(tries>20){document.getElementById('matchStatus').textContent='⚠️ Profile fetch timed out. Try again.';matchState.polling=false;resetFetchMoreBtn();return}
   var st=document.getElementById('matchStatus');
-  st.innerHTML='🔍 Fetching consultant profiles from LinkedIn... ('+(tries*8)+'s)';
+  // LinkedIn scrapes routinely take 2-5 min for 35+15 profiles across two runs.
+  // 45 tries x 8s = 6 minutes before we give up.
+  var MAX_TRIES=45;
+  if(tries>MAX_TRIES){
+    st.innerHTML='⚠️ Profile fetch still running after 6 minutes — giving up on waiting.'
+      +'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">The Apify runs may still complete in the background. Wait a minute, then press <strong>Match Profiles</strong> again — any profiles it fetched will be picked up from the cache.</div>';
+    matchState.polling=false;resetFetchMoreBtn();return;
+  }
+  var secs=tries*8;
+  st.innerHTML='🔍 Fetching consultant profiles from LinkedIn... ('+secs+'s)'
+    +(secs>=60?'<div style="font-size:.55rem;color:var(--g5)">LinkedIn scraping can take a few minutes — still working.</div>':'');
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'checkTopUp',jobId:matchState.jobId,runs:runs})});
     var d=await safeMatchJson(r);
     if(d.error&&d.retry){setTimeout(function(){pollTopUp(runs,tries+1)},8000);return}
     if(d.error){st.textContent='⚠️ '+d.error;matchState.polling=false;resetFetchMoreBtn();return}
-    if(!d.done){setTimeout(function(){pollTopUp(runs,tries+1)},8000);return}
+    if(!d.done){
+      // Show what each individual Apify run is actually doing — a silent "timed out"
+      // hides whether runs are progressing, failed, or stuck.
+      if(d.statuses&&d.statuses.length){
+        st.innerHTML='🔍 Fetching consultant profiles from LinkedIn... ('+secs+'s)'
+          +'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">'
+          +d.statuses.map(function(s){return '&bull; '+esc(s.keyword||'search')+': <strong>'+esc(s.status)+'</strong>'}).join('<br>')
+          +'</div>';
+      }
+      setTimeout(function(){pollTopUp(runs,tries+1)},8000);return;
+    }
     matchState.polling=false;
     resetFetchMoreBtn();
     var failNote=(d.failedRuns&&d.failedRuns.length)?' ('+d.failedRuns.length+' search(es) failed)':'';
-    if(!d.fetched){st.innerHTML='ℹ️ LinkedIn returned no new profiles for this role'+failNote+'. All results may already be cached.';return}
+    if(!d.fetched){
+      st.innerHTML='ℹ️ LinkedIn returned no new profiles for this role'+failNote+'.'
+        +(d.failedRuns&&d.failedRuns.length?'<div style="font-size:.55rem;color:#B45309;margin-top:.2rem">'+d.failedRuns.map(function(f){return '&bull; '+esc(f.keyword||'search')+': '+esc(f.status)}).join('<br>')+'</div>':'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">All results may already be cached.</div>');
+      return;
+    }
     st.innerHTML='✅ Fetched '+d.fetched+' profile'+(d.fetched>1?'s':'')+failNote+'. Scoring against job...';
     runMatch(0);
   }catch(e){st.textContent='⚠️ Error: '+e.message;matchState.polling=false;resetFetchMoreBtn()}
