@@ -19,6 +19,9 @@ const APIFY_TOKEN = process.env.APIFY_API_TOKEN;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 const PROFILE_ACTOR_ID = 'bebity~linkedin-premium-actor';
 const SCORING_MODEL = 'claude-sonnet-4-6';
+// Bump when the scoring formula changes so cached scores are recomputed rather than
+// silently kept. v2 = added the remote-aware location penalty.
+const SCORING_VERSION = 2;
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
@@ -304,16 +307,92 @@ async function scoreProfilesBatch(req, profiles, weights) {
       role: clamp(s.role), experience: clamp(s.experience), rate: clamp(s.rate === undefined ? 50 : s.rate)
     };
     if (scoreEducation) dims.education = clamp(s.education === undefined ? 50 : s.education);
-    var overall = Math.round(
+    var base = Math.round(
       (dims.skills * w.skills + dims.certifications * w.certifications +
         dims.compliance * w.compliance + dims.role * w.role +
         dims.experience * w.experience + dims.rate * w.rate +
         (scoreEducation ? dims.education * w.education : 0)) / 100
     );
-    return { profile: p, overall: overall, dimensions: dims, reason: s.reason || '' };
+    // Soft location penalty — severity depends on whether the role is remote.
+    var lf = locationFit(req, p);
+    var overall = Math.round(base * lf.factor);
+    dims.location = lf.sameCountry === null ? 50 : (lf.sameCountry ? 100 : Math.round(lf.factor * 100));
+    var reason = s.reason || '';
+    if (lf.note) reason = reason ? (reason + ' · ' + lf.note) : lf.note;
+    return {
+      profile: p, overall: overall, dimensions: dims, reason: reason,
+      locationFit: { sameCountry: lf.sameCountry, factor: lf.factor, profileCountry: lf.profCountry, baseScore: base }
+    };
   });
 }
 function clamp(n) { n = parseInt(n); if (isNaN(n)) return 0; return Math.max(0, Math.min(100, n)); }
+
+// ---------------------------------------------------------------------------
+// Location fit — deterministic, applied AFTER the LLM's weighted score.
+// ---------------------------------------------------------------------------
+// Geography is a factual comparison, so we don't ask the LLM to judge it (it would
+// cost tokens and be less reliable). Instead the LLM scores skills/certs/etc., and
+// we multiply that by a location factor.
+//
+// Severity depends on the job's work arrangement:
+//   * ON-SITE / HYBRID  -> an out-of-country consultant realistically can't be placed
+//                          (work auth, payroll, on-site expectation) => heavy penalty.
+//   * REMOTE            -> out-of-country is workable => light penalty, so in-country
+//                          still ranks first but others remain visible.
+const LOC_PENALTY = {
+  onsite:  { sameCountry: 1.00, otherCountry: 0.55 },  // heavy: ~45% cut
+  remote:  { sameCountry: 1.00, otherCountry: 0.90 },  // light: ~10% cut
+  unknown: { sameCountry: 1.00, otherCountry: 0.75 }   // middle ground
+};
+
+function jobIsRemote(req) {
+  var hay = ((req.remote || '') + ' ' + (req.jobType || '') + ' ' + (req.title || '') + ' ' + (req.location || '')).toLowerCase();
+  if (/\b(remote|work from home|wfh|telecommute|anywhere|distributed)\b/.test(hay)) return true;
+  if (/\b(on-?site|onsite|in-?office|hybrid)\b/.test(hay)) return false;
+  return null; // unknown
+}
+
+// Normalize a country string for comparison ("USA"/"United States"/"US" -> "united states")
+function canonCountry(c) {
+  var s = String(c || '').trim().toLowerCase();
+  if (!s) return '';
+  if (/^(us|usa|u\.s\.a?\.?|united states( of america)?)$/.test(s)) return 'united states';
+  if (/^(uk|u\.k\.|united kingdom|great britain|england|scotland|wales)$/.test(s)) return 'united kingdom';
+  if (/^(uae|united arab emirates)$/.test(s)) return 'united arab emirates';
+  if (/^ca$|^canada$/.test(s)) return 'canada';
+  return s;
+}
+
+// Derive a profile's country from its explicit country field, else the tail of its location
+function profileCountry(p) {
+  if (p.country) return canonCountry(p.country);
+  var loc = String(p.location || '').trim();
+  if (!loc) return '';
+  var tail = loc.split(',').pop().trim();
+  return canonCountry(tail);
+}
+
+// Returns { factor, sameCountry, profCountry, note }
+function locationFit(req, profile) {
+  var jobCountry = canonCountry(req.country || '');
+  var profCountry = profileCountry(profile);
+  var remote = jobIsRemote(req);
+  var band = remote === true ? LOC_PENALTY.remote : (remote === false ? LOC_PENALTY.onsite : LOC_PENALTY.unknown);
+
+  // If we can't tell either side's country, don't penalize — we have no evidence.
+  if (!jobCountry || !profCountry) {
+    return { factor: 1, sameCountry: null, profCountry: profCountry, note: '' };
+  }
+  if (jobCountry === profCountry) {
+    return { factor: band.sameCountry, sameCountry: true, profCountry: profCountry, note: '' };
+  }
+  var pretty = profCountry.replace(/\b\w/g, function (m) { return m.toUpperCase(); });
+  var jobPretty = jobCountry.replace(/\b\w/g, function (m) { return m.toUpperCase(); });
+  var note = remote === true
+    ? 'Different country (' + pretty + ' vs ' + jobPretty + ') — role is remote, so workable'
+    : 'Different country (' + pretty + ' vs ' + jobPretty + ') — on-site/hybrid role, placement unlikely';
+  return { factor: band.otherCountry, sameCountry: false, profCountry: profCountry, note: note };
+}
 
 // ---------------------------------------------------------------------------
 // Build Apify search keywords from job requirements
@@ -485,8 +564,20 @@ exports.handler = async function (event) {
       var preScored = [];
       cached.forEach(function (p) {
         var mc = (p.matchCache || {})[req.jobId];
-        if (mc) preScored.push({ profile: p, overall: mc.overall, dimensions: mc.dimensions, reason: mc.reason });
-        else toScore.push(p);
+        // Re-score anything cached before the current scoring version (e.g. entries saved
+        // before the location penalty existed), otherwise stale scores would persist forever.
+        if (mc && mc.v === SCORING_VERSION) {
+          // locationFit isn't stored in the cache entry — recompute it (cheap, deterministic)
+          // so the in-country count and the UI badge work for cached results too.
+          var lfC = locationFit(req, p);
+          preScored.push({
+            profile: p, overall: mc.overall, dimensions: mc.dimensions, reason: mc.reason,
+            locationFit: { sameCountry: lfC.sameCountry, factor: lfC.factor, profileCountry: lfC.profCountry,
+                           baseScore: lfC.factor ? Math.round(mc.overall / lfC.factor) : mc.overall }
+          });
+        } else {
+          toScore.push(p);
+        }
       });
 
       // Score the unscored ones — but CAP per request to stay under Netlify's 26s limit.
@@ -507,7 +598,7 @@ exports.handler = async function (event) {
             for (var i = 0; i < llmScored.length; i++) {
               var r = llmScored[i];
               var gate = gated.find(function (g) { return g.p.sourceId === r.profile.sourceId; });
-              var entry = { overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: gate ? gate.gate.flags : [], scoredAt: new Date() };
+              var entry = { overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: gate ? gate.gate.flags : [], scoredAt: new Date(), v: SCORING_VERSION };
               newlyScored.push({ profile: r.profile, overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: entry.flags });
               try { await cacheCol.updateOne({ _id: r.profile._id }, { $set: { ['matchCache.' + req.jobId]: entry } }); } catch (e) {}
             }
@@ -536,6 +627,10 @@ exports.handler = async function (event) {
           allMatchRefs: all.map(function (m) { return { sourceId: m.profile.sourceId, overall: m.overall }; }),
           page: page, hasMore: all.length > start + PAGE_SIZE,
           totalMatches: all.length, cachedCount: cached.length,
+          // How many of the matches are actually in the job's own country? If zero, the UI
+          // tells the user to source locally rather than silently showing foreign consultants.
+          inCountryMatches: all.filter(function (m) { return m.locationFit && m.locationFit.sameCountry === true; }).length,
+          jobCountry: req.country || '',
           moreToScore: moreToScore,
           needsTopUp: all.length < PAGE_SIZE && !moreToScore
         })
@@ -803,6 +898,7 @@ function formatMatch(m) {
     skills: (m.profile.skills || []).slice(0, 15),
     certifications: m.profile.certifications || [],
     overall: m.overall,
+    locationFit: m.locationFit || null,
     dimensions: m.dimensions,
     reason: m.reason,
     flags: m.flags || [],

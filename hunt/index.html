@@ -4328,7 +4328,13 @@ async function runMatch(page){
     // Here we just report what the local cache produced.
     var ci=document.getElementById('cacheInfo');
     if(ci&&page===0){
-      ci.textContent='Scored '+(d.cachedCount||0)+' cached profile'+((d.cachedCount||0)===1?'':'s')+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.';
+      var txt='Scored '+(d.cachedCount||0)+' cached profile'+((d.cachedCount||0)===1?'':'s')+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.';
+      // If nothing in this job's own country matched, say so plainly — the fix is to source locally.
+      if(d.inCountryMatches===0&&(d.totalMatches||0)>0&&d.jobCountry){
+        ci.innerHTML=esc(txt)+' <span style="color:#B45309">None are based in '+esc(d.jobCountry)+' — use “Fetch More from LinkedIn” to source locally.</span>';
+      }else{
+        ci.textContent=txt;
+      }
     }
   }catch(e){st.textContent='⚠️ Error: '+e.message}
 }
@@ -4547,6 +4553,13 @@ function matchCard(m,rank){
   var skills=(m.skills||[]).slice(0,10).map(function(s){return'<span style="font-size:.5rem;background:#EEF2FF;color:#4338CA;padding:.05rem .3rem;border-radius:3px">'+esc(s)+'</span>'}).join(' ');
   var certs=(m.certifications||[]).map(function(c){return'<span style="font-size:.5rem;background:#ECFDF5;color:#047857;padding:.05rem .3rem;border-radius:3px">'+esc(c)+'</span>'}).join(' ');
   var flags=(m.flags||[]).map(function(f){return'<div style="font-size:.55rem;color:#B45309">⚠️ '+esc(f)+'</div>'}).join('');
+  // Out-of-country badge: explains why an otherwise-strong score was reduced
+  var lf=m.locationFit;
+  if(lf&&lf.sameCountry===false){
+    var cn=(lf.profileCountry||'').replace(/\b\w/g,function(x){return x.toUpperCase()});
+    var pctCut=Math.round((1-(lf.factor||1))*100);
+    flags+='<div style="font-size:.55rem;color:#B45309;background:#FFFBEB;border:1px solid #FDE68A;border-radius:3px;padding:.1rem .3rem;margin-top:.15rem">🌍 Based in '+esc(cn||'another country')+' — score reduced '+pctCut+'% (was '+lf.baseScore+'%)</div>';
+  }
   var cardId='mc'+rank;
   return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
