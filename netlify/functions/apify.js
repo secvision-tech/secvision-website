@@ -648,10 +648,27 @@ function isCyberRelevant(title, desc) {
 function detectCountryFromLocation(loc) {
   if (!loc) return 'Unknown';
   var l = loc.toLowerCase();
-  var US_STATES = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY)\b/;
-  if (US_STATES.test(loc) || /united states|usa/i.test(loc)) return 'United States';
+
+  // Canadian provinces/territories are decisive — check BEFORE the US state codes,
+  // because "CA" is ambiguous (California vs the ISO code for Canada) and several
+  // Canadian job boards write locations as "Halifax, Nova Scotia, CA" or just "CA".
+  var CA_PROVINCE = /\b(Alberta|British Columbia|Manitoba|New Brunswick|Newfoundland|Labrador|Nova Scotia|Ontario|Prince Edward|Quebec|Saskatchewan|Yukon|Nunavut|Northwest Territories)\b/i;
+  if (CA_PROVINCE.test(loc) || /\bcanada\b/i.test(l)) return 'Canada';
+
+  // Bare "CA" with no other geography = the ISO country code for Canada
+  // (that's how Canadian boards populate it), NOT California.
+  if (/^\s*CA\s*$/i.test(loc)) return 'Canada';
+
+  // "<City>, CA" with no Canadian signal => California, i.e. United States.
+  // Known Canadian cities are excluded so "Toronto, CA" stays Canada.
+  var CA_CITY = /\b(toronto|montreal|montréal|vancouver|calgary|edmonton|ottawa|winnipeg|hamilton|kitchener|victoria|halifax|oshawa|windsor|saskatoon|regina|barrie|kelowna|abbotsford|sudbury|kingston|guelph|moncton|brantford|thunder bay|sherbrooke|peterborough|lethbridge|nanaimo|kamloops|fredericton|mississauga|brampton|surrey|laval|markham|vaughan|gatineau|longueuil|burnaby|richmond hill|oakville|burlington|waterloo|milton|cambridge|whitby|coquitlam|langley)\s*,\s*CA\b/i;
+  if (CA_CITY.test(loc)) return 'Canada';
+
+  var US_STATES = /\b(AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|DC)\b/;
+  var US_STATE_NAMES = /\b(California|Texas|New York|Florida|Illinois|Virginia|Washington|Georgia|Massachusetts|Colorado|Arizona|Ohio|Michigan|Pennsylvania|Maryland|Minnesota|Oregon|Nevada|Utah|Missouri|Indiana|Wisconsin|Tennessee|Alabama|Connecticut|New Jersey|North Carolina|South Carolina|Kentucky|Louisiana|Oklahoma|Iowa|Kansas|Arkansas|Mississippi|Nebraska|Idaho|Hawaii|Maine|New Hampshire|Rhode Island|Montana|Delaware|South Dakota|North Dakota|Vermont|Wyoming|West Virginia|New Mexico)\b/i;
+  if (US_STATES.test(loc) || US_STATE_NAMES.test(loc) || /united states|usa/i.test(loc)) return 'United States';
+
   if (/united kingdom|england|scotland|wales/i.test(l)) return 'United Kingdom';
-  if (/canada/i.test(l)) return 'Canada';
   if (/australia/i.test(l)) return 'Australia';
   if (/germany|deutschland/i.test(l)) return 'Germany';
   if (/france/i.test(l)) return 'France';
