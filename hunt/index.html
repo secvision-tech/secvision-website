@@ -492,7 +492,7 @@ var COLS=[
   {key:'skills',label:'Key Skills',w:120},
   {key:'certifications',label:'Certifications',w:100},
   {key:'compliance',label:'Compliance/Framework',w:110},
-  {key:'tools',label:'Technology/Tools',w:110},
+  {key:'tools',label:'Technologies/Tools',w:110},
   {key:'contact',label:'Contact',w:100},
   {key:'eligibility',label:'Eligibility',w:70},
   {key:'jobType',label:'Type',w:60},
@@ -509,17 +509,63 @@ msal_.initialize().then(function(){
 function login(){document.getElementById('loginBtn').textContent='Signing in...';msal_.loginRedirect({scopes:['openid','profile','email','User.Read'],prompt:'select_account'})}
 function logout(){sessionStorage.clear();msal_.logoutRedirect({account:curUser})}
 
-// Get ID token for API calls
+// Get ID token for API calls.
+// #414: MSAL ID tokens live ~1 hour. acquireTokenSilent normally renews them, but if the
+// silent path fails the old code fell back to acquireTokenPopup — which browsers block
+// unless it's inside a user gesture. A blocked popup returned '' and the request 401'd,
+// which is why sessions appeared to "time out" after a long working period.
+// Now: force a fresh token when it's close to expiry, and only go interactive as a
+// deliberate, explained step.
+var _tokenWarned=false;
 async function getAuthToken(){
   if(!curUser)return'';
   try{
-    var resp=await msal_.acquireTokenSilent({scopes:['openid','profile','email'],account:curUser});
+    var claims=curUser.idTokenClaims||{};
+    var secsLeft=claims.exp?(claims.exp-Math.floor(Date.now()/1000)):9999;
+    // Renew early (within 5 min of expiry) rather than waiting for a 401.
+    var resp=await msal_.acquireTokenSilent({
+      scopes:['openid','profile','email'],
+      account:curUser,
+      forceRefresh: secsLeft<300
+    });
+    if(resp&&resp.account)curUser=resp.account;
+    _tokenWarned=false;
     return resp.idToken||'';
   }catch(e){
-    // Token expired — try interactive
-    try{var resp2=await msal_.acquireTokenPopup({scopes:['openid','profile','email']});curUser=resp2.account;return resp2.idToken||''}
-    catch(e2){console.error('Token error:',e2);return''}
+    // Silent renewal failed — needs interaction. A popup here is usually blocked, so tell
+    // the user plainly and let them re-auth with a click instead of failing silently.
+    if(!_tokenWarned){
+      _tokenWarned=true;
+      try{
+        var resp2=await msal_.acquireTokenPopup({scopes:['openid','profile','email']});
+        curUser=resp2.account;_tokenWarned=false;
+        return resp2.idToken||'';
+      }catch(e2){
+        console.error('Token renewal needs interaction:',e2);
+        showSessionExpiredBanner();
+        return'';
+      }
+    }
+    return'';
   }
+}
+// A non-blocking banner beats a surprise redirect that loses whatever you were doing.
+function showSessionExpiredBanner(){
+  if(document.getElementById('sessionExpiredBar'))return;
+  var bar=document.createElement('div');
+  bar.id='sessionExpiredBar';
+  bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:3000;background:#B45309;color:#fff;padding:.5rem .8rem;font-size:.72rem;display:flex;justify-content:center;align-items:center;gap:.6rem;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+  bar.innerHTML='🔒 Your sign-in session has expired. '
+    +'<button onclick="reauthNow()" style="padding:.2rem .7rem;background:#fff;color:#B45309;border:none;border-radius:4px;font-size:.68rem;font-weight:700;cursor:pointer">Sign in again</button>'
+    +'<span style="font-size:.6rem;opacity:.85">Your unsaved work stays on screen until you do.</span>';
+  document.body.appendChild(bar);
+}
+async function reauthNow(){
+  try{
+    var r=await msal_.acquireTokenPopup({scopes:['openid','profile','email']});
+    curUser=r.account;_tokenWarned=false;
+    var bar=document.getElementById('sessionExpiredBar');if(bar)bar.remove();
+  }catch(e){ login(); }
 }
 
 // Authenticated fetch wrapper — adds Authorization header to all API calls
@@ -530,7 +576,7 @@ async function authFetch(url,opts){
   if(token)opts.headers['Authorization']='Bearer '+token;
   if(!opts.headers['Content-Type'])opts.headers['Content-Type']='application/json';
   var r=await fetch(url,opts);
-  if(r.status===401){login();throw new Error('Session expired')}
+  if(r.status===401){showSessionExpiredBanner();throw new Error('Session expired — please sign in again (see banner at top).')}
   if(r.status===403){
     var errBody;try{errBody=await r.json()}catch(e){errBody={error:'Access denied'}}
     alert('⛔ '+(errBody.error||'Access denied. You do not have permission for this action.'));
@@ -1708,7 +1754,7 @@ async function safeApiFetch(url,opts){
   if(token)opts.headers['Authorization']='Bearer '+token;
   if(!opts.headers['Content-Type'])opts.headers['Content-Type']='application/json';
   var r=await fetch(url,opts);
-  if(r.status===401){login();throw new Error('Session expired')}
+  if(r.status===401){showSessionExpiredBanner();throw new Error('Session expired — please sign in again (see banner at top).')}
   var txt=await r.text();
   try{return JSON.parse(txt)}catch(e){
     if(txt.charAt(0)==='<')throw new Error('Server returned an error page ('+r.status+'). Check function logs.');
@@ -3065,7 +3111,7 @@ var CJ_COLS=[
   {key:'detectedCountry',label:'Country',ch:10},
   {key:'salary',label:'Salary/Rate',ch:13},
   {key:'certifications',label:'Certs',ch:20},
-  {key:'tools',label:'Tools',ch:26},
+  {key:'tools',label:'Technologies/Tools',ch:26},
   {key:'status',label:'Status',ch:10},
   {key:'source',label:'Source',ch:9},
   {key:'action',label:'Action',ch:8}
@@ -3976,11 +4022,21 @@ async function openManageProfile(id){
   var pop=document.getElementById('manageProfilePopup');
   if(!pop){document.body.insertAdjacentHTML('beforeend',manageProfileHtml());pop=document.getElementById('manageProfilePopup')}
   pop.style.display='flex';
+  // #415: the title kept the PREVIOUS consultant's name until the fetch returned, so
+  // navigating Prev/Next briefly showed the wrong person. Set it up front from the
+  // candidate list (which we already have) and fall back to a neutral label.
+  var navHit=(_candidateNav||[]).find(function(x){return x._id===id});
+  var mpT=document.getElementById('mpTitle');
+  if(mpT)mpT.textContent=navHit&&navHit.name?((CAP.canStatus?'Manage: ':'View: ')+navHit.name):'Loading profile…';
   document.getElementById('mpBody').innerHTML='<div style="padding:2rem;text-align:center;color:var(--g5)">Loading profile...</div>';
   document.getElementById('mpStatus').textContent='';
+  // keep the nav counter honest while loading
+  updateCandidateNavUI();
   try{
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'getConsultant',id:id})});
     var d=await r.json();
+    // If the user navigated again while this was in flight, discard the stale response.
+    if(manageProfileId!==id)return;
     if(d.error){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">'+esc(d.error)+'</div>';return}
     manageProfileData=d.consultant;
     renderManageProfile();
@@ -4626,11 +4682,12 @@ async function loadJobCandidates(){
     _candidateNav=list.filter(function(c){return c._id}).map(function(c){return {_id:c._id,name:c.name}});
     var h=header
       +'<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px">'
-      +'<table id="candTable" style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:fixed;min-width:104ch"><thead><tr style="background:var(--g1)">'
+      +'<table id="candTable" style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:fixed;min-width:110ch"><thead><tr style="background:var(--g1)">'
       +'<th style="text-align:right;overflow:hidden;width:4ch">#</th>'
       +'<th style="text-align:right;overflow:hidden;width:8ch">Match</th>'
       +'<th style="text-align:left;overflow:hidden;width:22ch">Name</th>'
       +'<th style="text-align:left;overflow:hidden;width:24ch">Role</th>'
+      +'<th style="text-align:right;overflow:hidden;width:6ch">Exp</th>'
       +'<th style="text-align:left;overflow:hidden;width:18ch">Location</th>'
       +'<th style="text-align:left;overflow:hidden;width:12ch">Type</th>'
       +'<th style="text-align:left;overflow:hidden;width:14ch">Pipeline</th>'
@@ -4646,6 +4703,7 @@ async function loadJobCandidates(){
         +'<td style="text-align:right"><span style="font-weight:700;color:'+col+'">'+pct+'%</span></td>'
         +'<td style="font-weight:600" title="'+esc(c.name)+'">'+esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
         +'<td style="color:var(--g5)" title="'+esc(c.currentRole||'')+'">'+esc(c.currentRole||'—')+'</td>'
+        +'<td style="color:var(--g5);text-align:right" title="Years of experience">'+(c.yearsExperience?c.yearsExperience+'y':'—')+'</td>'
         +'<td style="color:var(--g5)" title="'+esc(loc)+'">'+esc(loc||'—')+'</td>'
         +'<td>'+typeBadgeCons(c.engagementType)+'</td>'
         +'<td>'+pipelineBadge(c.pipelineStatus)+'</td>'
@@ -5199,7 +5257,7 @@ async function toggleTranslate(idx){
 function getExportData(){
   var data=filtered.map(function(j){return{
     '#':j.idx,Date:j.date,Title:j.titleClean||j.title,'Full Title':j.title,Company:j.company,'Company Type':j.companyType||'','Company Size':j.companySize||'',Location:j.location,Country:j.detectedCountry||'Unknown',Experience:j.experience,
-    'Key Skills':j.skills,Certifications:j.certifications,'Compliance/Framework':j.compliance,'Technology/Tools':j.tools,
+    'Key Skills':j.skills,Certifications:j.certifications,'Compliance/Framework':j.compliance,'Technologies/Tools':j.tools,
     Contact:j.contact,Eligibility:j.eligibility,Type:j.jobType,Salary:j.salary,Source:j.source,Status:j.status||'new',
     'Apply Link':j.applyLink
   }});return data;

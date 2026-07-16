@@ -856,6 +856,7 @@ exports.handler = async function (event) {
         return {
           _id: p._id ? p._id.toString() : '', sourceId: c.sourceId, overall: c.overall, addedAt: c.addedAt,
           name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',
+          yearsExperience: (p.yearsExperience === undefined || p.yearsExperience === null) ? null : p.yearsExperience,
           currentCompany: p.currentCompany || '', location: p.location || '', country: p.country || '',
           engagementType: p.engagementType || (p.contractorSignal && p.contractorSignal.likely ? 'Contractor' : 'Unknown'),
           availability: p.availability || 'available', pipelineStatus: p.pipelineStatus || 'none',

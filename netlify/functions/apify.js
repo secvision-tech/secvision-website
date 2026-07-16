@@ -485,6 +485,7 @@ exports.handler = async function(event) {
           salary: j.salary || 'Not disclosed',
           datePosted: j.datePosted ? new Date(j.datePosted) : null,
           jobType: jobType,
+          contractDuration: extractContractDuration(desc),   // #411
           remote: remote,
           tools: tools,
           certifications: certs,
@@ -515,6 +516,7 @@ exports.handler = async function(event) {
                 companyUrl: jobDoc.companyUrl, companyLogo: jobDoc.companyLogo,
                 location: jobDoc.location, description: jobDoc.description,
                 salary: jobDoc.salary, datePosted: jobDoc.datePosted,
+                contractDuration: jobDoc.contractDuration,
                 tools: jobDoc.tools, certifications: jobDoc.certifications,
                 compliance: jobDoc.compliance, contact: jobDoc.contact,
                 posterFullName: jobDoc.posterFullName, posterProfileUrl: jobDoc.posterProfileUrl,
@@ -643,6 +645,49 @@ function isCyberRelevant(title, desc) {
   SIGNALS.forEach(function(re) { if (re.test(d)) cyberSignals++; });
 
   return cyberSignals >= 3;
+}
+
+// #411: Extract contract length from the description. This existed only in the JSearch
+// path (job-search.js), so LinkedIn-scanned jobs never got a duration — even when the
+// description clearly said "Contract Length: 18 Months".
+function extractContractDuration(desc) {
+  var d = String(desc || '');
+  var patterns = [
+    // Ranges first, so "6-12 months" doesn't match as just "6 months"
+    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)/i,
+    /\b(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|initial|assignment)/i,
+    // Single values — covers "Contract Length: 18 Months", "Duration - 12 months"
+    /\b(?:contract\s*)?(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
+    /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:contract|engagement|assignment|initial|rolling|duration)/i,
+    /\b(?:initial\s*)?(?:contract|engagement)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
+    /\b(?:contract|engagement)\s*\(\s*(\d+)[\s-]*(?:months?|mos?)[^)]*\)/i,
+    /\b(?:contract[\s-]*to[\s-]*hire|c2h|temp[\s-]*to[\s-]*perm)\s*(?:after\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
+    /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:\+\s*(?:\d+\s*)?(?:months?|extension))/i,
+    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:weeks?)/i,
+    // Year-based
+    /\b(\d+)[\s-]*(?:year|yr)s?\s*(?:renewable|rolling|extendable|fixed[\s-]*term)?\s*(?:contract|engagement|assignment)/i,
+    /\b(?:contract|engagement)\s*(?:[\-–:(]\s*)?(\d+)[\s-]*(?:year|yr)/i
+  ];
+  for (var i = 0; i < patterns.length; i++) {
+    var m = d.match(patterns[i]);
+    if (!m) continue;
+    if (m[2] && i <= 1) {
+      var r1 = parseInt(m[1]), r2 = parseInt(m[2]);
+      if (r1 >= 1 && r1 <= 36 && r2 >= 1 && r2 <= 36 && r2 > r1) return r1 + '-' + r2 + ' months';
+      continue;
+    }
+    var num = parseInt(m[1]);
+    if (i >= 9) {                                   // year patterns
+      if (num >= 1 && num <= 5) return num === 1 ? '1 year' : num + ' years';
+      continue;
+    }
+    if (i === 8) {                                  // weeks pattern
+      if (num >= 1 && num <= 104) return num + ' weeks';
+      continue;
+    }
+    if (num >= 1 && num <= 36) return num + ' months';
+  }
+  return '';
 }
 
 function detectCountryFromLocation(loc) {
