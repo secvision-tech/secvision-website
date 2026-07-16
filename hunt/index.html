@@ -1583,7 +1583,7 @@ async function aiFormatDesc(i){
   if(btn){btn.disabled=true;btn.style.opacity='.5';btn.textContent='✨ Tidying...'}
   if(msg){msg.style.color='var(--g5)';msg.textContent='Reformatting with AI (a few seconds)...'}
   try{
-    var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'formatOne',jobId:id})});
+    var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'formatOne',jobId:id,force:true})});
     var d=await r.json();
     if(d.error){
       if(msg){msg.style.color='#B45309';msg.textContent='⚠️ '+(d.message||d.error)}
@@ -1826,17 +1826,43 @@ async function viewDet(i){
   jobCandidatesJobId=j._id||j.jobId||'';
   _selectedCandidates={};  // #403: selections are per-job
   _currentJobForMatch={skills:j.skills||'',certifications:j.certifications||'',tools:j.tools||'',compliance:j.compliance||'',title:j.title||''};
-  // If this job already has saved AI formatting, show it (cheap: no LLM call).
-  // We ask the server rather than shipping descFormatted in every list response.
+  // Auto-tidy on first view: shows saved formatting instantly if we have it, otherwise
+  // tidies once (recent + genuinely messy descriptions only), caches it, and shows it.
+  // Every later view of this job is free.
   (async function(){
     var jid=j._id||j.jobId||'';
     if(!jid)return;
     if(_aiFmtCache[jid]){renderFormattedDesc(i,_aiFmtCache[jid]);return}
+    var msg=document.getElementById('descFmtMsg');
+    var btn=document.getElementById('aiFmtBtn');
+    // Only show a spinner-ish note if it takes long enough to notice (cache hits are instant)
+    var slowTimer=setTimeout(function(){
+      if(msg&&jobCandidatesJobId===jid){msg.style.color='var(--g5)';msg.textContent='✨ Tidying up the description...'}
+      if(btn){btn.disabled=true;btn.style.opacity='.5'}
+    },600);
     try{
-      var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'getFormatted',jobId:jid})});
+      var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'getFormatted',jobId:jid,autoFormat:true,days:30})});
       var d=await r.json();
-      if(d&&d.formatted){_aiFmtCache[jid]=d.formatted;renderFormattedDesc(i,d.formatted)}
-    }catch(e){}
+      clearTimeout(slowTimer);
+      if(btn){btn.disabled=false;btn.style.opacity='1'}
+      // The popup may have been closed/changed while we waited — don't clobber it
+      if(jobCandidatesJobId!==jid)return;
+      if(msg)msg.textContent='';
+      if(d&&d.formatted){
+        _aiFmtCache[jid]=d.formatted;
+        renderFormattedDesc(i,d.formatted);
+        if(msg&&!d.cached){msg.style.color='#047857';msg.textContent='✅ Tidied up automatically. Use "Show original" to compare.';setTimeout(function(){if(msg)msg.textContent=''},4000)}
+        return;
+      }
+      // Nothing formatted — explain why, and keep the manual button useful.
+      if(d&&d.alreadyClean&&btn){btn.style.display='none'}      // no value in offering it
+      else if(d&&d.tooOld&&msg){msg.style.color='var(--g5)';msg.textContent='Older job — press “✨ Tidy up” if the text is hard to read.'}
+      else if(d&&d.discarded&&msg){msg.style.color='#B45309';msg.textContent='⚠️ Auto-tidy output looked wrong, so the original is shown.'}
+    }catch(e){
+      clearTimeout(slowTimer);
+      if(btn){btn.disabled=false;btn.style.opacity='1'}
+      if(msg&&jobCandidatesJobId===jid)msg.textContent='';   // stay silent; original is shown
+    }
   })();
   loadJobCandidates();
 }

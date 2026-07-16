@@ -104,6 +104,29 @@ async function formatOne(desc) {
 
 // Sanity guard: the model must not have dropped or invented substantial content.
 // Compare word counts — a legit reformat stays close; a summary would shrink a lot.
+// Does this description actually need the LLM? Many arrive already well-structured
+// (real line breaks, headers on their own lines) — the existing regex formatter handles
+// those fine, so paying for AI would be waste. We only tidy genuinely run-on text.
+function needsTidying(desc) {
+  var d = String(desc || '');
+  if (d.length < 400) return false;                 // too short to be worth it
+
+  var lines = d.split(/\r?\n/).filter(function (l) { return l.trim().length; });
+  var avgLineLen = lines.length ? (d.length / lines.length) : d.length;
+
+  // Signal 1: very few line breaks for the amount of text => one run-on block.
+  if (avgLineLen > 300) return true;
+  // Signal 2: almost no line breaks at all.
+  if (lines.length <= 3 && d.length > 800) return true;
+  // Signal 3: run-on "text Label: text Label:" pattern repeated on the same line.
+  var runOnLabels = (d.match(/[a-z0-9)]\s+[A-Z][A-Za-z ]{2,30}:\s/g) || []).length;
+  if (runOnLabels >= 3 && avgLineLen > 150) return true;
+  // Signal 4: scraping artefacts (split/glued words) worth fixing.
+  if (/[a-z][A-Z] [A-Z]{2,}|\b[A-Z]{2,} [A-Z]\b/.test(d) && avgLineLen > 200) return true;
+
+  return false;
+}
+
 function looksSane(original, formatted) {
   var wo = (original.match(/\b[\w']+\b/g) || []).length;
   var wf = (formatted.match(/\b[\w']+\b/g) || []).length;
@@ -138,13 +161,48 @@ exports.handler = async function (event) {
 
   try {
     // ---- getFormatted: read cached formatting only. NEVER calls the LLM (free). ----
+    // ---- getFormatted: read cached formatting. With autoFormat:true it will also
+    //      format-on-miss (auto-tidy on first view). Cost guards: recent jobs only,
+    //      and only descriptions that genuinely need restructuring.
     if (action === 'getFormatted') {
       var jg = await findJob(body.jobId);
       if (!jg) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null }) };
+      var descG = jg.description || '';
       var okCache = jg.descFormatted
         && jg.descFormatVersion === FORMAT_VERSION
-        && jg.descFormattedHash === hashOf(jg.description || '');
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: okCache ? jg.descFormatted : null }) };
+        && jg.descFormattedHash === hashOf(descG);
+      if (okCache) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: jg.descFormatted, cached: true }) };
+
+      // No usable cache. Only spend money when explicitly asked AND the job qualifies.
+      if (!body.autoFormat) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null }) };
+      if (jg.descFormatSkipped) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null, skipped: true }) };
+      if (!descG.trim()) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null }) };
+
+      // Cost guard 1: auto-tidy only recent jobs. Older ones stay manual (the ✨ button).
+      var autoDays = parseInt(body.days) || 30;
+      var cutoff = new Date(Date.now() - autoDays * 24 * 60 * 60 * 1000);
+      var jobDate = jg.datePosted || jg.dateScanned;
+      if (jobDate && new Date(jobDate) < cutoff) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null, tooOld: true }) };
+      }
+
+      // Cost guard 2: skip descriptions that are already well structured — no LLM call,
+      // and mark them so we never re-check.
+      if (!needsTidying(descG)) {
+        await jobs.updateOne({ _id: jg._id }, { $set: { descFormatSkipped: true, descFormatVersion: FORMAT_VERSION } });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null, alreadyClean: true }) };
+      }
+
+      var autoOut = await formatOne(descG);
+      if (!autoOut || !looksSane(descG, autoOut)) {
+        await jobs.updateOne({ _id: jg._id }, { $set: { descFormatSkipped: true, descFormatVersion: FORMAT_VERSION } });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null, discarded: true }) };
+      }
+      await jobs.updateOne({ _id: jg._id }, { $set: {
+        descFormatted: autoOut, descFormattedHash: hashOf(descG),
+        descFormatVersion: FORMAT_VERSION, descFormattedAt: new Date(), descFormattedBy: user.email + ' (auto)'
+      } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: autoOut, cached: false, auto: true }) };
     }
 
     // ---- formatOne: format a single job's description on demand ----
@@ -176,7 +234,7 @@ exports.handler = async function (event) {
         descFormatVersion: FORMAT_VERSION,
         descFormattedAt: new Date(),
         descFormattedBy: user.email
-      } });
+      }, $unset: { descFormatSkipped: '' } });   // a manual tidy un-skips the job
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: formatted, cached: false }) };
     }
 
@@ -207,6 +265,12 @@ exports.handler = async function (event) {
       var okCount = 0, skipped = 0;
       for (var i = 0; i < pending.length; i++) {
         var p = pending[i];
+        // Don't spend on descriptions that are already well structured.
+        if (!needsTidying(p.description || '')) {
+          await jobs.updateOne({ _id: p._id }, { $set: { descFormatSkipped: true, descFormatVersion: FORMAT_VERSION } });
+          skipped++;
+          continue;
+        }
         try {
           var f = await formatOne(p.description || '');
           if (f && looksSane(p.description || '', f)) {
