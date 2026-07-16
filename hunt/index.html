@@ -344,6 +344,15 @@ body.role-viewer .edit-btn{display:none!important}
               </div>
               <div id="backupList" style="margin-top:.4rem;display:none"></div>
             </div>
+            <div style="border:1px solid #DDD6FE;background:#FAF5FF;border-radius:6px;padding:.5rem;margin-top:.5rem">
+              <div style="font-size:.62rem;font-weight:700;color:#6C3FBF;margin-bottom:.3rem">✨ Tidy up job descriptions with AI — last 1 month only</div>
+              <div style="font-size:.56rem;color:var(--g5);margin-bottom:.35rem">Many scraped descriptions arrive as one unbroken block of text. This restructures them into headings, bullets and paragraphs. The original description is always kept. Roughly $0.01 per job — scoped to the last month to control cost.</div>
+              <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
+                <button onclick="countPendingFormat()" style="padding:.2rem .6rem;background:#fff;color:#6C3FBF;border:1px solid #C4B5FD;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Count pending</button>
+                <button onclick="runFormatBatch()" id="fmtBatchBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">✨ Tidy next 10</button>
+                <span id="fmtBatchStatus" style="font-size:.6rem;color:#6C3FBF;align-self:center"></span>
+              </div>
+            </div>
             <div style="display:flex;gap:.5rem;margin-top:.3rem;flex-wrap:wrap">
               <button onclick="fixCountries()" style="padding:.2rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">⚡ Fix Countries</button>
               <button onclick="fixCompanyTypes()" style="padding:.2rem .6rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">🏷️ Fix Company Types</button>
@@ -1500,6 +1509,97 @@ function toggleDescHighlight(i){
   el.innerHTML=on?highlightTermsInHtml(base,buildJobHighlightTerms(j)):base;
 }
 
+// ---------------------------------------------------------------------------
+// AI description tidy-up (#411)
+// ---------------------------------------------------------------------------
+// Many scraped descriptions arrive as one unbroken block of prose, which the
+// regex-based formatDesc() can't structure (it needs real line breaks). This
+// asks the backend to restructure it with an LLM. The original is never lost —
+// the "Show original" toggle brings it straight back.
+var _aiFmtCache={};   // jobId -> formatted markdown, for this session
+function mdToHtml(md){
+  if(!md)return '';
+  var esc_=function(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')};
+  var lines=String(md).split('\n');
+  var out=[],inList=false;
+  lines.forEach(function(raw){
+    var line=raw.replace(/\s+$/,'');
+    var t=line.trim();
+    if(!t){ if(inList){out.push('</ul>');inList=false} out.push(''); return }
+    // headings
+    var hm=t.match(/^(#{1,4})\s+(.*)$/);
+    if(hm){
+      if(inList){out.push('</ul>');inList=false}
+      out.push('<strong style="color:var(--pri);font-size:.85rem;display:block;margin-top:.7rem">'+esc_(hm[2])+'</strong>');
+      return;
+    }
+    // bullets
+    var bm=t.match(/^[-*\u2022]\s+(.*)$/);
+    if(bm){
+      if(!inList){out.push('<ul style="margin:.2rem 0 .2rem 1rem;padding:0">');inList=true}
+      out.push('<li style="margin:.1rem 0">'+inlineMd(bm[1])+'</li>');
+      return;
+    }
+    if(inList){out.push('</ul>');inList=false}
+    out.push('<div style="margin:.25rem 0">'+inlineMd(t)+'</div>');
+  });
+  if(inList)out.push('</ul>');
+  return out.join('');
+  function inlineMd(s){
+    s=esc_(s);
+    s=s.replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>');
+    s=s.replace(/(https?:\/\/[^\s<>"')\]]+)/gi,'<a href="$1" target="_blank" style="color:var(--ac);word-break:break-all">$1</a>');
+    s=s.replace(/([\w.+-]+@[\w-]+\.[\w.]+)/gi,'<a href="mailto:$1" style="color:var(--ac)">$1</a>');
+    return s;
+  }
+}
+function renderFormattedDesc(i,md){
+  var j=allJobs[i];if(!j)return;
+  var el=document.getElementById('descContent');if(!el)return;
+  var html=mdToHtml(md);
+  var chk=document.getElementById('descHighlightChk');
+  el.style.whiteSpace='normal';
+  el.innerHTML=(chk&&chk.checked)?highlightTermsInHtml(html,buildJobHighlightTerms(j)):html;
+  var btn=document.getElementById('aiFmtBtn');
+  if(btn){btn.textContent='↩︎ Show original';btn.onclick=function(){showOriginalDesc(i)}}
+}
+function showOriginalDesc(i){
+  var j=allJobs[i];if(!j)return;
+  var el=document.getElementById('descContent');if(!el)return;
+  var base=formatDesc((j.description||'').slice(0,5000));
+  var chk=document.getElementById('descHighlightChk');
+  el.style.whiteSpace='pre-line';
+  el.innerHTML=(chk&&chk.checked)?highlightTermsInHtml(base,buildJobHighlightTerms(j)):base;
+  var btn=document.getElementById('aiFmtBtn');
+  if(btn){btn.textContent='✨ Tidy up';btn.onclick=function(){aiFormatDesc(i)}}
+}
+async function aiFormatDesc(i){
+  var j=allJobs[i];if(!j)return;
+  var id=j._id||j.jobId||'';
+  var msg=document.getElementById('descFmtMsg');
+  var btn=document.getElementById('aiFmtBtn');
+  // session cache — don't re-hit the API for a job we already tidied this session
+  if(_aiFmtCache[id]){renderFormattedDesc(i,_aiFmtCache[id]);return}
+  if(btn){btn.disabled=true;btn.style.opacity='.5';btn.textContent='✨ Tidying...'}
+  if(msg){msg.style.color='var(--g5)';msg.textContent='Reformatting with AI (a few seconds)...'}
+  try{
+    var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'formatOne',jobId:id})});
+    var d=await r.json();
+    if(d.error){
+      if(msg){msg.style.color='#B45309';msg.textContent='⚠️ '+(d.message||d.error)}
+      if(btn){btn.disabled=false;btn.style.opacity='1';btn.textContent='✨ Tidy up'}
+      return;
+    }
+    _aiFmtCache[id]=d.formatted;
+    if(msg){msg.style.color='#047857';msg.textContent=d.cached?'✅ Showing saved formatting.':'✅ Reformatted. The original is kept — use "Show original" to compare.'}
+    if(btn){btn.disabled=false;btn.style.opacity='1'}
+    renderFormattedDesc(i,d.formatted);
+  }catch(e){
+    if(msg){msg.style.color='#DC2626';msg.textContent='⚠️ '+e.message}
+    if(btn){btn.disabled=false;btn.style.opacity='1';btn.textContent='✨ Tidy up'}
+  }
+}
+
 function formatDesc(text){
   if(!text)return'No description available.';
   var h = text
@@ -1713,7 +1813,7 @@ async function viewDet(i){
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
   var isNonEnglish=/[\u0600-\u06FF\u0750-\u077F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0900-\u097F\u0980-\u09FF\u0C00-\u0C7F\u0B80-\u0BFF\u00C0-\u024F\u1E00-\u1EFF]/.test(desc.slice(0,500));
   var translateBtnHtml=isNonEnglish?' <button onclick="toggleTranslate('+i+')" id="translateBtn" style="font-size:.6rem;padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600">🌐 Translate to English</button>':'';
-  h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center">Full Description<span style="display:flex;gap:.4rem;align-items:center"><label style="font-size:.6rem;font-weight:400;color:var(--g5);display:flex;align-items:center;gap:.2rem;cursor:pointer"><input type="checkbox" id="descHighlightChk" checked onchange="toggleDescHighlight('+i+')" style="cursor:pointer"><mark style="background:#FEF08A;color:#713F12;padding:0 .15rem;border-radius:2px">Highlight</mark> key terms</label>'+translateBtnHtml+'</span></h4><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+highlightTermsInHtml(formatDesc(desc.slice(0,5000)),buildJobHighlightTerms(j))+'</div></div>';
+  h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3rem">Full Description<span style="display:flex;gap:.4rem;align-items:center"><button id="aiFmtBtn" onclick="aiFormatDesc('+i+')" title="Use AI to restructure this description (headings, bullets, paragraphs). The original is kept." style="padding:.15rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">✨ Tidy up</button><label style="font-size:.6rem;font-weight:400;color:var(--g5);display:flex;align-items:center;gap:.2rem;cursor:pointer"><input type="checkbox" id="descHighlightChk" checked onchange="toggleDescHighlight('+i+')" style="cursor:pointer"><mark style="background:#FEF08A;color:#713F12;padding:0 .15rem;border-radius:2px">Highlight</mark> key terms</label>'+translateBtnHtml+'</span></h4><div id="descFmtMsg" style="font-size:.58rem;margin-bottom:.3rem"></div><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+highlightTermsInHtml(formatDesc(desc.slice(0,5000)),buildJobHighlightTerms(j))+'</div></div>';
   // Match Profiles is the primary action (supply-side matching). Apply link kept as secondary.
   h+='<div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;flex-wrap:wrap">';
   if(CAP.canContacts)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
@@ -1726,6 +1826,18 @@ async function viewDet(i){
   jobCandidatesJobId=j._id||j.jobId||'';
   _selectedCandidates={};  // #403: selections are per-job
   _currentJobForMatch={skills:j.skills||'',certifications:j.certifications||'',tools:j.tools||'',compliance:j.compliance||'',title:j.title||''};
+  // If this job already has saved AI formatting, show it (cheap: no LLM call).
+  // We ask the server rather than shipping descFormatted in every list response.
+  (async function(){
+    var jid=j._id||j.jobId||'';
+    if(!jid)return;
+    if(_aiFmtCache[jid]){renderFormattedDesc(i,_aiFmtCache[jid]);return}
+    try{
+      var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'getFormatted',jobId:jid})});
+      var d=await r.json();
+      if(d&&d.formatted){_aiFmtCache[jid]=d.formatted;renderFormattedDesc(i,d.formatted)}
+    }catch(e){}
+  })();
   loadJobCandidates();
 }
 var viewDirty=false;
@@ -2240,6 +2352,31 @@ async function fixExcessContacts(){
     st.textContent='👥 Done! '+d.companiesFixed+' companies had excess contacts. '+d.totalDeleted+' contacts removed.';
     setTimeout(function(){st.textContent=''},12000);
   }catch(e){st.textContent='⚠️ Error: '+e.message;setTimeout(function(){st.textContent=''},8000)}
+}
+
+async function countPendingFormat(){
+  var st=document.getElementById('fmtBatchStatus');
+  st.textContent='Counting...';
+  try{
+    var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'countPending',days:30})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}
+    var est=(d.pending*0.008).toFixed(2);
+    st.textContent=d.pending+' job'+(d.pending===1?'':'s')+' from the last 30 days need tidying (~$'+est+' to do all).';
+  }catch(e){st.textContent='⚠️ '+e.message}
+}
+async function runFormatBatch(){
+  var st=document.getElementById('fmtBatchStatus');
+  var btn=document.getElementById('fmtBatchBtn');
+  btn.disabled=true;btn.style.opacity='.5';
+  st.textContent='✨ Tidying up to 10 descriptions (this takes ~20-40s)...';
+  try{
+    var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'formatBatch',days:30,limit:10})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error}
+    else{st.textContent='✅ Tidied '+d.done+(d.skipped?', skipped '+d.skipped+' (output looked wrong)':'')+'. '+d.remaining+' still pending.'}
+  }catch(e){st.textContent='⚠️ '+e.message}
+  btn.disabled=false;btn.style.opacity='1';
 }
 
 async function backupJobsNow(){
