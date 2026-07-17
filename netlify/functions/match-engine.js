@@ -77,6 +77,157 @@ function validateToken(event) {
 // ---------------------------------------------------------------------------
 // ADAPTER: Apify bebity profile → normalized ConsultantProfile
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// #410: Location language normalization
+// ---------------------------------------------------------------------------
+// LinkedIn returns each profile's location in that profile's own locale, e.g.
+//   "Nowy Jork, Stany Zjednoczone"                  (Polish)
+//   "Sint-Eloois-Vijve, Région flamande, Belgique"  (French)
+//   "Chicago, Illinois, Verenigde Staten"           (Dutch)
+//   "Lanham, Maryland, Vereinigte Staaten von Amerika" (German)
+//   "Stati Uniti d'America"                          (Italian)
+//   "Spojené státy"                                  (Czech)
+// We normalize the COUNTRY and common REGION words to English. City names are
+// proper nouns and are left alone.
+//
+// Keys must be lowercase. Longest keys are matched first so "vereinigte staaten von
+// amerika" wins over "vereinigte staaten".
+const LOCATION_TERM_MAP = {
+  // ---- United States (incl. long "of America" forms) ----
+  'stany zjednoczone': 'United States',
+  'stany zjednoczone ameryki': 'United States',
+  'etats-unis': 'United States',
+  'états-unis': 'United States',
+  "etats-unis d'amerique": 'United States',
+  "états-unis d'amérique": 'United States',
+  'vereinigte staaten': 'United States',
+  'vereinigte staaten von amerika': 'United States',
+  'estados unidos': 'United States',
+  'estados unidos de américa': 'United States',
+  'estados unidos da américa': 'United States',
+  'verenigde staten': 'United States',
+  'verenigde staten van amerika': 'United States',
+  'stati uniti': 'United States',
+  "stati uniti d'america": 'United States',
+  'spojené státy': 'United States',
+  'spojené státy americké': 'United States',
+  'spojené štáty': 'United States',
+  'amerikas förenta stater': 'United States',
+  'amerikai egyesült államok': 'United States',
+  'statele unite': 'United States',
+  'statele unite ale americii': 'United States',
+  'yhdysvallat': 'United States',
+  'amerika birleşik devletleri': 'United States',
+  'соединённые штаты': 'United States',
+  'сполучені штати': 'United States',
+
+  // ---- United Kingdom ----
+  'royaume-uni': 'United Kingdom', 'vereinigtes königreich': 'United Kingdom',
+  'reino unido': 'United Kingdom', 'regno unito': 'United Kingdom',
+  'verenigd koninkrijk': 'United Kingdom', 'wielka brytania': 'United Kingdom',
+  'zjednoczone królestwo': 'United Kingdom', 'spojené království': 'United Kingdom',
+  'storbritannien': 'United Kingdom', 'birleşik krallık': 'United Kingdom',
+
+  // ---- Other common countries ----
+  'belgique': 'Belgium', 'belgië': 'Belgium', 'belgien': 'Belgium', 'belgio': 'Belgium', 'bélgica': 'Belgium',
+  'allemagne': 'Germany', 'deutschland': 'Germany', 'duitsland': 'Germany', 'germania': 'Germany',
+  'alemania': 'Germany', 'alemanha': 'Germany', 'niemcy': 'Germany', 'německo': 'Germany',
+  'frankrijk': 'France', 'frankreich': 'France', 'francia': 'France', 'frança': 'France',
+  'francja': 'France', 'francie': 'France',
+  'pays-bas': 'Netherlands', 'niederlande': 'Netherlands', 'nederland': 'Netherlands',
+  'paesi bassi': 'Netherlands', 'países bajos': 'Netherlands', 'holandia': 'Netherlands',
+  'espagne': 'Spain', 'spanien': 'Spain', 'españa': 'Spain', 'spagna': 'Spain',
+  'spanje': 'Spain', 'hiszpania': 'Spain', 'espanha': 'Spain',
+  'italie': 'Italy', 'italien': 'Italy', 'italia': 'Italy', 'italië': 'Italy', 'włochy': 'Italy',
+  'suisse': 'Switzerland', 'schweiz': 'Switzerland', 'svizzera': 'Switzerland',
+  'zwitserland': 'Switzerland', 'suiza': 'Switzerland', 'szwajcaria': 'Switzerland',
+  'autriche': 'Austria', 'österreich': 'Austria', 'oostenrijk': 'Austria', 'austria': 'Austria',
+  'inde': 'India', 'indien': 'India', 'india': 'India', 'indie': 'India',
+  'canadá': 'Canada', 'kanada': 'Canada', 'kanadassa': 'Canada',
+  'brasil': 'Brazil', 'brésil': 'Brazil', 'brasilien': 'Brazil', 'brasile': 'Brazil',
+  'polska': 'Poland', 'pologne': 'Poland', 'polen': 'Poland', 'polonia': 'Poland',
+  'irlande': 'Ireland', 'irland': 'Ireland', 'irlanda': 'Ireland', 'ierland': 'Ireland',
+  'suède': 'Sweden', 'schweden': 'Sweden', 'sverige': 'Sweden', 'zweden': 'Sweden',
+  'danemark': 'Denmark', 'dänemark': 'Denmark', 'danmark': 'Denmark', 'denemarken': 'Denmark',
+  'norvège': 'Norway', 'norwegen': 'Norway', 'norge': 'Norway', 'noorwegen': 'Norway',
+  'finlande': 'Finland', 'finnland': 'Finland', 'suomi': 'Finland',
+  'portugal': 'Portugal', 'portogallo': 'Portugal',
+  'tchéquie': 'Czech Republic', 'tschechien': 'Czech Republic', 'česko': 'Czech Republic',
+  'česká republika': 'Czech Republic', 'czechy': 'Czech Republic',
+  'australie': 'Australia', 'australien': 'Australia', 'australië': 'Australia',
+  'singapour': 'Singapore', 'singapur': 'Singapore',
+  'émirats arabes unis': 'United Arab Emirates', 'vereinigte arabische emirate': 'United Arab Emirates',
+  'emiratos árabes unidos': 'United Arab Emirates',
+
+  // ---- Regions / administrative words ----
+  'région flamande': 'Flanders', 'vlaams gewest': 'Flanders', 'flemish region': 'Flanders',
+  'région wallonne': 'Wallonia', 'waals gewest': 'Wallonia',
+  'région de bruxelles-capitale': 'Brussels', 'brussels hoofdstedelijk gewest': 'Brussels',
+  'catalogne': 'Catalonia', 'cataluña': 'Catalonia', 'catalunya': 'Catalonia',
+  'baviera': 'Bavaria', 'bayern': 'Bavaria', 'bavière': 'Bavaria',
+  'lombardia': 'Lombardy', 'lombardie': 'Lombardy',
+  'andalucía': 'Andalusia', 'andalousie': 'Andalusia',
+
+  // ---- Cities that get localized (most city names don't, but a few big ones do) ----
+  'nowy jork': 'New York', 'nueva york': 'New York', 'new york city': 'New York',
+  'londyn': 'London', 'londres': 'London', 'londra': 'London', 'londen': 'London',
+  'parigi': 'Paris', 'parís': 'Paris', 'paryż': 'Paris',
+  'rzym': 'Rome', 'roma': 'Rome', 'rom': 'Rome',
+  'wiedeń': 'Vienna', 'wien': 'Vienna', 'vienne': 'Vienna', 'vienna': 'Vienna',
+  'monachium': 'Munich', 'münchen': 'Munich', 'munich': 'Munich',
+  'kolonia': 'Cologne', 'köln': 'Cologne',
+  'praga': 'Prague', 'praha': 'Prague', 'prag': 'Prague',
+  'warszawa': 'Warsaw', 'warschau': 'Warsaw', 'varsovie': 'Warsaw',
+  'bruksela': 'Brussels', 'bruxelles': 'Brussels', 'brussel': 'Brussels', 'brüssel': 'Brussels',
+  'genève': 'Geneva', 'genf': 'Geneva', 'ginevra': 'Geneva',
+  'zurych': 'Zurich', 'zürich': 'Zurich', 'zurigo': 'Zurich',
+  'kopenhaga': 'Copenhagen', 'københavn': 'Copenhagen', 'kopenhagen': 'Copenhagen',
+  'lizbona': 'Lisbon', 'lisboa': 'Lisbon', 'lissabon': 'Lisbon', 'lisbonne': 'Lisbon',
+  'mediolan': 'Milan', 'milano': 'Milan', 'milan': 'Milan', 'mailand': 'Milan',
+  'florencja': 'Florence', 'firenze': 'Florence', 'florenz': 'Florence',
+  'wenecja': 'Venice', 'venezia': 'Venice', 'venedig': 'Venice',
+  'neapol': 'Naples', 'napoli': 'Naples', 'neapel': 'Naples',
+  'turyn': 'Turin', 'torino': 'Turin',
+  'sewilla': 'Seville', 'sevilla': 'Seville', 'séville': 'Seville',
+  'moskwa': 'Moscow', 'moskau': 'Moscow', 'moscou': 'Moscow', 'mosca': 'Moscow',
+
+  // ---- Administrative prefixes to strip (empty value = drop the prefix, keep the place) ----
+  'provincia di': '', 'province de': '', 'provincie': '',
+  'región de': '', 'region de': '', 'comunidad de': '',
+  'comunidad autónoma de': '', 'bundesland': '', 'regione': '',
+  'województwo': '', 'kraj': ''
+};
+
+// Longest keys first so multi-word terms win over their prefixes.
+const LOCATION_TERM_KEYS = Object.keys(LOCATION_TERM_MAP).sort(function (a, b) { return b.length - a.length; });
+
+function normalizeLocationToEnglish(loc) {
+  if (!loc) return loc;
+  var parts = String(loc).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+  var out = parts.map(function (part) {
+    var lower = part.toLowerCase();
+    // exact match on the whole comma-part
+    if (Object.prototype.hasOwnProperty.call(LOCATION_TERM_MAP, lower)) return LOCATION_TERM_MAP[lower];
+    // administrative prefix ("Provincia di Milano" -> "Milano" -> "Milan")
+    for (var i = 0; i < LOCATION_TERM_KEYS.length; i++) {
+      var k = LOCATION_TERM_KEYS[i];
+      if (LOCATION_TERM_MAP[k] === '' && lower.indexOf(k + ' ') === 0) {
+        var rest = part.slice(k.length).trim();
+        var restLower = rest.toLowerCase();
+        // the remainder may itself be a translatable place name
+        if (Object.prototype.hasOwnProperty.call(LOCATION_TERM_MAP, restLower) && LOCATION_TERM_MAP[restLower]) {
+          return LOCATION_TERM_MAP[restLower];
+        }
+        return rest;
+      }
+    }
+    return part;
+  }).filter(function (s) { return s && s.length; });
+  // drop consecutive duplicates (e.g. "United States, United States")
+  var dedup = out.filter(function (v, i) { return i === 0 || v.toLowerCase() !== out[i - 1].toLowerCase(); });
+  return dedup.join(', ');
+}
+
 function normalizeApifyProfile(p) {
   var exp = Array.isArray(p.experience) ? p.experience : [];
   // total years from experience durations (rough)
@@ -111,7 +262,7 @@ function normalizeApifyProfile(p) {
     linkedinUrl: p.linkedinUrl || '',
     name: ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || p.vanityName || 'Unknown',
     headline: p.headline || '',
-    location: p.location || '',
+    location: normalizeLocationToEnglish(p.location || ''),
     industry: p.industry || '',
     profilePicture: p.profilePictureUrl || '',
     // scored attributes
