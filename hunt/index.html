@@ -4481,11 +4481,11 @@ async function saveNewConsultant(){
 // ============ END CONSULTANT DATABASE ============
 
 // ============ MATCH PROFILES ENGINE (frontend orchestration) ============
-var matchState={jobId:null,jobTitle:'',company:'',page:0,polling:false};
+var matchState={jobId:null,jobTitle:'',company:'',page:0,polling:false,evalCap:50};
 
 async function openMatchProfiles(idx){
   var j=allJobs[idx];if(!j)return;
-  matchState={jobId:j._id||j.jobId||'',jobTitle:j.title||j.titleClean||'',company:j.company||'',page:0,polling:false};
+  matchState={jobId:j._id||j.jobId||'',jobTitle:j.title||j.titleClean||'',company:j.company||'',page:0,polling:false,evalCap:50};
   document.getElementById('matchPopup').style.display='flex';
   document.getElementById('matchTitle').textContent='🎯 Match Profiles';
   document.getElementById('matchSub').innerHTML='<strong>'+esc(matchState.jobTitle)+'</strong> at '+esc(matchState.company)+' &middot; consultants scoring ≥60% shown, best first';
@@ -4517,7 +4517,7 @@ async function runMatch(page){
   st.textContent='⏳ Scoring cached consultant profiles...';
   document.getElementById('matchResults').innerHTML='';
   try{
-    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page})});
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50})});
     var d=await safeMatchJson(r);
     if(d.error){
       // Scoring timeouts are transient — each pass saves progress, so auto-retry a few times
@@ -4531,6 +4531,9 @@ async function runMatch(page){
       st.innerHTML='⚠️ '+esc(d.error)+(d.retry?' <button onclick="matchState._retries=0;runMatch('+page+')" style="padding:.1rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Retry</button>':'');return;
     }
     matchState._retries=0;
+    // #416: auto-continue ONLY while we still need matches to fill the current page and
+    // budget remains. Once the page is full we stop — the user drives further scoring via
+    // Next / "Score more" / Fetch More, so we never grind the whole cache unprompted.
     if(d.moreToScore){
       st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)';
       if(d.matches&&d.matches.length)renderMatches(d);
@@ -4547,12 +4550,17 @@ async function runMatch(page){
     // Here we just report what the local cache produced.
     var ci=document.getElementById('cacheInfo');
     if(ci&&page===0){
-      var txt='Scored '+(d.cachedCount||0)+' cached profile'+((d.cachedCount||0)===1?'':'s')+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.';
+      var txt='Evaluated '+(d.evaluated||0)+' of '+(d.cachedCount||0)+' cached profile'+((d.cachedCount||0)===1?'':'s')+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.';
+      var extra='';
+      // #416: we deliberately stopped early. Say so, and let the user go further if they want.
+      if(d.canScoreMore&&d.unscoredLeft>0){
+        extra=' <button onclick="scoreMoreCached()" style="padding:.1rem .45rem;background:#fff;color:#6C3FBF;border:1px solid #C4B5FD;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Score '+Math.min(50,d.unscoredLeft)+' more cached</button>';
+      }
       // If nothing in this job's own country matched, say so plainly — the fix is to source locally.
       if(d.inCountryMatches===0&&(d.totalMatches||0)>0&&d.jobCountry){
-        ci.innerHTML=esc(txt)+' <span style="color:#B45309">None are based in '+esc(d.jobCountry)+' — use “Fetch More from LinkedIn” to source locally.</span>';
+        ci.innerHTML=esc(txt)+' <span style="color:#B45309">None are based in '+esc(d.jobCountry)+' — use “Fetch More from LinkedIn” to source locally.</span>'+extra;
       }else{
-        ci.textContent=txt;
+        ci.innerHTML=esc(txt)+extra;
       }
     }
   }catch(e){st.textContent='⚠️ Error: '+e.message}
@@ -4823,8 +4831,19 @@ function matchCard(m,rank){
     +'</div>';
 }
 function toggleMatchDetail(id){var el=document.getElementById(id);if(el)el.style.display=el.style.display==='none'?'block':'none'}
-function matchNextPage(){runMatch(matchState.page+1)}
+// #416: Each Match run evaluates at most ~50 profiles and stops once the page is full.
+// Pressing Next raises the budget so the next 10 matches can be found, rather than
+// scoring the whole cache up front.
+function matchNextPage(){
+  matchState.evalCap=(matchState.evalCap||50)+50;
+  runMatch(matchState.page+1);
+}
 function matchPrevPage(){if(matchState.page>0)runMatch(matchState.page-1)}
+// "Score more" — user explicitly asks to evaluate further cached profiles for this page.
+function scoreMoreCached(){
+  matchState.evalCap=(matchState.evalCap||50)+50;
+  runMatch(matchState.page||0);
+}
 // ============ END MATCH PROFILES ============
 
 async function openContactFinder(company,domain,linkedin){

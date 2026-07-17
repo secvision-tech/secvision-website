@@ -733,12 +733,37 @@ exports.handler = async function (event) {
 
       // Score the unscored ones — but CAP per request to stay under Netlify's 26s limit.
       // Score in small sub-batches, persisting each, so a timeout doesn't lose all progress.
+      // #416: Don't grind through the entire cache. Two stopping rules:
+      //   1. EVAL_CAP — never evaluate more than N profiles in one Match run.
+      //   2. Enough matches — once we have (page+1)*PAGE_SIZE matches, the current page is
+      //      full, so stop. Further scoring happens only when the user asks (Next / Fetch More).
+      // Both are overridable per-request so "Next" can push further into the cache.
+      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 200);
+      var NEED_MATCHES = (page + 1) * PAGE_SIZE;
+
       var SCORE_CAP = 8;
       var newlyScored = [];
       var moreToScore = false;
       var scoreError = null;
+      var evaluated = preScored.length;   // cached scores already count toward the cap
+
+      // Already have a full page from cache alone? Don't score anything new.
+      var haveNow = preScored.filter(function (m) { return m.overall >= MATCH_THRESHOLD; }).length;
+      if (haveNow >= NEED_MATCHES) {
+        toScore = [];
+        moreToScore = false;
+      } else if (evaluated >= EVAL_CAP) {
+        // Cap already consumed by cached entries — offer to continue, but don't spend now.
+        moreToScore = toScore.length > 0;
+        toScore = [];
+      } else if (toScore.length) {
+        // Only score up to what the cap allows, and never more than SCORE_CAP per request.
+        var roomLeft = EVAL_CAP - evaluated;
+        var budget = Math.min(SCORE_CAP, roomLeft);
+        if (toScore.length > budget) { moreToScore = true; toScore = toScore.slice(0, budget); }
+      }
+
       if (toScore.length) {
-        if (toScore.length > SCORE_CAP) { moreToScore = true; toScore = toScore.slice(0, SCORE_CAP); }
         var gated = toScore.map(function (p) { return { p: p, gate: applyHardGates(req, p) }; });
         var passing = gated.filter(function (g) { return g.gate.passed; }).map(function (g) { return g.p; });
         try {
@@ -770,6 +795,17 @@ exports.handler = async function (event) {
 
       var start = page * PAGE_SIZE;
       var pageItems = all.slice(start, start + PAGE_SIZE);
+
+      // #416: separate "the client must keep polling to finish this page" from "there are
+      // more cached profiles we COULD score if the user asks".
+      //   keepScoring  -> auto-continue (we don't yet have a full page and budget remains)
+      //   canScoreMore -> show a "Score more" affordance; do NOT auto-continue
+      var pageIsFull = all.length >= (page + 1) * PAGE_SIZE;
+      var unscoredLeft = cached.length - (preScored.length + newlyScored.length);
+      var budgetUsed = (preScored.length + newlyScored.length) >= EVAL_CAP;
+      var keepScoring = moreToScore && !pageIsFull && !budgetUsed && !scoreError;
+      var canScoreMore = (unscoredLeft > 0) && !keepScoring;
+
       return {
         statusCode: 200, headers: hdrs, body: JSON.stringify({
           matches: pageItems.map(formatMatch),
@@ -782,8 +818,11 @@ exports.handler = async function (event) {
           // tells the user to source locally rather than silently showing foreign consultants.
           inCountryMatches: all.filter(function (m) { return m.locationFit && m.locationFit.sameCountry === true; }).length,
           jobCountry: req.country || '',
-          moreToScore: moreToScore,
-          needsTopUp: all.length < PAGE_SIZE && !moreToScore
+          evaluated: preScored.length + newlyScored.length,
+          unscoredLeft: unscoredLeft > 0 ? unscoredLeft : 0,
+          moreToScore: keepScoring,          // frontend auto-continues ONLY on this
+          canScoreMore: canScoreMore,        // offer a manual "score more" instead
+          needsTopUp: all.length < PAGE_SIZE && !keepScoring && !canScoreMore
         })
       };
     }
