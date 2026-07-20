@@ -479,6 +479,87 @@ async function scoreProfilesBatch(req, profiles, weights) {
 function clamp(n) { n = parseInt(n); if (isNaN(n)) return 0; return Math.max(0, Math.min(100, n)); }
 
 // ---------------------------------------------------------------------------
+// Stage 3: reverse matching — score a batch of JOBS against one CONSULTANT.
+// ---------------------------------------------------------------------------
+// Forward matching scores many candidates against one job. This is the inverse:
+// given one consultant, score how well each job fits them. Reuses the same weighted
+// dimensions and the same deterministic location penalty for consistency.
+async function scoreJobsForConsultant(consultant, jobs, weights) {
+  if (!jobs.length) return [];
+  if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
+
+  var w = weights || DEFAULT_WEIGHTS;
+  var compact = jobs.map(function (j, i) {
+    return {
+      i: i,
+      title: j.title || j.titleClean || '',
+      company: j.company || '',
+      skills: (j.skills && j.skills !== 'See details') ? String(j.skills).slice(0, 400) : '',
+      certifications: (j.certifications && j.certifications !== 'See details') ? String(j.certifications).slice(0, 200) : '',
+      compliance: (j.compliance && j.compliance !== 'See details') ? String(j.compliance).slice(0, 200) : '',
+      tools: (j.tools && j.tools !== 'See details') ? String(j.tools).slice(0, 200) : '',
+      experience: j.experience || j.experienceLevel || ''
+    };
+  });
+
+  var cSkills = (consultant.skills || []).join(', ');
+  var cCerts = (consultant.certifications || []).join(', ');
+  var prompt =
+    'You are matching ONE cybersecurity consultant against several job openings. '
+    + 'Score how well the CONSULTANT fits EACH job.\n\n'
+    + 'CONSULTANT:\n'
+    + '  Role: ' + (consultant.currentRole || consultant.headline || '') + '\n'
+    + '  Experience: ' + (consultant.yearsExperience || 'unknown') + ' years\n'
+    + '  Skills: ' + (cSkills || 'not listed') + '\n'
+    + '  Certifications: ' + (cCerts || 'none listed') + '\n'
+    + '  Summary: ' + String(consultant.summary || '').slice(0, 500) + '\n\n'
+    + 'JOBS (JSON array):\n' + JSON.stringify(compact) + '\n\n'
+    + 'For EACH job return 0-100 scores for how well THIS consultant fits THAT job: '
+    + 'skills, certifications, compliance, role, experience, rate (50 if unknown). '
+    + 'Also a one-sentence "reason".\n'
+    + 'Respond with ONLY a JSON array: [{"i":0,"skills":..,"certifications":..,"compliance":..,'
+    + '"role":..,"experience":..,"rate":..,"reason":".."}, ...]. No prose, no code fences.';
+
+  var ctrl = new AbortController();
+  var tmo = setTimeout(function () { ctrl.abort(); }, 22000);
+  var scores;
+  try {
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: SCORING_MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+    });
+    if (!resp.ok) throw new Error('Anthropic ' + resp.status);
+    var data = await resp.json();
+    var txt = (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
+    txt = txt.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    scores = JSON.parse(txt);
+  } finally { clearTimeout(tmo); }
+
+  return jobs.map(function (j, i) {
+    var s = (scores || []).find(function (x) { return x.i === i; }) || {};
+    var dims = {
+      skills: clamp(s.skills), certifications: clamp(s.certifications),
+      compliance: clamp(s.compliance), role: clamp(s.role),
+      experience: clamp(s.experience), rate: clamp(s.rate === undefined ? 50 : s.rate)
+    };
+    var base = Math.round(
+      (dims.skills * w.skills + dims.certifications * w.certifications +
+        dims.compliance * w.compliance + dims.role * w.role +
+        dims.experience * w.experience + dims.rate * w.rate) / 100
+    );
+    var req = { country: j.detectedCountry || '', location: j.location || '', jobType: j.jobType || '', title: j.title || '', remote: j.remote || '' };
+    var lf = locationFit(req, consultant);
+    var overall = Math.round(base * lf.factor);
+    return {
+      job: j, overall: overall, dimensions: dims, reason: s.reason || '',
+      locationFit: { sameCountry: lf.sameCountry, factor: lf.factor, jobCountry: canonCountry(j.detectedCountry || ''), baseScore: base }
+    };
+  });
+}
+
+
+// ---------------------------------------------------------------------------
 // Location fit — deterministic, applied AFTER the LLM's weighted score.
 // ---------------------------------------------------------------------------
 // Geography is a factual comparison, so we don't ask the LLM to judge it (it would
@@ -1061,6 +1142,128 @@ exports.handler = async function (event) {
       if (!jr) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
       await db.collection('jobs').updateOne({ _id: jr._id }, { $pull: { candidateProfiles: { sourceId: body.sourceId } } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ removed: true }) };
+    }
+
+    // ---- Stage 3: matchJobs — reverse matching, one consultant -> jobs in a time window ----
+    if (action === 'matchJobs') {
+      var consId = body.consultantId || '';
+      if (!consId) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'consultantId required' }) };
+      var cacheCol = db.collection(CACHE_COLLECTION);
+
+      var consultant = null;
+      try { consultant = await cacheCol.findOne({ _id: new (require('mongodb').ObjectId)(consId) }); } catch (e) {}
+      if (!consultant) consultant = await cacheCol.findOne({ sourceId: consId });
+      if (!consultant) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Consultant not found' }) };
+
+      // Time window (default 7 days per Sunil). Maps period -> days.
+      var PERIOD_DAYS = { '1d': 1, '3d': 3, '1w': 7, '2w': 14, '1m': 30 };
+      var days = PERIOD_DAYS[body.period] || 7;
+      var since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      var page = parseInt(body.page) || 0;
+      var PAGE = 10;
+      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 200);
+      var NEED = (page + 1) * PAGE;
+      var SCORE_CAP = 8;
+
+      var jobsCol = db.collection('jobs');
+      // Candidate jobs: in the window, with something to score against. Newest first.
+      var jobQuery = {
+        $and: [
+          { $or: [{ datePosted: { $gte: since } }, { dateScanned: { $gte: since } }] },
+          { $or: [{ skills: { $exists: true, $ne: '' } }, { tools: { $exists: true, $ne: '' } }] }
+        ]
+      };
+      var candidateJobs = await jobsCol.find(jobQuery)
+        .project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, salary: 1,
+          datePosted: 1, dateScanned: 1, skills: 1, certifications: 1, compliance: 1, tools: 1,
+          experience: 1, experienceLevel: 1, jobType: 1, remote: 1, contractDuration: 1, applyLink: 1,
+          jobUrl: 1, source: 1, matchCacheRev: 1 })
+        .sort({ datePosted: -1, dateScanned: -1 }).limit(500).toArray();
+
+      // Split into already-scored (cached on the consultant) vs to-score.
+      var revCache = consultant.jobMatchCache || {};
+      var preScored = [], toScore = [];
+      candidateJobs.forEach(function (j) {
+        var key = String(j._id);
+        var mc = revCache[key];
+        if (mc && mc.v === SCORING_VERSION) {
+          preScored.push({ job: j, overall: mc.overall, dimensions: mc.dimensions, reason: mc.reason,
+            locationFit: mc.locationFit || null });
+        } else {
+          toScore.push(j);
+        }
+      });
+
+      var evaluated = preScored.length;
+      var haveNow = preScored.filter(function (m) { return m.overall >= MATCH_THRESHOLD; }).length;
+      var moreToScore = false, scoreError = null, newlyScored = [];
+
+      if (haveNow >= NEED) {
+        toScore = [];
+      } else if (evaluated >= EVAL_CAP) {
+        moreToScore = toScore.length > 0; toScore = [];
+      } else if (toScore.length) {
+        var budget = Math.min(SCORE_CAP, EVAL_CAP - evaluated);
+        if (toScore.length > budget) { moreToScore = true; toScore = toScore.slice(0, budget); }
+      }
+
+      if (toScore.length) {
+        try {
+          var weights = DEFAULT_WEIGHTS;
+          newlyScored = await scoreJobsForConsultant(consultant, toScore, weights);
+          // cache each result on the consultant
+          var setOps = {};
+          newlyScored.forEach(function (r) {
+            setOps['jobMatchCache.' + String(r.job._id)] = {
+              overall: r.overall, dimensions: r.dimensions, reason: r.reason,
+              locationFit: r.locationFit, v: SCORING_VERSION, scoredAt: new Date()
+            };
+          });
+          if (Object.keys(setOps).length) {
+            try { await cacheCol.updateOne({ _id: consultant._id }, { $set: setOps }); } catch (e) {}
+          }
+        } catch (e) { scoreError = e.message; }
+      }
+
+      var all = preScored.concat(newlyScored)
+        .filter(function (m) { return m.overall >= MATCH_THRESHOLD; })
+        .sort(function (a, b) { return b.overall - a.overall; });
+
+      var start = page * PAGE;
+      var pageItems = all.slice(start, start + PAGE);
+      var pageIsFull = all.length >= (page + 1) * PAGE;
+      var evaluatedTotal = preScored.length + newlyScored.length;
+      var unscoredLeft = candidateJobs.length - evaluatedTotal;
+      var keepScoring = moreToScore && !pageIsFull && evaluatedTotal < EVAL_CAP && !scoreError;
+
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        matches: pageItems.map(function (m) {
+          return {
+            jobId: String(m.job._id),
+            title: m.job.title || m.job.titleClean || '',
+            company: m.job.company || '',
+            location: m.job.location || '',
+            country: m.job.detectedCountry || '',
+            salary: m.job.salary || '',
+            datePosted: m.job.datePosted || m.job.dateScanned || null,
+            jobType: m.job.jobType || '',
+            contractDuration: m.job.contractDuration || '',
+            applyLink: m.job.applyLink || m.job.jobUrl || '',
+            source: m.job.source || '',
+            overall: m.overall, dimensions: m.dimensions, reason: m.reason,
+            locationFit: m.locationFit
+          };
+        }),
+        page: page, hasMore: all.length > start + PAGE,
+        totalMatches: all.length, evaluated: evaluatedTotal,
+        jobsInWindow: candidateJobs.length, unscoredLeft: unscoredLeft > 0 ? unscoredLeft : 0,
+        period: body.period || '1w', days: days,
+        moreToScore: keepScoring,
+        canScoreMore: (unscoredLeft > 0) && !keepScoring,
+        scoreError: scoreError,
+        consultantCountry: profileCountry(consultant)
+      }) };
     }
 
     // ---- ACTION: getSourcing / setSourcing (keyword variants + per-variant fetch limits) ----

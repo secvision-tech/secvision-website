@@ -4084,6 +4084,76 @@ function updateCandidateNavUI(){
 }
 function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="font-size:.55rem;color:var(--g4);display:block">'+label+'</span><span style="font-size:.68rem">'+(val||'—')+'</span></div>'}
 
+// ---- Stage 3: Match Jobs (reverse matching from a consultant) ----
+var mjState={consultantId:null,page:0,evalCap:50};
+function runMatchJobs(page){
+  var c=manageProfileData;
+  if(!c)return;
+  var cid=c._id||c.sourceId||'';
+  if(!cid){document.getElementById('mjStatus').textContent='This consultant has no id to match on.';return}
+  if(page===0&&mjState.consultantId!==cid){mjState.evalCap=50}
+  mjState.consultantId=cid;mjState.page=page;
+  var period=document.getElementById('mjPeriod').value;
+  var st=document.getElementById('mjStatus');
+  var btn=document.getElementById('mjBtn');
+  if(btn){btn.disabled=true;btn.style.opacity='.5'}
+  st.textContent='🔍 Scoring recent jobs against this consultant...';
+  authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({
+    action:'matchJobs',consultantId:cid,period:period,page:page,evalCap:mjState.evalCap
+  })}).then(function(r){return r.json()}).then(function(d){
+    if(btn){btn.disabled=false;btn.style.opacity='1'}
+    if(d.error){st.innerHTML='⚠️ '+esc(d.error);return}
+    if(d.moreToScore){
+      st.textContent='⏳ Scoring jobs... ('+(d.totalMatches||0)+' matches so far)';
+      if(d.matches&&d.matches.length)renderMatchJobs(d);
+      setTimeout(function(){runMatchJobs(page)},400);
+      return;
+    }
+    renderMatchJobs(d);
+  }).catch(function(e){
+    if(btn){btn.disabled=false;btn.style.opacity='1'}
+    st.textContent='⚠️ '+e.message;
+  });
+}
+function mjNextPage(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page+1)}
+function mjScoreMore(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page||0)}
+function renderMatchJobs(d){
+  var st=document.getElementById('mjStatus');
+  var box=document.getElementById('mjResults');
+  if(!box)return;
+  st.innerHTML='Evaluated '+(d.evaluated||0)+' of '+(d.jobsInWindow||0)+' job'+((d.jobsInWindow||0)===1?'':'s')+' in the last '+(d.days||7)+' days — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'
+    +((d.canScoreMore&&d.unscoredLeft>0)?' <button onclick="mjScoreMore()" style="padding:.1rem .45rem;background:#fff;color:#6C3FBF;border:1px solid #C4B5FD;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Score '+Math.min(50,d.unscoredLeft)+' more</button>':'');
+  if(!d.matches||!d.matches.length){
+    box.innerHTML='<div style="font-size:.6rem;color:var(--g5);padding:.4rem 0">No matching jobs found in this period. Try a longer time window.</div>';
+    return;
+  }
+  var h='<div style="border:1px solid var(--g2);border-radius:6px;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:.62rem"><thead><tr style="background:var(--g1)">'
+    +'<th style="padding:.3rem .4rem;text-align:left">Match</th><th style="padding:.3rem .4rem;text-align:left">Role</th>'
+    +'<th style="padding:.3rem .4rem;text-align:left">Company</th><th style="padding:.3rem .4rem;text-align:left">Location</th>'
+    +'<th style="padding:.3rem .4rem;text-align:left">Posted</th><th style="padding:.3rem .4rem;text-align:left">Duration</th></tr></thead><tbody>';
+  d.matches.forEach(function(m){
+    var scoreColor=m.overall>=80?'#047857':(m.overall>=70?'#6C3FBF':'#B45309');
+    var loc=m.location||m.country||'—';
+    var flag=(m.locationFit&&m.locationFit.sameCountry===false)?' <span title="Different country from consultant — score reduced" style="color:#B45309">🌍</span>':'';
+    var dur=m.contractDuration?esc(m.contractDuration):(/contract/i.test(m.jobType||'')?'Contract':'—');
+    var link=m.applyLink?'<a href="'+m.applyLink+'" target="_blank" style="color:var(--ac)">'+esc(m.title||'')+' ↗</a>':esc(m.title||'');
+    h+='<tr style="border-top:1px solid var(--g1)" title="'+esc(m.reason||'')+'">'
+      +'<td style="padding:.3rem .4rem;font-weight:700;color:'+scoreColor+'">'+m.overall+'%'+flag+'</td>'
+      +'<td style="padding:.3rem .4rem">'+link+'</td>'
+      +'<td style="padding:.3rem .4rem">'+esc(m.company||'—')+'</td>'
+      +'<td style="padding:.3rem .4rem;color:var(--g5)">'+esc(loc)+'</td>'
+      +'<td style="padding:.3rem .4rem;color:var(--g5)">'+(m.datePosted?fmtDate(m.datePosted):'—')+'</td>'
+      +'<td style="padding:.3rem .4rem;color:var(--g5)">'+dur+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem">';
+  if(d.page>0)h+='<button onclick="runMatchJobs('+(d.page-1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>';
+  h+='<span style="font-size:.55rem;color:var(--g5)">Page '+(d.page+1)+'</span>';
+  if(d.hasMore||d.canScoreMore)h+='<button onclick="mjNextPage()" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Next 10 ›</button>';
+  h+='</div>';
+  box.innerHTML=h;
+}
+
 function renderManageProfile(){
   var c=manageProfileData;if(!c)return;
   var isAdmin=(curUserRole==='admin'||curUserRole==='super_admin');
@@ -4113,6 +4183,20 @@ function renderManageProfile(){
   h+=fld('Experience',(c.yearsExperience||0)+' yrs');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual')));
   h+='</div>';
+  // Stage 3: reverse matching — which open roles does this consultant fit?
+  h+='<div style="border:1px solid #DDD6FE;background:#FAF5FF;border-radius:6px;padding:.5rem .6rem;margin-bottom:.7rem">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem">'
+    +'<span style="font-size:.64rem;font-weight:700;color:#6C3FBF">🎯 Match Jobs — open roles this consultant fits</span>'
+    +'<span style="display:flex;gap:.3rem;align-items:center">'
+    +'<select id="mjPeriod" style="font-size:.58rem;padding:.15rem .3rem;border:1px solid #C4B5FD;border-radius:4px">'
+    +'<option value="1d">Last 1 day</option><option value="3d">Last 3 days</option>'
+    +'<option value="1w" selected>Last 1 week</option><option value="2w">Last 2 weeks</option>'
+    +'<option value="1m">Last 1 month</option></select>'
+    +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
+    +'</span></div>'
+    +'<div id="mjStatus" style="font-size:.58rem;color:var(--g5);margin-top:.35rem"></div>'
+    +'<div id="mjResults" style="margin-top:.4rem"></div>'
+    +'</div>';
   // #398: when opened from a job's candidate table, highlight skills/certs that match that job
   var reqToks=jobRequirementTokens(_matchJobContext);
   if(reqToks){
