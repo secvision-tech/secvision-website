@@ -1762,6 +1762,7 @@ async function safeApiFetch(url,opts){
   }
 }
 async function viewDet(i){
+  mjFromConsultant=!!_mjPending;_mjPending=false;  // #418: one-shot; normal opens default to false
   currentViewIdx=i;
   var j=allJobs[i];if(!j)return;
   // If description missing (DB search excludes it), fetch full record
@@ -1862,7 +1863,11 @@ async function viewDet(i){
   h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3rem">Full Description<span style="display:flex;gap:.4rem;align-items:center"><button id="aiFmtBtn" onclick="aiFormatDesc('+i+')" title="Use AI to restructure this description (headings, bullets, paragraphs). The original is kept." style="padding:.15rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">✨ Tidy up</button><label style="font-size:.6rem;font-weight:400;color:var(--g5);display:flex;align-items:center;gap:.2rem;cursor:pointer"><input type="checkbox" id="descHighlightChk" checked onchange="toggleDescHighlight('+i+')" style="cursor:pointer"><mark style="background:#FEF08A;color:#713F12;padding:0 .15rem;border-radius:2px">Highlight</mark> key terms</label>'+translateBtnHtml+'</span></h4><div id="descFmtMsg" style="font-size:.58rem;margin-bottom:.3rem"></div><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+highlightTermsInHtml(formatDesc(desc.slice(0,5000)),buildJobHighlightTerms(j))+'</div></div>';
   // Match Profiles is the primary action (supply-side matching). Apply link kept as secondary.
   h+='<div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;flex-wrap:wrap">';
-  if(CAP.canContacts)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
+  // #418: when this popup was opened from a consultant's Match Jobs, DON'T offer Match
+  // Profiles — that would loop consultant->job->consultant. We still show the job's already
+  // saved candidates below (read-only), just no new fetch/match from here.
+  if(CAP.canContacts&&!mjFromConsultant)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
+  if(mjFromConsultant)h+='<span style="font-size:.6rem;color:var(--g5);font-style:italic">Opened from a consultant — matched candidates for this job are shown below.</span>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--ac);text-decoration:underline">View original posting &rarr;</a>';
   h+='</div>';
   // Matched candidates for this job (persisted) render below the button
@@ -1916,6 +1921,7 @@ var viewDirty=false;
 function closeDet(){
   document.getElementById('detailOverlay').classList.remove('open');
   jobCandidatesJobId='';
+  mjFromConsultant=false;   // #418: clear the "opened from consultant" flag
   if(viewDirty){
     // Re-render search results table
     filtered=allJobs.slice();renderTable();
@@ -4117,41 +4123,97 @@ function runMatchJobs(page){
 }
 function mjNextPage(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page+1)}
 function mjScoreMore(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page||0)}
+var mjSortCol='overall',mjSortDir=-1,mjMouseX=0,mjLastData=null;
+function mjHeaderDown(e){mjMouseX=e.clientX}
+function mjHeaderClick(col,e){
+  // #417: don't sort if the mouse moved (that was a resize drag, not a click)
+  if(Math.abs(e.clientX-mjMouseX)>5)return;
+  if(mjSortCol===col){mjSortDir*=-1}else{mjSortCol=col;mjSortDir=(col==='title'||col==='company'||col==='location')?1:-1}
+  if(mjLastData)renderMatchJobs(mjLastData);
+}
+function mjSortValue(m,col){
+  if(col==='overall')return m.overall||0;
+  if(col==='datePosted')return m.datePosted?new Date(m.datePosted).getTime():0;
+  if(col==='duration')return m.contractDuration||'';
+  return (m[col]||'').toString().toLowerCase();
+}
 function renderMatchJobs(d){
+  mjLastData=d;
   var st=document.getElementById('mjStatus');
   var box=document.getElementById('mjResults');
   if(!box)return;
-  st.innerHTML='Evaluated '+(d.evaluated||0)+' of '+(d.jobsInWindow||0)+' job'+((d.jobsInWindow||0)===1?'':'s')+' in the last '+(d.days||7)+' days — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'
-    +((d.canScoreMore&&d.unscoredLeft>0)?' <button onclick="mjScoreMore()" style="padding:.1rem .45rem;background:#fff;color:#6C3FBF;border:1px solid #C4B5FD;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Score '+Math.min(50,d.unscoredLeft)+' more</button>':'');
-  if(!d.matches||!d.matches.length){
-    box.innerHTML='<div style="font-size:.6rem;color:var(--g5);padding:.4rem 0">No matching jobs found in this period. Try a longer time window.</div>';
+  if(st&&!d.saved){
+    st.innerHTML='Evaluated '+(d.evaluated||0)+' of '+(d.jobsInWindow||0)+' job'+((d.jobsInWindow||0)===1?'':'s')+' in the last '+(d.days||7)+' days — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'
+      +((d.canScoreMore&&d.unscoredLeft>0)?' <button onclick="mjScoreMore()" style="padding:.1rem .45rem;background:#fff;color:#6C3FBF;border:1px solid #C4B5FD;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Score '+Math.min(50,d.unscoredLeft)+' more</button>':'');
+  }
+  var list=(d.matches||[]).slice().sort(function(a,b){
+    var va=mjSortValue(a,mjSortCol),vb=mjSortValue(b,mjSortCol);
+    if(va<vb)return -1*mjSortDir;if(va>vb)return 1*mjSortDir;return 0;
+  });
+  if(!list.length){
+    box.innerHTML='<div style="font-size:.6rem;color:var(--g5);padding:.4rem 0">No matching jobs saved yet. Pick a period and press “Find matching jobs”.</div>';
     return;
   }
-  var h='<div style="border:1px solid var(--g2);border-radius:6px;overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:.62rem"><thead><tr style="background:var(--g1)">'
-    +'<th style="padding:.3rem .4rem;text-align:left">Match</th><th style="padding:.3rem .4rem;text-align:left">Role</th>'
-    +'<th style="padding:.3rem .4rem;text-align:left">Company</th><th style="padding:.3rem .4rem;text-align:left">Location</th>'
-    +'<th style="padding:.3rem .4rem;text-align:left">Posted</th><th style="padding:.3rem .4rem;text-align:left">Duration</th></tr></thead><tbody>';
-  d.matches.forEach(function(m){
+  var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
+  var cols=[['overall','Match',6],['title','Role',26],['company','Company',18],['location','Location',16],['datePosted','Posted',9],['duration','Duration',9]];
+  var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:104ch"><thead><tr style="background:var(--g1)">';
+  cols.forEach(function(c){
+    h+='<th onmousedown="mjHeaderDown(event)" onclick="mjHeaderClick(\''+c[0]+'\',event)" style="padding:.3rem .4rem;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;width:'+c[2]+'ch">'+c[1]+'<span style="color:var(--ac);font-size:.5rem">'+arrow(c[0])+'</span></th>';
+  });
+  h+='<th style="padding:.3rem .4rem;text-align:center;width:13ch">Action</th></tr></thead><tbody>';
+  list.forEach(function(m){
     var scoreColor=m.overall>=80?'#047857':(m.overall>=70?'#6C3FBF':'#B45309');
     var loc=m.location||m.country||'—';
     var flag=(m.locationFit&&m.locationFit.sameCountry===false)?' <span title="Different country from consultant — score reduced" style="color:#B45309">🌍</span>':'';
     var dur=m.contractDuration?esc(m.contractDuration):(/contract/i.test(m.jobType||'')?'Contract':'—');
-    var link=m.applyLink?'<a href="'+m.applyLink+'" target="_blank" style="color:var(--ac)">'+esc(m.title||'')+' ↗</a>':esc(m.title||'');
     h+='<tr style="border-top:1px solid var(--g1)" title="'+esc(m.reason||'')+'">'
-      +'<td style="padding:.3rem .4rem;font-weight:700;color:'+scoreColor+'">'+m.overall+'%'+flag+'</td>'
-      +'<td style="padding:.3rem .4rem">'+link+'</td>'
-      +'<td style="padding:.3rem .4rem">'+esc(m.company||'—')+'</td>'
-      +'<td style="padding:.3rem .4rem;color:var(--g5)">'+esc(loc)+'</td>'
-      +'<td style="padding:.3rem .4rem;color:var(--g5)">'+(m.datePosted?fmtDate(m.datePosted):'—')+'</td>'
-      +'<td style="padding:.3rem .4rem;color:var(--g5)">'+dur+'</td></tr>';
+      +'<td style="padding:.3rem .4rem;font-weight:700;color:'+scoreColor+';overflow:hidden">'+m.overall+'%'+flag+'</td>'
+      +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.title||'')+'">'+esc(m.title||'—')+'</td>'
+      +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.company||'')+'">'+esc(m.company||'—')+'</td>'
+      +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(loc)+'">'+esc(loc)+'</td>'
+      +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+(m.datePosted?fmtDate(m.datePosted):'—')+'</td>'
+      +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+dur+'</td>'
+      +'<td style="padding:.3rem .4rem;text-align:center;white-space:nowrap">'
+        +'<button onclick="mjManageJob(\''+m.jobId+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">Manage</button>'
+        +'<button onclick="mjDeleteJob(\''+m.jobId+'\')" title="Remove from this consultant\'s matches" style="padding:.15rem .4rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer">✕</button>'
+      +'</td></tr>';
   });
   h+='</tbody></table></div>';
   h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem">';
   if(d.page>0)h+='<button onclick="runMatchJobs('+(d.page-1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>';
-  h+='<span style="font-size:.55rem;color:var(--g5)">Page '+(d.page+1)+'</span>';
+  if(typeof d.page==='number')h+='<span style="font-size:.55rem;color:var(--g5)">Page '+(d.page+1)+'</span>';
   if(d.hasMore||d.canScoreMore)h+='<button onclick="mjNextPage()" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Next 10 ›</button>';
   h+='</div>';
   box.innerHTML=h;
+  attachColResizers('mjTable');   // #417: JS drag-resize, sort-safe (see #408)
+}
+var mjFromConsultant=false,_mjPending=false;
+function mjManageJob(jobId){
+  var idx=allJobs.findIndex(function(x){return (x._id||x.jobId||'')===jobId});
+  if(idx<0){
+    // Job isn't in the currently-loaded list — fetch it, then open.
+    authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getJob',jobId:jobId})})
+      .then(function(r){return r.json()}).then(function(d){
+        if(d&&d.job){allJobs.push(d.job);_mjPending=true;viewDet(allJobs.length-1)}
+        else alert('Could not load that job.');
+      }).catch(function(e){alert('Error loading job: '+e.message)});
+    return;
+  }
+  _mjPending=true;
+  viewDet(idx);
+}
+function mjDeleteJob(jobId){
+  var c=manageProfileData;if(!c)return;
+  var cid=c._id||c.sourceId||'';
+  if(!confirm('Remove this job from '+(c.name||'this consultant')+'\u2019s matches?\n\nIt won\u2019t be re-added by future matching unless you clear the removal.'))return;
+  authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'deleteMatchedJob',consultantId:cid,jobId:jobId})})
+    .then(function(r){return r.json()}).then(function(d){
+      if(d.removed&&mjLastData){
+        mjLastData.matches=(mjLastData.matches||[]).filter(function(m){return m.jobId!==jobId});
+        mjLastData.totalMatches=(mjLastData.matches||[]).length;
+        renderMatchJobs(mjLastData);
+      }
+    }).catch(function(e){alert('Error: '+e.message)});
 }
 
 function renderManageProfile(){
@@ -4305,8 +4367,24 @@ function renderManageProfile(){
     h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem;text-align:right"><button onclick="deleteProfile()" style="padding:.3rem .7rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Delete Profile</button></div>';
   }
   document.getElementById('mpBody').innerHTML=h;
+  // #419: show any previously-saved matched jobs immediately (no scoring, free).
+  loadSavedMatchJobs();
 }
-function mpAvailChange(){var v=document.getElementById('mpAvail').value;document.getElementById('mpAvailFromWrap').style.display=(v==='busy')?'block':'none'}
+function loadSavedMatchJobs(){
+  var c=manageProfileData;if(!c)return;
+  var cid=c._id||c.sourceId||'';if(!cid)return;
+  mjState.consultantId=cid;mjState.page=0;mjState.evalCap=50;mjLastData=null;
+  var st=document.getElementById('mjStatus');
+  authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'listMatchedJobs',consultantId:cid})})
+    .then(function(r){return r.json()}).then(function(d){
+      if(d&&d.matches&&d.matches.length){
+        if(st)st.innerHTML=d.totalMatches+' saved match'+(d.totalMatches===1?'':'es')+'. <span style="color:var(--g5)">Press “Find matching jobs” to refresh or extend.</span>';
+        renderMatchJobs({matches:d.matches,totalMatches:d.totalMatches,consultantCountry:d.consultantCountry,saved:true});
+      }else{
+        if(st)st.innerHTML='No matched jobs yet. Pick a period and press “Find matching jobs”.';
+      }
+    }).catch(function(){});
+}
 function mpMsg(msg,color){
   var el=document.getElementById('mpStatus');if(!el)return;
   if(!msg){el.innerHTML='';el.style.display='none';return}

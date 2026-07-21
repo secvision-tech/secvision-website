@@ -1237,6 +1237,38 @@ exports.handler = async function (event) {
       var unscoredLeft = candidateJobs.length - evaluatedTotal;
       var keepScoring = moreToScore && !pageIsFull && evaluatedTotal < EVAL_CAP && !scoreError;
 
+      // #419: Persist the matches so the list survives closing the popup. We merge into a
+      // `matchedJobs` array on the consultant (dedup by jobId, keep the latest score).
+      // User deletions are respected via a `matchedJobsRemoved` set — we never re-add a
+      // job the user explicitly deleted.
+      var removedSet = {};
+      (consultant.matchedJobsRemoved || []).forEach(function (id) { removedSet[id] = 1; });
+      var existing = {};
+      (consultant.matchedJobs || []).forEach(function (mj) { existing[mj.jobId] = mj; });
+      all.forEach(function (m) {
+        var jid = String(m.job._id);
+        if (removedSet[jid]) return;                 // user deleted this — don't resurrect it
+        existing[jid] = {
+          jobId: jid,
+          title: m.job.title || m.job.titleClean || '',
+          company: m.job.company || '',
+          location: m.job.location || '',
+          country: m.job.detectedCountry || '',
+          salary: m.job.salary || '',
+          datePosted: m.job.datePosted || m.job.dateScanned || null,
+          jobType: m.job.jobType || '',
+          contractDuration: m.job.contractDuration || '',
+          applyLink: m.job.applyLink || m.job.jobUrl || '',
+          source: m.job.source || '',
+          overall: m.overall, reason: m.reason,
+          locationFit: m.locationFit,
+          matchedAt: new Date()
+        };
+      });
+      var mergedList = Object.keys(existing).map(function (k) { return existing[k]; })
+        .sort(function (a, b) { return b.overall - a.overall; });
+      try { await cacheCol.updateOne({ _id: consultant._id }, { $set: { matchedJobs: mergedList } }); } catch (e) {}
+
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         matches: pageItems.map(function (m) {
           return {
@@ -1263,6 +1295,40 @@ exports.handler = async function (event) {
         canScoreMore: (unscoredLeft > 0) && !keepScoring,
         scoreError: scoreError,
         consultantCountry: profileCountry(consultant)
+      }) };
+    }
+
+    // ---- #419: listMatchedJobs — return the saved matched-jobs list (NO scoring, free) ----
+    if (action === 'listMatchedJobs') {
+      var lcId = body.consultantId || '';
+      if (!lcId) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'consultantId required' }) };
+      var lcCol = db.collection(CACHE_COLLECTION);
+      var lcCons = null;
+      try { lcCons = await lcCol.findOne({ _id: new (require('mongodb').ObjectId)(lcId) }); } catch (e) {}
+      if (!lcCons) lcCons = await lcCol.findOne({ sourceId: lcId });
+      if (!lcCons) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Consultant not found' }) };
+      var saved = (lcCons.matchedJobs || []).sort(function (a, b) { return b.overall - a.overall; });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        matches: saved, totalMatches: saved.length, consultantCountry: profileCountry(lcCons), saved: true
+      }) };
+    }
+
+    // ---- #419: deleteMatchedJob — remove one saved match and remember not to re-add it ----
+    if (action === 'deleteMatchedJob') {
+      var dcId = body.consultantId || '';
+      var dJobId = body.jobId || '';
+      if (!dcId || !dJobId) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'consultantId and jobId required' }) };
+      var dcCol = db.collection(CACHE_COLLECTION);
+      var dFilter = null;
+      try { dFilter = { _id: new (require('mongodb').ObjectId)(dcId) }; } catch (e) { dFilter = { sourceId: dcId }; }
+      // pull from matchedJobs, add to the removed set so future scoring won't resurrect it
+      await dcCol.updateOne(dFilter, {
+        $pull: { matchedJobs: { jobId: dJobId } },
+        $addToSet: { matchedJobsRemoved: dJobId }
+      });
+      var dcCons = await dcCol.findOne(dFilter);
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        removed: true, remaining: (dcCons && dcCons.matchedJobs ? dcCons.matchedJobs.length : 0)
       }) };
     }
 
