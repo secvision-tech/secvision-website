@@ -191,7 +191,18 @@ const LOCATION_TERM_MAP = {
   'sewilla': 'Seville', 'sevilla': 'Seville', 'séville': 'Seville',
   'moskwa': 'Moscow', 'moskau': 'Moscow', 'moscou': 'Moscow', 'mosca': 'Moscow',
 
+  // ---- Cyrillic country names ----
+  'канада': 'Canada', 'соединённые штаты': 'United States', 'сполучені штати': 'United States',
+  'германия': 'Germany', 'франция': 'France', 'испания': 'Spain', 'австрия': 'Austria',
+  'индия': 'India', 'великобритания': 'United Kingdom',
+  // ---- Swedish / Nordic country names not already covered ----
+  'österrike': 'Austria', 'tyskland': 'Germany', 'frankrike': 'France', 'storbritannien': 'United Kingdom',
+
   // ---- Administrative prefixes to strip (empty value = drop the prefix, keep the place) ----
+  'großraum': '', 'grossraum': '',                       // German "Greater ... area"
+  'región metropolitana de': '', 'region metropolitana de': '',
+  'área metropolitana de': '', 'area metropolitana di': '',
+  'grand': '', 'greater': '',
   'provincia di': '', 'province de': '', 'provincie': '',
   'región de': '', 'region de': '', 'comunidad de': '',
   'comunidad autónoma de': '', 'bundesland': '', 'regione': '',
@@ -585,12 +596,45 @@ function jobIsRemote(req) {
 }
 
 // Normalize a country string for comparison ("USA"/"United States"/"US" -> "united states")
+// #428: LinkedIn returns countries in many languages/scripts. For matching to work, a
+// consultant in "Kanada"/"Канада" and a job in "Canada" must resolve to the SAME country.
+// This maps localized/native country names (lowercased) to canonical English.
+const COUNTRY_ALIASES = {
+  'canada': 'canada', 'kanada': 'canada', 'канада': 'canada', 'canadá': 'canada', 'ca': 'canada',
+  'united states': 'united states', 'usa': 'united states', 'us': 'united states',
+  'vereinigte staaten': 'united states', 'estados unidos': 'united states', 'états-unis': 'united states',
+  'stany zjednoczone': 'united states', 'verenigde staten': 'united states', 'stati uniti': 'united states',
+  'соединённые штаты': 'united states', 'сполучені штати': 'united states',
+  'united kingdom': 'united kingdom', 'uk': 'united kingdom', 'großbritannien': 'united kingdom',
+  'grossbritannien': 'united kingdom', 'royaume-uni': 'united kingdom', 'reino unido': 'united kingdom',
+  'vereinigtes königreich': 'united kingdom', 'storbritannien': 'united kingdom',
+  'germany': 'germany', 'deutschland': 'germany', 'allemagne': 'germany', 'alemania': 'germany',
+  'tyskland': 'germany', 'niemcy': 'germany', 'германия': 'germany',
+  'austria': 'austria', 'österreich': 'austria', 'osterreich': 'austria', 'österrike': 'austria',
+  'autriche': 'austria', 'австрия': 'austria',
+  'switzerland': 'switzerland', 'schweiz': 'switzerland', 'suisse': 'switzerland', 'svizzera': 'switzerland',
+  'france': 'france', 'frankreich': 'france', 'frankrike': 'france', 'франция': 'france',
+  'netherlands': 'netherlands', 'niederlande': 'netherlands', 'nederland': 'netherlands', 'pays-bas': 'netherlands',
+  'belgium': 'belgium', 'belgique': 'belgium', 'belgië': 'belgium', 'belgien': 'belgium',
+  'spain': 'spain', 'españa': 'spain', 'espagne': 'spain', 'spanien': 'spain', 'испания': 'spain',
+  'italy': 'italy', 'italia': 'italy', 'italien': 'italy', 'italie': 'italy',
+  'ireland': 'ireland', 'irland': 'ireland', 'irlande': 'ireland',
+  'india': 'india', 'indien': 'india', 'inde': 'india', 'индия': 'india',
+  'australia': 'australia', 'australien': 'australia', 'australie': 'australia',
+  'sweden': 'sweden', 'sverige': 'sweden', 'schweden': 'sweden',
+  'poland': 'poland', 'polska': 'poland', 'polen': 'poland', 'pologne': 'poland',
+  'brazil': 'brazil', 'brasil': 'brazil', 'brasilien': 'brazil',
+  'singapore': 'singapore', 'singapur': 'singapore',
+  'united arab emirates': 'united arab emirates', 'uae': 'united arab emirates',
+  'vereinigte arabische emirate': 'united arab emirates'
+};
 function canonCountry(c) {
   var s = String(c || '').trim().toLowerCase();
   if (!s) return '';
+  if (COUNTRY_ALIASES[s]) return COUNTRY_ALIASES[s];
+  // regex fallbacks for punctuated forms
   if (/^(us|usa|u\.s\.a?\.?|united states( of america)?)$/.test(s)) return 'united states';
   if (/^(uk|u\.k\.|united kingdom|great britain|england|scotland|wales)$/.test(s)) return 'united kingdom';
-  if (/^(uae|united arab emirates)$/.test(s)) return 'united arab emirates';
   if (/^ca$|^canada$/.test(s)) return 'canada';
   return s;
 }

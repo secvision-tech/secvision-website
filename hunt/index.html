@@ -1766,15 +1766,18 @@ async function viewDet(i){
   currentViewIdx=i;
   var j=allJobs[i];if(!j)return;
   // If description missing (DB search excludes it), fetch full record
-  if(!j.description&&j._id){
+  if(!j.description&&(j._id||j.jobId)){
     try{
       var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({action:'get',id:j._id})});
+        body:JSON.stringify({action:'getJob',id:j._id||j.jobId,jobId:j._id||j.jobId})});
       if(r.ok){var data=await r.json();if(data.job){
         j.description=data.job.description||'';
         j.qualifications=Array.isArray(data.job.qualifications)?data.job.qualifications:[];
         j.responsibilities=Array.isArray(data.job.responsibilities)?data.job.responsibilities:[];
         j.benefits=Array.isArray(data.job.benefits)?data.job.benefits:[];
+        // carry over fields the saved-match copy may lack, so the popup is complete
+        if(!j.skills)j.skills=data.job.skills;if(!j.tools)j.tools=data.job.tools;
+        if(!j.certifications)j.certifications=data.job.certifications;if(!j.compliance)j.compliance=data.job.compliance;
       }}
     }catch(e){console.error('Failed to fetch details:',e)}
   }
@@ -1812,7 +1815,7 @@ async function viewDet(i){
   // Status: editable by all except viewer (analyst+). Render as clickable only if canStatus.
   var statusInner=(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1);
   var statusHtml=CAP.canStatus?'<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+statusInner+'</span>':'<span class="status-badge status-'+(j.status||'new')+'">'+statusInner+'</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links (only show section if user has access)
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
@@ -3083,10 +3086,23 @@ function renderPartnerTable(data){
   el.innerHTML=html;
 }
 
+var _ctcSelected={};   // #426: selected company rows (by company name)
+function ctcRowClick(e,company){
+  if(_ctcSelected[company])delete _ctcSelected[company]; else _ctcSelected[company]=true;
+  if(_ctcLastData)renderContractTable(_ctcLastData);
+}
+function ctcClearSel(){_ctcSelected={};if(_ctcLastData)renderContractTable(_ctcLastData)}
+var _ctcLastData=null;
 function renderContractTable(data){
   var el=document.getElementById('contractTable');if(!el)return;
+  _ctcLastData=data;
   if(!data||!data.length){el.innerHTML='<div class="css-no-data">No contract jobs yet. Run searches with contract-specific roles.</div>';return}
-  var html='<table class="dash-table"><thead><tr><th>Rank</th><th>Company</th><th>Type</th><th>Size</th><th>Contracts</th><th>Rate/Salary</th><th>Pipeline</th><th>Job Locations</th><th>Action</th></tr></thead><tbody>';
+  // #426: table-layout:fixed with ch widths so columns are drag-resizable (see attachColResizers).
+  var cols=[['Rank',5],['Company',22],['Type',12],['Size',8],['Contracts',9],['Rate/Salary',14],['Pipeline',16],['Job Locations',18]];
+  var html='<div style="overflow-x:auto"><table id="ctcTable" class="dash-table" style="table-layout:fixed;min-width:118ch"><thead><tr>';
+  html+='<th style="width:4ch;text-align:center"><input type="checkbox" onchange="ctcToggleAll(this.checked)" title="Select all" style="cursor:pointer"></th>';
+  cols.forEach(function(c){html+='<th style="width:'+c[1]+'ch;overflow:hidden">'+c[0]+'</th>'});
+  html+='<th style="width:12ch">Action</th></tr></thead><tbody>';
   data.forEach(function(d,i){
     var company=d._id||'Unknown';
     var type=d.companyType||'';
@@ -3099,13 +3115,30 @@ function renderContractTable(data){
     var allLocs=(d.locations||[]).join(', ');
     var locsHtml='<span title="'+allLocs.replace(/"/g,'&quot;')+'" style="font-size:.6rem;color:var(--g5);cursor:help">'+locs.join(', ').slice(0,30)+(d.locations?.length>2?' +':'')+'</span>';
     var companyLink=d.companyUrl&&d.companyUrl.indexOf('google.com/search')===-1?'<a href="'+d.companyUrl+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none">'+company+'</a>':'<a href="https://www.google.com/search?q='+encodeURIComponent(company+' official website')+'" target="_blank" style="color:var(--pri);font-weight:700;text-decoration:none">'+company+'</a>';
-    var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.preventDefault();searchContractOpenings(this.dataset.company)">'+d.count+'</a>';
+    var openingsLink='<a href="#" class="'+hot+'" style="text-decoration:none" data-company="'+company.replace(/"/g,'&quot;')+'" onclick="event.stopPropagation();event.preventDefault();searchContractOpenings(this.dataset.company)">'+d.count+'</a>';
     var salaryHtml='<span style="font-size:.6rem;color:var(--g5)">'+(d.salary||'N/A')+'</span>';
-    var searchUrl='https://www.linkedin.com/search/results/people/?keywords='+encodeURIComponent('"'+company+'" AND ("recruiter" OR "HR" OR "hiring manager" OR "talent acquisition")');
-    html+='<tr><td>'+(i+1)+'</td><td>'+companyLink+'</td><td>'+typeBadge+'</td><td><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td><td>'+openingsLink+'</td><td>'+salaryHtml+'</td><td>'+statusHtml+'</td><td>'+locsHtml+'</td><td>'+companyBtn(company)+'</td></tr>';
+    var isSel=!!_ctcSelected[company];
+    var rowBg=isSel?'background:#EEF2FF;':'';
+    html+='<tr onclick="ctcRowClick(event,\''+company.replace(/'/g,"\\'").replace(/"/g,'&quot;')+'\')" style="cursor:pointer;'+rowBg+'">'
+      +'<td style="text-align:center"><span style="font-size:.7rem;color:'+(isSel?'var(--pri)':'var(--g3)')+'">'+(isSel?'☑':'☐')+'</span></td>'
+      +'<td style="text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+(i+1)+'</td>'
+      +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+companyLink+'</td>'
+      +'<td style="overflow:hidden">'+typeBadge+'</td>'
+      +'<td style="overflow:hidden"><span style="font-size:.6rem;color:var(--g5)">'+size+'</span></td>'
+      +'<td style="overflow:hidden">'+openingsLink+'</td>'
+      +'<td style="overflow:hidden">'+salaryHtml+'</td>'
+      +'<td style="overflow:hidden">'+statusHtml+'</td>'
+      +'<td style="overflow:hidden">'+locsHtml+'</td>'
+      +'<td style="white-space:nowrap" onclick="event.stopPropagation()">'+companyBtn(company)+'</td></tr>';
   });
-  html+='</tbody></table>';
+  html+='</tbody></table></div>';
   el.innerHTML=html;
+  attachColResizers('ctcTable');   // #426: drag-resize columns (same helper as other tables)
+}
+function ctcToggleAll(on){
+  _ctcSelected={};
+  if(on&&_ctcLastData)_ctcLastData.forEach(function(d){_ctcSelected[d._id||'Unknown']=true});
+  renderContractTable(_ctcLastData);
 }
 
 var cjData=[],cjSortCol='',cjSortDir=1,cjPage=1,cjPerPage=25,cjMouseX=0;
