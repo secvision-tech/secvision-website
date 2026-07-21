@@ -1872,7 +1872,12 @@ async function viewDet(i){
   h+='</div>';
   // Matched candidates for this job (persisted) render below the button
   h+='<div id="jobCandidates" style="margin-top:.8rem"></div>';
-  document.getElementById('detBody').innerHTML=h;document.getElementById('detailOverlay').classList.add('open');
+  document.getElementById('detBody').innerHTML=h;
+  var ov=document.getElementById('detailOverlay');
+  // #425: when opened from a consultant's Match Jobs (which sits at z-index 1200), the job
+  // popup must render ABOVE it, not behind. Otherwise reset to the default stacking.
+  ov.style.zIndex=mjFromConsultant?'1300':'';
+  ov.classList.add('open');
   // load the saved candidates for this job
   jobCandidatesJobId=j._id||j.jobId||'';
   _selectedCandidates={};  // #403: selections are per-job
@@ -1919,7 +1924,9 @@ async function viewDet(i){
 }
 var viewDirty=false;
 function closeDet(){
-  document.getElementById('detailOverlay').classList.remove('open');
+  var ov=document.getElementById('detailOverlay');
+  ov.classList.remove('open');
+  ov.style.zIndex='';   // #425: reset the raised z-index used when opened from a consultant
   jobCandidatesJobId='';
   mjFromConsultant=false;   // #418: clear the "opened from consultant" flag
   if(viewDirty){
@@ -4126,6 +4133,11 @@ function mjScoreMore(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjS
 var mjSortCol='overall',mjSortDir=-1,mjMouseX=0,mjLastData=null;
 var _mjSelected={};   // #422: jobId -> true for selected rows
 function mjToggleOne(jobId,on){ if(on)_mjSelected[jobId]=true; else delete _mjSelected[jobId]; if(mjLastData)renderMatchJobs(mjLastData); }
+// #424: click anywhere on a row to toggle its selection (buttons stopPropagation).
+function mjRowClick(e,jobId){
+  if(_mjSelected[jobId])delete _mjSelected[jobId]; else _mjSelected[jobId]=true;
+  if(mjLastData)renderMatchJobs(mjLastData);
+}
 function mjToggleAll(on){
   _mjSelected={};
   if(on&&mjLastData&&mjLastData.matches)mjLastData.matches.forEach(function(m){_mjSelected[m.jobId]=true});
@@ -4202,10 +4214,11 @@ function renderMatchJobs(d){
     var loc=m.location||m.country||'—';
     var flag=(m.locationFit&&m.locationFit.sameCountry===false)?' <span title="Different country from consultant — score reduced" style="color:#B45309">🌍</span>':'';
     var dur=m.contractDuration?esc(m.contractDuration):(/contract/i.test(m.jobType||'')?'Contract':'—');
-    var sel=_mjSelected[m.jobId]?'checked':'';
-    var rowBg=_mjSelected[m.jobId]?'background:#F5F3FF;':'';
-    h+='<tr style="border-top:1px solid var(--g1);'+rowBg+'" title="'+esc(m.reason||'')+'" data-mjrow="'+esc(m.jobId)+'">'
-      +'<td style="padding:.3rem .3rem;text-align:center"><input type="checkbox" '+sel+' onchange="mjToggleOne(\''+esc(m.jobId)+'\',this.checked)" style="cursor:pointer"></td>'
+    var isSel=!!_mjSelected[m.jobId];
+    var rowBg=isSel?'background:#F5F3FF;':'';
+    // #424: clicking anywhere on the row toggles selection (except the action buttons).
+    h+='<tr onclick="mjRowClick(event,\''+esc(m.jobId)+'\')" style="border-top:1px solid var(--g1);cursor:pointer;'+rowBg+'" title="'+esc(m.reason||'')+'" data-mjrow="'+esc(m.jobId)+'">'
+      +'<td style="padding:.3rem .3rem;text-align:center"><span style="font-size:.7rem;color:'+(isSel?'#6C3FBF':'var(--g3)')+'">'+(isSel?'☑':'☐')+'</span></td>'
       +'<td style="padding:.3rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+(ri+1)+'</td>'
       +'<td style="padding:.3rem .4rem;font-weight:700;color:'+scoreColor+';overflow:hidden">'+m.overall+'%'+flag+'</td>'
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.title||'')+'">'+esc(m.title||'—')+'</td>'
@@ -4214,8 +4227,8 @@ function renderMatchJobs(d){
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+(m.datePosted?fmtDate(m.datePosted):'—')+'</td>'
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+dur+'</td>'
       +'<td style="padding:.3rem .4rem;text-align:center;white-space:nowrap">'
-        +'<button onclick="mjManageJob(\''+esc(m.jobId)+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">Manage</button>'
-        +'<button onclick="mjDeleteJob(\''+esc(m.jobId)+'\')" title="Remove from this consultant\'s matches" style="padding:.15rem .4rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer">✕</button>'
+        +'<button onclick="event.stopPropagation();mjManageJob(\''+esc(m.jobId)+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">Manage</button>'
+        +'<button onclick="event.stopPropagation();mjDeleteJob(\''+esc(m.jobId)+'\')" title="Remove from this consultant\'s matches" style="padding:.15rem .4rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer">✕</button>'
       +'</td></tr>';
   });
   h+='</tbody></table></div>';
