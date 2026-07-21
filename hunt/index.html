@@ -4035,7 +4035,7 @@ async function openManageProfile(id){
   var mpT=document.getElementById('mpTitle');
   if(mpT)mpT.textContent=navHit&&navHit.name?((CAP.canStatus?'Manage: ':'View: ')+navHit.name):'Loading profile…';
   document.getElementById('mpBody').innerHTML='<div style="padding:2rem;text-align:center;color:var(--g5)">Loading profile...</div>';
-  document.getElementById('mpStatus').textContent='';
+  mpClearStatus();
   // keep the nav counter honest while loading
   updateCandidateNavUI();
   try{
@@ -4072,7 +4072,7 @@ function manageProfileHtml(){
     +'<button id="mpNextBtn" onclick="candidateNavGo(1)" style="padding:.2rem .5rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">Next ›</button>'
     +'</div>'
     +'<button onclick="closeManageProfile()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
-    +'<div id="mpStatus" style="font-size:.62rem;margin-bottom:.5rem"></div>'
+    +'<div id="mpStatus" style="font-size:.62rem;margin-bottom:.5rem;display:none"></div>'
     +'<div id="mpBody"></div>'
     +'</div></div>';
 }
@@ -4124,6 +4124,37 @@ function runMatchJobs(page){
 function mjNextPage(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page+1)}
 function mjScoreMore(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page||0)}
 var mjSortCol='overall',mjSortDir=-1,mjMouseX=0,mjLastData=null;
+var _mjSelected={};   // #422: jobId -> true for selected rows
+function mjToggleOne(jobId,on){ if(on)_mjSelected[jobId]=true; else delete _mjSelected[jobId]; if(mjLastData)renderMatchJobs(mjLastData); }
+function mjToggleAll(on){
+  _mjSelected={};
+  if(on&&mjLastData&&mjLastData.matches)mjLastData.matches.forEach(function(m){_mjSelected[m.jobId]=true});
+  if(mjLastData)renderMatchJobs(mjLastData);
+}
+function mjClearSelection(){ _mjSelected={}; if(mjLastData)renderMatchJobs(mjLastData); }
+function mjDeleteSelected(){
+  var c=manageProfileData;if(!c)return;
+  var cid=c._id||c.sourceId||'';
+  var ids=Object.keys(_mjSelected).filter(function(k){return _mjSelected[k]});
+  if(!ids.length)return;
+  if(!confirm('Remove '+ids.length+' selected job'+(ids.length>1?'s':'')+' from '+(c.name||'this consultant')+'\u2019s matches?'))return;
+  // delete sequentially; they won't be re-added by future matching
+  var done=0;
+  ids.forEach(function(jid){
+    authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'deleteMatchedJob',consultantId:cid,jobId:jid})})
+      .then(function(r){return r.json()}).then(function(){
+        done++;
+        if(done===ids.length){
+          if(mjLastData){
+            mjLastData.matches=(mjLastData.matches||[]).filter(function(m){return ids.indexOf(m.jobId)<0});
+            mjLastData.totalMatches=(mjLastData.matches||[]).length;
+          }
+          _mjSelected={};
+          if(mjLastData)renderMatchJobs(mjLastData);
+        }
+      }).catch(function(){done++});
+  });
+}
 function mjHeaderDown(e){mjMouseX=e.clientX}
 function mjHeaderClick(col,e){
   // #417: don't sort if the mouse moved (that was a resize drag, not a click)
@@ -4155,18 +4186,27 @@ function renderMatchJobs(d){
     return;
   }
   var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
-  var cols=[['overall','Match',6],['title','Role',26],['company','Company',18],['location','Location',16],['datePosted','Posted',9],['duration','Duration',9]];
-  var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:104ch"><thead><tr style="background:var(--g1)">';
+  var cols=[['overall','Match',6],['title','Role',24],['company','Company',17],['location','Location',15],['datePosted','Posted',9],['duration','Duration',9]];
+  var allSel=list.length&&list.every(function(m){return _mjSelected[m.jobId]});
+  var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:112ch"><thead><tr style="background:var(--g1)">';
+  // #422: select-all checkbox
+  h+='<th style="padding:.3rem .3rem;text-align:center;width:4ch"><input type="checkbox" '+(allSel?'checked':'')+' onchange="mjToggleAll(this.checked)" title="Select all" style="cursor:pointer"></th>';
+  // #420: rank column
+  h+='<th style="padding:.3rem .3rem;text-align:right;width:4ch">#</th>';
   cols.forEach(function(c){
     h+='<th onmousedown="mjHeaderDown(event)" onclick="mjHeaderClick(\''+c[0]+'\',event)" style="padding:.3rem .4rem;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;width:'+c[2]+'ch">'+c[1]+'<span style="color:var(--ac);font-size:.5rem">'+arrow(c[0])+'</span></th>';
   });
   h+='<th style="padding:.3rem .4rem;text-align:center;width:13ch">Action</th></tr></thead><tbody>';
-  list.forEach(function(m){
+  list.forEach(function(m,ri){
     var scoreColor=m.overall>=80?'#047857':(m.overall>=70?'#6C3FBF':'#B45309');
     var loc=m.location||m.country||'—';
     var flag=(m.locationFit&&m.locationFit.sameCountry===false)?' <span title="Different country from consultant — score reduced" style="color:#B45309">🌍</span>':'';
     var dur=m.contractDuration?esc(m.contractDuration):(/contract/i.test(m.jobType||'')?'Contract':'—');
-    h+='<tr style="border-top:1px solid var(--g1)" title="'+esc(m.reason||'')+'">'
+    var sel=_mjSelected[m.jobId]?'checked':'';
+    var rowBg=_mjSelected[m.jobId]?'background:#F5F3FF;':'';
+    h+='<tr style="border-top:1px solid var(--g1);'+rowBg+'" title="'+esc(m.reason||'')+'" data-mjrow="'+esc(m.jobId)+'">'
+      +'<td style="padding:.3rem .3rem;text-align:center"><input type="checkbox" '+sel+' onchange="mjToggleOne(\''+esc(m.jobId)+'\',this.checked)" style="cursor:pointer"></td>'
+      +'<td style="padding:.3rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+(ri+1)+'</td>'
       +'<td style="padding:.3rem .4rem;font-weight:700;color:'+scoreColor+';overflow:hidden">'+m.overall+'%'+flag+'</td>'
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.title||'')+'">'+esc(m.title||'—')+'</td>'
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.company||'')+'">'+esc(m.company||'—')+'</td>'
@@ -4174,11 +4214,20 @@ function renderMatchJobs(d){
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+(m.datePosted?fmtDate(m.datePosted):'—')+'</td>'
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+dur+'</td>'
       +'<td style="padding:.3rem .4rem;text-align:center;white-space:nowrap">'
-        +'<button onclick="mjManageJob(\''+m.jobId+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">Manage</button>'
-        +'<button onclick="mjDeleteJob(\''+m.jobId+'\')" title="Remove from this consultant\'s matches" style="padding:.15rem .4rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer">✕</button>'
+        +'<button onclick="mjManageJob(\''+esc(m.jobId)+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">Manage</button>'
+        +'<button onclick="mjDeleteJob(\''+esc(m.jobId)+'\')" title="Remove from this consultant\'s matches" style="padding:.15rem .4rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer">✕</button>'
       +'</td></tr>';
   });
   h+='</tbody></table></div>';
+  // #422: bulk action bar when rows are selected
+  var selCount=Object.keys(_mjSelected).filter(function(k){return _mjSelected[k]}).length;
+  if(selCount>0){
+    h+='<div style="display:flex;gap:.5rem;align-items:center;margin-top:.4rem;padding:.35rem .5rem;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:5px">'
+      +'<span style="font-size:.58rem;color:#6C3FBF;font-weight:600">'+selCount+' selected</span>'
+      +'<button onclick="mjDeleteSelected()" style="padding:.15rem .5rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.56rem;cursor:pointer;font-weight:600">Delete selected</button>'
+      +'<button onclick="mjClearSelection()" style="padding:.15rem .5rem;background:#fff;color:var(--g5);border:1px solid var(--g2);border-radius:4px;font-size:.56rem;cursor:pointer">Clear</button>'
+      +'</div>';
+  }
   h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem">';
   if(d.page>0)h+='<button onclick="runMatchJobs('+(d.page-1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>';
   if(typeof d.page==='number')h+='<span style="font-size:.55rem;color:var(--g5)">Page '+(d.page+1)+'</span>';
@@ -4192,7 +4241,7 @@ function mjManageJob(jobId){
   var idx=allJobs.findIndex(function(x){return (x._id||x.jobId||'')===jobId});
   if(idx<0){
     // Job isn't in the currently-loaded list — fetch it, then open.
-    authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getJob',jobId:jobId})})
+    authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getJob',id:jobId,jobId:jobId})})
       .then(function(r){return r.json()}).then(function(d){
         if(d&&d.job){allJobs.push(d.job);_mjPending=true;viewDet(allJobs.length-1)}
         else alert('Could not load that job.');
@@ -4373,7 +4422,7 @@ function renderManageProfile(){
 function loadSavedMatchJobs(){
   var c=manageProfileData;if(!c)return;
   var cid=c._id||c.sourceId||'';if(!cid)return;
-  mjState.consultantId=cid;mjState.page=0;mjState.evalCap=50;mjLastData=null;
+  mjState.consultantId=cid;mjState.page=0;mjState.evalCap=50;mjLastData=null;_mjSelected={};
   var st=document.getElementById('mjStatus');
   authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'listMatchedJobs',consultantId:cid})})
     .then(function(r){return r.json()}).then(function(d){
@@ -4385,16 +4434,21 @@ function loadSavedMatchJobs(){
       }
     }).catch(function(){});
 }
+function mpClearStatus(){
+  var el=document.getElementById('mpStatus');if(!el)return;
+  el.innerHTML='';el.style.display='none';
+  // strip the box styling that mpMsg applied, so a reopened popup shows no empty placeholder
+  el.style.padding='';el.style.border='';el.style.background='';el.style.borderRadius='';el.style.fontWeight='';
+}
 function mpMsg(msg,color){
   var el=document.getElementById('mpStatus');if(!el)return;
-  if(!msg){el.innerHTML='';el.style.display='none';return}
+  if(!msg){mpClearStatus();return}
   var c=color||'var(--pri)';
   var bg=c==='#047857'?'#ECFDF5':(c==='#DC2626'?'#FEE2E2':(c==='#B45309'?'#FEF3C7':'#EEF2FF'));
   el.innerHTML=msg;el.style.display='block';el.style.color=c;el.style.background=bg;
   el.style.padding='.4rem .6rem';el.style.borderRadius='5px';el.style.fontWeight='600';el.style.border='1px solid '+c;
   if(window._mpMsgTimer)clearTimeout(window._mpMsgTimer);
-  // auto-clear success/info after 4s; keep errors visible
-  if(c==='#047857'||c==='var(--pri)')window._mpMsgTimer=setTimeout(function(){if(el)el.style.display='none'},4000);
+  if(c==='#047857'||c==='var(--pri)')window._mpMsgTimer=setTimeout(function(){if(el)mpClearStatus()},4000);
 }
 
 async function saveProfileStatus(){
