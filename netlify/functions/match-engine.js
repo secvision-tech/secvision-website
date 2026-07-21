@@ -934,6 +934,16 @@ exports.handler = async function (event) {
       return {
         statusCode: 200, headers: hdrs, body: JSON.stringify({
           matches: pageItems.map(formatMatch),
+          // #432: compact list of the profiles scored in THIS batch (all of them, incl.
+          // sub-threshold) so the UI can show each consultant ticking past with their score.
+          justScored: newlyScored.map(function (m) {
+            return {
+              name: m.profile.name || '',
+              role: m.profile.currentRole || m.profile.headline || '',
+              country: (m.locationFit && m.locationFit.profileCountry) ? m.locationFit.profileCountry : (profileCountry(m.profile) || ''),
+              overall: m.overall
+            };
+          }),
           // #402: the full ranked set (id + score only) so the client can ask the server to
           // add the next batch of 10 unsaved candidates without re-scoring.
           allMatchRefs: all.map(function (m) { return { sourceId: m.profile.sourceId, overall: m.overall }; }),

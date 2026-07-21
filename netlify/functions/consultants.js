@@ -243,6 +243,12 @@ exports.handler = async function (event) {
         if (Object.keys(setFields).length) freedOps.push({ updateOne: { filter: { _id: p._id }, update: { $set: setFields } } });
         p.hasResume = !!(p.resume && p.resume.data);
         if (p.resume) delete p.resume; // keep list payload light
+        // #430: surface a lightweight match indicator; drop the heavy array from the list.
+        p.matchedJobsCount = Array.isArray(p.matchedJobs) ? p.matchedJobs.length : 0;
+        p.topJobMatch = (Array.isArray(p.matchedJobs) && p.matchedJobs.length)
+          ? Math.max.apply(null, p.matchedJobs.map(function (m) { return m.overall || 0; })) : 0;
+        if (p.matchedJobs) delete p.matchedJobs;
+        if (p.jobMatchCache) delete p.jobMatchCache; // never needed in the list, can be large
         p._id = p._id.toString();
       });
       if (freedOps.length) { try { await col.bulkWrite(freedOps); } catch (e) {} }

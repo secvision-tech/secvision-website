@@ -1900,7 +1900,7 @@ async function viewDet(i){
       if(btn){btn.disabled=true;btn.style.opacity='.5'}
     },600);
     try{
-      var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'getFormatted',jobId:jid,autoFormat:true,days:30})});
+      var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'getFormatted',jobId:jid,autoFormat:true,days:90})});
       var d=await r.json();
       clearTimeout(slowTimer);
       if(btn){btn.disabled=false;btn.style.opacity='1'}
@@ -4007,6 +4007,13 @@ function matchedPriorityCerts(certs){
   });
   return hits;
 }
+// #430: little 🎯 badge before a consultant's name when they have saved job matches.
+function matchJobsBadge(c){
+  var n=c.matchedJobsCount||0;
+  if(!n)return '';
+  var top=c.topJobMatch||0;
+  return '<span title="'+n+' matching job'+(n>1?'s':'')+' found'+(top?' (best '+top+'%)':'')+'" style="display:inline-block;background:#EDE9FE;color:#6C3FBF;font-size:.5rem;font-weight:700;padding:.05rem .28rem;border-radius:3px;margin-right:.25rem;vertical-align:middle">🎯 '+n+'</span>';
+}
 function certMarker(certs){
   var hits=matchedPriorityCerts(certs);
   if(!hits.length)return '';
@@ -4034,7 +4041,7 @@ function renderConsultants(){
     if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
     h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
       +'<td style="padding:.4rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+rowNum+'</td>'
-      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
+      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+matchJobsBadge(c)+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
       +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
@@ -4745,6 +4752,26 @@ async function saveNewConsultant(){
 // ============ MATCH PROFILES ENGINE (frontend orchestration) ============
 var matchState={jobId:null,jobTitle:'',company:'',page:0,polling:false,evalCap:50};
 
+// #432: live feed of consultants as they're scored during Match Profiles.
+var _mjScoredFeed=[];
+function mjResetScoredFeed(){_mjScoredFeed=[]}
+function mjPushScoredFeed(batch){
+  if(!batch||!batch.length)return;
+  batch.forEach(function(s){_mjScoredFeed.push(s)});
+  if(_mjScoredFeed.length>8)_mjScoredFeed=_mjScoredFeed.slice(-8); // keep the last 8 visible
+}
+function mjScoredFeedHtml(){
+  if(!_mjScoredFeed.length)return '';
+  var rows=_mjScoredFeed.map(function(s){
+    var col=s.overall>=60?'#047857':(s.overall>=40?'#B45309':'var(--g4)');
+    var country=s.country?(String(s.country).replace(/\b\w/g,function(x){return x.toUpperCase()})):'—';
+    return '<div style="display:flex;justify-content:space-between;gap:.5rem;padding:.1rem 0;font-size:.58rem;border-bottom:1px solid var(--g1)">'
+      +'<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><strong>'+esc(s.name||'—')+'</strong> <span style="color:var(--g5)">'+esc(s.role||'')+'</span> <span style="color:var(--g4)">· '+esc(country)+'</span></span>'
+      +'<span style="font-weight:700;color:'+col+';white-space:nowrap">('+s.overall+'%)</span></div>';
+  }).join('');
+  return '<div style="margin-top:.4rem;border:1px solid var(--g2);border-radius:5px;padding:.3rem .5rem;background:#fff">'
+    +'<div style="font-size:.52rem;color:var(--g5);margin-bottom:.15rem">Recently evaluated:</div>'+rows+'</div>';
+}
 async function openMatchProfiles(idx){
   var j=allJobs[idx];if(!j)return;
   matchState={jobId:j._id||j.jobId||'',jobTitle:j.title||j.titleClean||'',company:j.company||'',page:0,polling:false,evalCap:50};
@@ -4775,6 +4802,7 @@ async function safeMatchJson(r){
 
 async function runMatch(page){
   matchState.page=page;
+  if(page===0)mjResetScoredFeed();   // #432: fresh run clears the live feed
   var st=document.getElementById('matchStatus');
   st.textContent='⏳ Scoring cached consultant profiles...';
   document.getElementById('matchResults').innerHTML='';
@@ -4797,7 +4825,8 @@ async function runMatch(page){
     // budget remains. Once the page is full we stop — the user drives further scoring via
     // Next / "Score more" / Fetch More, so we never grind the whole cache unprompted.
     if(d.moreToScore){
-      st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)';
+      mjPushScoredFeed(d.justScored);
+      st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)'+mjScoredFeedHtml();
       if(d.matches&&d.matches.length)renderMatches(d);
       setTimeout(function(){runMatch(page)},400);
       return;

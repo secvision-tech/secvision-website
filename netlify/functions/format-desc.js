@@ -179,7 +179,7 @@ exports.handler = async function (event) {
       if (!descG.trim()) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: null }) };
 
       // Cost guard 1: auto-tidy only recent jobs. Older ones stay manual (the ✨ button).
-      var autoDays = parseInt(body.days) || 30;
+      var autoDays = parseInt(body.days) || 90;
       var cutoff = new Date(Date.now() - autoDays * 24 * 60 * 60 * 1000);
       var jobDate = jg.datePosted || jg.dateScanned;
       if (jobDate && new Date(jobDate) < cutoff) {
