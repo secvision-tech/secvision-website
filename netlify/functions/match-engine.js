@@ -628,6 +628,22 @@ const COUNTRY_ALIASES = {
   'united arab emirates': 'united arab emirates', 'uae': 'united arab emirates',
   'vereinigte arabische emirate': 'united arab emirates'
 };
+// Profiles often carry a bare city ("Greater Bengaluru Area") with no country. The harvest
+// country-gate uses these hints as a fallback so such profiles aren't wrongly rejected.
+// LinkedIn geoUrn IDs: the bebity actor's location autocomplete fails on plain country names
+// ("Couldn't look up location \"India\""), but its docs accept raw geo IDs, which skip the
+// broken lookup entirely. These are LinkedIn's stable country geoUrn values.
+const COUNTRY_GEO_IDS = {
+  'india': '102713980',
+  'united states': '103644278',
+  'united kingdom': '101165590',
+  'canada': '101174742'
+};
+const COUNTRY_CITY_HINTS = {
+  'india': /\b(bengaluru|bangalore|mumbai|pune|hyderabad|chennai|new delhi|delhi|noida|gurgaon|gurugram|kolkata|ahmedabad|kochi|coimbatore|thiruvananthapuram|jaipur|chandigarh|indore|nagpur)\b/i,
+  'united states': /\b(new york|san francisco|seattle|austin|dallas|chicago|boston|atlanta|denver|los angeles|washington dc)\b/i,
+  'united kingdom': /\b(london|manchester|edinburgh|birmingham|leeds|glasgow)\b/i
+};
 function canonCountry(c) {
   var s = String(c || '').trim().toLowerCase();
   if (!s) return '';
@@ -972,25 +988,34 @@ exports.handler = async function (event) {
       var targets = buildSearchTargets(req2, sourcing);
       // The job's detectedCountry is occasionally wrong (e.g. "Santa Ana, CA" read as Canada).
       // If the job's own location text names a US state or "United States", trust that instead.
-      var searchCountry = resolveSearchCountry(req2);
-      var locations = searchCountry ? [searchCountry] : [];
+      // Country override (e.g. build an India bench against a US job's keywords). Falls back
+      // to the job's own country when not provided.
+      var searchCountry = (body.countryOverride && String(body.countryOverride).trim()) || resolveSearchCountry(req2);
+      // Prefer LinkedIn geo IDs — the actor's place-name autocomplete is broken for country
+      // names ("Couldn't look up location"), but raw geo IDs skip that lookup.
+      var geoId = COUNTRY_GEO_IDS[canonCountry(searchCountry)] || '';
+      var locations = geoId ? [geoId] : (searchCountry ? [searchCountry] : []);
       var runs = [];
       try {
         for (var t = 0; t < targets.length; t++) {
           var tgt = targets[t];
+          // With a geo ID the actor's own filter works — keep the keyword clean. Only when we
+          // lack a geo ID do we bake the country into the keyword as a soft filter. The
+          // harvest-side country gate applies in both cases.
+          var kw = tgt.keyword + (!geoId && searchCountry ? ' ' + searchCountry : '');
           var resp = await fetch('https://api.apify.com/v2/acts/' + PROFILE_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               action: 'get-profiles',
-              keywords: [tgt.keyword],       // one keyword per run — actor applies limit PER keyword
+              keywords: [kw],                // one keyword per run — actor applies limit PER keyword
               limit: tgt.limit,
-              location: locations,
+              location: locations,           // kept: harmless if ignored, useful if vendor fixes it
               profileFields: ['about', 'experience', 'skills', 'languages', 'organizations']
             })
           });
           var run = await resp.json();
           if (run.data && run.data.id) {
-            runs.push({ runId: run.data.id, datasetId: run.data.defaultDatasetId, keyword: tgt.keyword, limit: tgt.limit });
+            runs.push({ runId: run.data.id, datasetId: run.data.defaultDatasetId, keyword: tgt.keyword, limit: tgt.limit, country: searchCountry || '' });
           } else if (!runs.length && t === targets.length - 1) {
             return { statusCode: 200, headers: hdrs, body: JSON.stringify({
               error: 'Failed to start profile fetch',
@@ -1023,6 +1048,7 @@ exports.handler = async function (event) {
 
       // Pull a set of finished runs' datasets into the cache. Idempotent: profiles are
       // upserted by {source,sourceId}, so harvesting the same run twice is harmless.
+      var rejectedOffCountry = 0, rejectedJunk = 0;
       async function harvestRuns(runList) {
         var allNormalized = [];
         for (var rj = 0; rj < runList.length; rj++) {
@@ -1031,6 +1057,28 @@ exports.handler = async function (event) {
             var rResp = await fetchWithTimeout('https://api.apify.com/v2/datasets/' + runList[rj].datasetId + '/items?token=' + APIFY_TOKEN + '&format=json', {}, 12000);
             var raw = await rResp.json();
             var norm = (raw || []).map(normalizeApifyProfile).filter(function (p) { return p.sourceId; });
+            // Junk guard: the actor sometimes returns UI artifacts as "profiles"
+            // (e.g. name "Add cover image", headline "Create a slideshow with").
+            norm = norm.filter(function (p) {
+              var blob = ((p.name || '') + ' ' + (p.headline || '')).toLowerCase();
+              if (/add cover image|create a slideshow|see who you know/.test(blob)) { rejectedJunk++; return false; }
+              if (!p.name && !p.headline) { rejectedJunk++; return false; }
+              return true;
+            });
+            // Country gate: the actor's location filter is unreliable, so enforce it here.
+            // A run tagged with an expected country only admits profiles that resolve to it.
+            var wantCountry = canonCountry(runList[rj].country || '');
+            if (wantCountry) {
+              norm = norm.filter(function (p) {
+                var normLoc = normalizeLocationToEnglish(p.location || '');
+                var pc = canonCountry(profileCountry({ location: normLoc }));
+                if (pc === wantCountry) return true;
+                // Bare-city locations ("Greater Bengaluru Area") carry no country — use hints.
+                var hint = COUNTRY_CITY_HINTS[wantCountry];
+                if (hint && hint.test(normLoc)) return true;
+                rejectedOffCountry++; return false;
+              });
+            }
             allNormalized = allNormalized.concat(norm);
           } catch (e) { /* skip this dataset; others may still yield */ }
         }
@@ -1095,7 +1143,9 @@ exports.handler = async function (event) {
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         done: true, fetched: fetchedCount, failedRuns: anyFailed,
+        rejectedOffCountry: rejectedOffCountry, rejectedJunk: rejectedJunk,
         message: 'Fetched and cached ' + fetchedCount + ' profiles across ' + runs.length + ' searches.'
+          + (rejectedOffCountry ? ' Rejected ' + rejectedOffCountry + ' off-country result' + (rejectedOffCountry > 1 ? 's' : '') + ' (actor location filter is unreliable — filtered server-side).' : '')
       }) };
     }
 
