@@ -241,6 +241,9 @@ exports.handler = async (event) => {
       'fixDescriptions': SUPER_ONLY, 'cleanupNonCyber': SUPER_ONLY, 'fixExcessContacts': SUPER_ONLY,
       'getOrphanedContacts': ADMIN_UP, 'bulkUpdateContactCompanies': ADMIN_UP, 'fixOrphanedByEmail': SUPER_ONLY, 'fixContaminatedUrls': SUPER_ONLY, 'getContactsForLinkedinScrape': ADMIN_UP, 'tagScrapeFailed': ADMIN_UP, 'deleteCompanyContacts': CONTACT_DEL_ROLES,
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
+      // #436: job assignment (manager+) and comments (any active role)
+      'assignJob': MANAGER_UP, 'unassignJob': MANAGER_UP, 'listAssignees': MANAGER_UP,
+      'addJobComment': ALL_ACTIVE, 'getJobActivity': ALL_ACTIVE,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
       'updateUserPreferences': ALL_ACTIVE,
@@ -1573,14 +1576,74 @@ exports.handler = async (event) => {
     }
 
     // Get single job by ID (for View from dashboard)
+    // ---- #436: job assignment + comment history ----
+    // Managers+ assign a job to any user who can drive it; anyone active can comment.
+    // Comments persist on the job as history; assignments also log a system comment.
+    async function findJobDoc(jobId) {
+      var OID = require('mongodb').ObjectId;
+      var j = null;
+      try { j = await col.findOne({ _id: new OID(jobId) }); } catch (e) {}
+      if (!j) { try { j = await col.findOne({ jobId: jobId }); } catch (e) {} }
+      return j;
+    }
+    if (action === 'listAssignees') {
+      var aUsers = await db.collection('users').find({ active: { $ne: false } })
+        .project({ email: 1, name: 1, role: 1 }).sort({ name: 1, email: 1 }).toArray();
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        users: aUsers.map(function (u) { return { email: u.email, name: u.name || '', role: u.role || '' }; })
+      }) };
+    }
+    if (action === 'assignJob') {
+      var ajDoc = await findJobDoc(body.jobId);
+      if (!ajDoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      var assigneeEmail = String(body.assigneeEmail || '').trim();
+      if (!assigneeEmail) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'assigneeEmail required' }) };
+      var aUser = await db.collection('users').findOne({ email: new RegExp('^' + assigneeEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') });
+      if (!aUser) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'No such user: ' + assigneeEmail }) };
+      var assignment = { email: aUser.email, name: aUser.name || '', role: aUser.role || '',
+        assignedBy: authUser.email, assignedAt: new Date() };
+      await col.updateOne({ _id: ajDoc._id }, {
+        $set: { assignedTo: assignment },
+        $push: { comments: { text: 'Assigned to ' + (aUser.name || aUser.email) + ' (' + (aUser.role || 'user') + ')',
+          author: authUser.email, system: true, createdAt: new Date() } }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ assigned: true, assignedTo: assignment }) };
+    }
+    if (action === 'unassignJob') {
+      var ujDoc = await findJobDoc(body.jobId);
+      if (!ujDoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      var prev = ujDoc.assignedTo && (ujDoc.assignedTo.name || ujDoc.assignedTo.email) || 'unassigned';
+      await col.updateOne({ _id: ujDoc._id }, {
+        $unset: { assignedTo: '' },
+        $push: { comments: { text: 'Unassigned (was ' + prev + ')', author: authUser.email, system: true, createdAt: new Date() } }
+      });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ unassigned: true }) };
+    }
+    if (action === 'addJobComment') {
+      var cjDoc = await findJobDoc(body.jobId);
+      if (!cjDoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      var ctext = String(body.text || '').trim().slice(0, 2000);
+      if (!ctext) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Comment text required' }) };
+      var comment = { text: ctext, author: authUser.email, createdAt: new Date() };
+      await col.updateOne({ _id: cjDoc._id }, { $push: { comments: comment } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ added: true, comment: comment }) };
+    }
+    if (action === 'getJobActivity') {
+      var gaDoc = await findJobDoc(body.jobId);
+      if (!gaDoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        assignedTo: gaDoc.assignedTo || null,
+        comments: (gaDoc.comments || []).slice(-100)
+      }) };
+    }
+
     if (action === 'getJob') {
       var { ObjectId } = require('mongodb');
-      try {
-        var job = await col.findOne({ _id: new ObjectId(body.id) });
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ job: job }) };
-      } catch(e) {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ job: null, error: e.message }) };
-      }
+      var wantId = body.id || body.jobId || '';
+      var job = null;
+      try { job = await col.findOne({ _id: new ObjectId(wantId) }); } catch (e) {}
+      if (!job) { try { job = await col.findOne({ jobId: wantId }); } catch (e) {} }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ job: job }) };
     }
 
     // Get latest 100 contract jobs
