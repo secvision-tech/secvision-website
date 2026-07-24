@@ -1272,10 +1272,13 @@ exports.handler = async function (event) {
 
       var jobsCol = db.collection('jobs');
       // Candidate jobs: in the window, with something to score against. Newest first.
+      // #434: currently limited to CONTRACT roles only — that's the staffing business today.
+      // Remove the contract clause below to reopen to all job types.
       var jobQuery = {
         $and: [
           { $or: [{ datePosted: { $gte: since } }, { dateScanned: { $gte: since } }] },
-          { $or: [{ skills: { $exists: true, $ne: '' } }, { tools: { $exists: true, $ne: '' } }] }
+          { $or: [{ skills: { $exists: true, $ne: '' } }, { tools: { $exists: true, $ne: '' } }] },
+          { $or: [{ jobType: { $regex: 'contract', $options: 'i' } }, { contractDuration: { $exists: true, $nin: [null, ''] } }] }
         ]
       };
       var candidateJobs = await jobsCol.find(jobQuery)

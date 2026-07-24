@@ -3881,7 +3881,7 @@ function fmtDate(date){return formatDateWithSettings(date)}
 loadSettings();
 
 var scopeDialogHtml='<div id="scopeDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1100;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div id="scopeDialogBody"></div></div></div>';
-var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchActions" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap"><button id="fetchMoreBtn" onclick="topUpProfiles()" style="padding:.3rem .7rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button><span id="cacheInfo" style="font-size:.56rem;color:var(--g5)"></span></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
+var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchActions" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap"><button id="fetchMoreBtn" onclick="topUpProfiles()" style="padding:.3rem .7rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button><select id="fetchCountry" title="Where to source consultants from" style="font-size:.58rem;padding:.25rem .3rem;border:1px solid #C4B5FD;border-radius:4px;color:var(--pri)"><option value="">From: job&#39;s country</option><option value="India">From: India</option><option value="United States">From: United States</option><option value="United Kingdom">From: United Kingdom</option><option value="Canada">From: Canada</option></select><span id="cacheInfo" style="font-size:.56rem;color:var(--g5)"></span></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
 document.addEventListener("DOMContentLoaded",function(){document.body.insertAdjacentHTML("beforeend",contactPopupHtml);document.body.insertAdjacentHTML("beforeend",scopeDialogHtml);document.body.insertAdjacentHTML("beforeend",matchPopupHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
@@ -4012,7 +4012,7 @@ function matchJobsBadge(c){
   var n=c.matchedJobsCount||0;
   if(!n)return '';
   var top=c.topJobMatch||0;
-  return '<span title="'+n+' matching job'+(n>1?'s':'')+' found'+(top?' (best '+top+'%)':'')+'" style="display:inline-block;background:#EDE9FE;color:#6C3FBF;font-size:.5rem;font-weight:700;padding:.05rem .28rem;border-radius:3px;margin-right:.25rem;vertical-align:middle">🎯 '+n+'</span>';
+  return '<span title="'+n+' matching job'+(n>1?'s':'')+' found'+(top?' (best '+top+'%)':'')+'" style="display:inline-block;background:#EDE9FE;color:#6C3FBF;font-size:.5rem;font-weight:700;padding:.05rem .28rem;border-radius:3px;margin-left:.3rem;vertical-align:middle">🎯 '+n+'</span>';
 }
 function certMarker(certs){
   var hits=matchedPriorityCerts(certs);
@@ -4041,7 +4041,7 @@ function renderConsultants(){
     if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
     h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
       +'<td style="padding:.4rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+rowNum+'</td>'
-      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+matchJobsBadge(c)+esc(c.name||'—')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
+      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+matchJobsBadge(c)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
       +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
@@ -4226,7 +4226,7 @@ function renderMatchJobs(d){
   var box=document.getElementById('mjResults');
   if(!box)return;
   if(st&&!d.saved){
-    st.innerHTML='Evaluated '+(d.evaluated||0)+' of '+(d.jobsInWindow||0)+' job'+((d.jobsInWindow||0)===1?'':'s')+' in the last '+(d.days||7)+' days — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'
+    st.innerHTML='Evaluated '+(d.evaluated||0)+' of '+(d.jobsInWindow||0)+' contract job'+((d.jobsInWindow||0)===1?'':'s')+' in the last '+(d.days||7)+' days — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'
       +((d.canScoreMore&&d.unscoredLeft>0)?' <button onclick="mjScoreMore()" style="padding:.1rem .45rem;background:#fff;color:#6C3FBF;border:1px solid #C4B5FD;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Score '+Math.min(50,d.unscoredLeft)+' more</button>':'');
   }
   var list=(d.matches||[]).slice().sort(function(a,b){
@@ -4350,7 +4350,7 @@ function renderManageProfile(){
   // Stage 3: reverse matching — which open roles does this consultant fit?
   h+='<div style="border:1px solid #DDD6FE;background:#FAF5FF;border-radius:6px;padding:.5rem .6rem;margin-bottom:.7rem">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem">'
-    +'<span style="font-size:.64rem;font-weight:700;color:#6C3FBF">🎯 Match Jobs — open roles this consultant fits</span>'
+    +'<span style="font-size:.64rem;font-weight:700;color:#6C3FBF">🎯 Match Jobs — open contract roles this consultant fits</span>'
     +'<span style="display:flex;gap:.3rem;align-items:center">'
     +'<select id="mjPeriod" style="font-size:.58rem;padding:.15rem .3rem;border:1px solid #C4B5FD;border-radius:4px">'
     +'<option value="1d">Last 1 day</option><option value="3d">Last 3 days</option>'
@@ -4683,7 +4683,7 @@ function addConsultantHtml(){
   return '<div id="addConsultantPopup" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,.85);z-index:1200;justify-content:center;align-items:center">'
     +'<div style="background:#fff;border-radius:8px;width:96%;max-width:600px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)">+ Add Consultant Profile</h3><button onclick="closeAddConsultant()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
-    +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx) — optional</label><input type="file" id="acResume" accept=".docx" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
+    +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx or PDF) — AI extraction</label><input type="file" id="acResume" accept=".docx,.pdf" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">'
     +f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')+f('acLocation','Location')
     +f('acCountry','Country')+'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Permanent</option><option>Unknown</option></select></div>'
@@ -4696,34 +4696,59 @@ function addConsultantHtml(){
     +'<div style="display:flex;gap:.4rem;margin-top:.6rem;justify-content:flex-end"><button onclick="closeAddConsultant()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer">Cancel</button><button onclick="saveNewConsultant()" style="padding:.35rem .9rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Profile</button></div>'
     +'</div></div>';
 }
-// Resume parsing via mammoth (loaded from CDN on demand)
+// Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
+var _acResumeFile=null;   // #435: keep the imported file so we can attach it after Save
+async function extractResumeText(file){
+  var buf=await file.arrayBuffer();
+  if(/\.pdf$/i.test(file.name)){
+    if(typeof pdfjsLib==='undefined'){
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js');
+      pdfjsLib.GlobalWorkerOptions.workerSrc='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    var pdf=await pdfjsLib.getDocument({data:buf}).promise;
+    var out=[];
+    for(var pn=1;pn<=Math.min(pdf.numPages,8);pn++){
+      var page=await pdf.getPage(pn);
+      var tc=await page.getTextContent();
+      out.push(tc.items.map(function(it){return it.str}).join(' '));
+    }
+    return out.join('\n');
+  }
+  if(typeof mammoth==='undefined'){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js')}
+  var result=await mammoth.extractRawText({arrayBuffer:buf});
+  return result.value||'';
+}
 async function parseResume(e){
   var file=e.target.files[0];if(!file)return;
-  var st=document.getElementById('acResumeStatus');st.textContent='Parsing resume...';
+  var st=document.getElementById('acResumeStatus');st.textContent='Reading file...';st.style.color='var(--g5)';
   try{
-    if(typeof mammoth==='undefined'){await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js')}
-    var buf=await file.arrayBuffer();
-    var result=await mammoth.extractRawText({arrayBuffer:buf});
-    var text=result.value||'';
-    // Basic field extraction
+    var text=await extractResumeText(file);
+    if(!text.trim())throw new Error('No readable text found in the file');
+    _acResumeFile=file;   // remember for auto-attach on Save
+    // quick regex fills (instant, free) while the AI call runs
     var email=(text.match(/[\w.+-]+@[\w-]+\.[\w.]+/)||[])[0]||'';
     var phone=(text.match(/(\+?\d[\d\s().-]{7,}\d)/)||[])[0]||'';
     var linkedin=(text.match(/linkedin\.com\/in\/[\w-]+/)||[])[0]||'';
     if(email)document.getElementById('acEmail').value=email;
     if(phone)document.getElementById('acPhone').value=phone.trim();
     if(linkedin)document.getElementById('acLinkedin').value='https://'+linkedin;
-    // Name: first non-empty line, often the name
-    var firstLine=(text.split('\n').map(function(l){return l.trim()}).filter(Boolean)[0]||'');
-    if(firstLine&&firstLine.length<50&&!document.getElementById('acName').value)document.getElementById('acName').value=firstLine;
-    // Skills: look for common cyber skills mentioned
-    var SKILL_HINTS=['Splunk','Sentinel','QRadar','CrowdStrike','Defender','SIEM','SOAR','Python','Azure','AWS','GCP','Palo Alto','Fortinet','Wireshark','Nessus','Metasploit','Kubernetes','Terraform','KQL','EDR','XDR','DLP','IAM','PAM'];
-    var found=SKILL_HINTS.filter(function(s){return new RegExp('\\b'+s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(text)});
-    if(found.length)document.getElementById('acSkills').value=found.join(', ');
-    var CERT_HINTS=['CISSP','CISM','CISA','CEH','OSCP','GCIH','GCIA','Security+','SC-200','SC-100','AZ-500','CCSP','CCNA','CCNP'];
-    var fcerts=CERT_HINTS.filter(function(s){return new RegExp('\\b'+s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'\\b','i').test(text)});
-    if(fcerts.length)document.getElementById('acCerts').value=fcerts.join(', ');
-    st.textContent='✅ Parsed. Review & correct the fields below, then Save.';st.style.color='#047857';
-  }catch(err){st.textContent='Could not parse: '+err.message+'. Enter manually.';st.style.color='#B45309'}
+    st.textContent='🤖 Extracting profile details with AI...';
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'parseResumeText',text:text})});
+    var d=await r.json();
+    if(d.error)throw new Error(d.error);
+    var p=d.parsed||{};
+    var setIf=function(id,val){if(val&&document.getElementById(id))document.getElementById(id).value=val};
+    setIf('acName',p.name);setIf('acRole',p.currentRole);setIf('acCompany',p.currentCompany);
+    setIf('acLocation',p.location);setIf('acCountry',p.country);
+    if(p.yearsExperience)document.getElementById('acYears').value=p.yearsExperience;
+    if(Array.isArray(p.skills)&&p.skills.length)document.getElementById('acSkills').value=p.skills.join(', ');
+    if(Array.isArray(p.certifications)&&p.certifications.length)document.getElementById('acCerts').value=p.certifications.join(', ');
+    setIf('acSummary',p.summary);
+    setIf('acEmail',p.email);setIf('acPhone',p.phone);setIf('acLinkedin',p.linkedinUrl);
+    st.textContent='✅ Extracted. Review & correct the fields below, then Save — the resume file will be attached automatically.';st.style.color='#047857';
+  }catch(err){
+    st.textContent='⚠️ '+err.message+'. Fill the fields manually — the file will still be attached on Save.';st.style.color='#B45309';
+  }
 }
 function loadScript(src){return new Promise(function(res,rej){var s=document.createElement('script');s.src=src;s.onload=res;s.onerror=rej;document.head.appendChild(s)})}
 
@@ -4744,6 +4769,15 @@ async function saveNewConsultant(){
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'createConsultant',consultant:consultant})});
     var d=await r.json();
     if(d.error){document.getElementById('acStatus').textContent='Error: '+d.error;document.getElementById('acStatus').style.color='#DC2626';return}
+    // #435: if the consultant was imported from a resume, attach that file to their record
+    // so it shows in the Manage popup's Resume/CV section.
+    if(d.id&&_acResumeFile){
+      try{
+        var fb64=await new Promise(function(res,rej){var fr=new FileReader();fr.onload=function(){res(String(fr.result).split(',')[1])};fr.onerror=rej;fr.readAsDataURL(_acResumeFile)});
+        await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'uploadResume',id:d.id,fileName:_acResumeFile.name,mimeType:_acResumeFile.type||'application/octet-stream',fileData:fb64})});
+      }catch(e){/* profile saved; attachment failed silently — user can upload from popup */}
+      _acResumeFile=null;
+    }
     closeAddConsultant();loadConsultants();
   }catch(e){document.getElementById('acStatus').textContent='Error: '+e.message;document.getElementById('acStatus').style.color='#DC2626'}
 }
@@ -4868,7 +4902,10 @@ async function topUpProfiles(){
   if(fb){fb.disabled=true;fb.style.opacity='.5';fb.textContent='🔍 Fetching...'}
   st.innerHTML='🔍 Searching LinkedIn for matching consultants...';
   try{
-    var sr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'startTopUp',jobId:matchState.jobId})});
+    var _fc=document.getElementById('fetchCountry');
+    var _fcv=_fc&&_fc.value?_fc.value:'';
+    if(_fcv)st.innerHTML='🔍 Searching LinkedIn for consultants in '+esc(_fcv)+'...';
+    var sr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'startTopUp',jobId:matchState.jobId,countryOverride:_fcv||undefined})});
     var sd=await safeMatchJson(sr);
     if(sd.error){st.innerHTML='⚠️ '+esc(sd.error)+(sd.detail?'<div style="font-size:.55rem;color:var(--g5);margin-top:.2rem">Apify: '+esc(sd.detail)+' (HTTP '+(sd.apifyStatus||'?')+')</div>':'');resetFetchMoreBtn();return}
     var runs=sd.runs||[];

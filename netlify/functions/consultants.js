@@ -509,6 +509,50 @@ exports.handler = async function (event) {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ released: true }) };
     }
 
+    // ---- #435: AI resume parsing — extract structured fields from raw resume text ----
+    // The old client-side regex only found email/phone/linkedin; name, location, country,
+    // company, years and summary need real understanding. Haiku costs a fraction of a cent.
+    if (action === 'parseResumeText') {
+      var rtext = String(body.text || '').slice(0, 15000);
+      if (!rtext.trim()) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'No resume text provided' }) };
+      var AKEY = process.env.ANTHROPIC_API_KEY;
+      if (!AKEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }) };
+      var rPrompt = 'Extract structured data from this resume text. Respond with ONLY a JSON object '
+        + '(no prose, no code fences) with these keys:\n'
+        + '  name: full name of the person (string)\n'
+        + '  email: email address or ""\n'
+        + '  phone: phone number or ""\n'
+        + '  linkedinUrl: full LinkedIn profile URL or ""\n'
+        + '  location: city/state where they are based, e.g. "Pune, Maharashtra" (string)\n'
+        + '  country: country they are based in, in English, e.g. "India" (string)\n'
+        + '  currentRole: their current/most recent job title (string)\n'
+        + '  currentCompany: their current/most recent employer (string)\n'
+        + '  yearsExperience: total years of professional experience as an integer (infer from '
+        + 'stated totals like "over 15 years" or from career date ranges; 0 if unknown)\n'
+        + '  skills: array of technical skills/tools mentioned (max 25)\n'
+        + '  certifications: array of certification names mentioned (max 15)\n'
+        + '  summary: their professional summary in 2-3 sentences, based on the resume\'s own '
+        + 'summary section if present\n\nRESUME TEXT:\n' + rtext;
+      try {
+        var rctrl = new AbortController();
+        var rtmo = setTimeout(function () { rctrl.abort(); }, 20000);
+        var rresp = await fetch('https://api.anthropic.com/v1/messages', {
+          method: 'POST', signal: rctrl.signal,
+          headers: { 'Content-Type': 'application/json', 'x-api-key': AKEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1200, messages: [{ role: 'user', content: rPrompt }] })
+        });
+        clearTimeout(rtmo);
+        if (!rresp.ok) throw new Error('Anthropic ' + rresp.status);
+        var rdata = await rresp.json();
+        var rtxt = (rdata.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
+        rtxt = rtxt.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+        var parsed = JSON.parse(rtxt);
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ parsed: parsed }) };
+      } catch (e) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Parse failed: ' + e.message }) };
+      }
+    }
+
     // ---- RESUME upload / get / remove (base64 in Mongo) ----
     if (action === 'uploadResume') {
       if (!body.fileData || !body.fileName) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'File data and name required' }) };
