@@ -1788,7 +1788,7 @@ async function viewDet(i){
   var bens=Array.isArray(j.benefits)?j.benefits:[];
   var countryForSearch=j.detectedCountry&&j.detectedCountry!=='Unknown'?' '+j.detectedCountry:'';
   var companyLink=j.companyUrl&&j.companyUrl.indexOf('google.com/search')===-1?j.companyUrl:'https://www.google.com/search?q='+encodeURIComponent(j.company+countryForSearch+' official website');
-  var canEditCo=CAP.canEditFields; // manager+ can edit company/job fields
+  var canEditCo=CAP.canEditFields&&!mjFromConsultant; // manager+ edit; read-only from Match Jobs (#439)
   var editName=canEditCo?' <span onclick="editCompanyName('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company name">✎</span> <span onclick="editCompanyUrl('+i+')" style="cursor:pointer;font-size:.6rem;color:var(--ac);border:1px solid var(--ac);border-radius:3px;padding:0 .25rem" title="Edit company website URL">✎ URL</span>':'';
   var companyHtml='<a href="'+companyLink+'" target="_blank">'+j.company+'</a>'+editName;
   var mapQuery=j.location||'';
@@ -1814,13 +1814,13 @@ async function viewDet(i){
   var canEnrich=CAP.canEnrichCompany;
   // Status: editable by all except viewer (analyst+). Render as clickable only if canStatus.
   var statusInner=(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1);
-  var statusHtml=CAP.canStatus?'<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+statusInner+'</span>':'<span class="status-badge status-'+(j.status||'new')+'">'+statusInner+'</span>';
+  var statusHtml=(CAP.canStatus&&!mjFromConsultant)?'<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+statusInner+'</span>':'<span class="status-badge status-'+(j.status||'new')+'">'+statusInner+'</span>';
   var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links (only show section if user has access)
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
     h+='<div style="margin-top:.4rem;display:flex;gap:.3rem;flex-wrap:wrap">';
-    h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">'+(canEnrich?'🏢 Manage Company':'🔍 Manage Contacts')+'</button>';
+    if(!mjFromConsultant)h+='<button onclick="findContacts('+i+')" style="padding:.25rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">'+(canEnrich?'🏢 Manage Company':'🔍 Manage Contacts')+'</button>';
     h+='</div></div>';
   }
   if(canContact)setTimeout(async function(){
@@ -1863,6 +1863,9 @@ async function viewDet(i){
   if(bens.length)h+='<div class="dm-sec"><h4>Benefits</h4><ul>'+bens.map(function(b){return'<li>'+b+'</li>'}).join('')+'</ul></div>';
   var isNonEnglish=/[\u0600-\u06FF\u0750-\u077F\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF\u0E00-\u0E7F\u0400-\u04FF\u0900-\u097F\u0980-\u09FF\u0C00-\u0C7F\u0B80-\u0BFF\u00C0-\u024F\u1E00-\u1EFF]/.test(desc.slice(0,500));
   var translateBtnHtml=isNonEnglish?' <button onclick="toggleTranslate('+i+')" id="translateBtn" style="font-size:.6rem;padding:.2rem .5rem;background:var(--ac);color:#fff;border:none;border-radius:4px;cursor:pointer;font-family:\'DM Sans\',sans-serif;font-weight:600">🌐 Translate to English</button>':'';
+  // #436: Assignment & Comments — lazy-loaded so it's always current. Read-only from a
+  // consultant's Match Jobs popup (#439).
+  h+='<div class="dm-sec"><h4>Assignment &amp; Comments</h4><div id="jobAssignBox" style="font-size:.68rem;color:var(--g5)">Loading...</div></div>';
   h+='<div class="dm-sec"><h4 style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.3rem">Full Description<span style="display:flex;gap:.4rem;align-items:center"><button id="aiFmtBtn" onclick="aiFormatDesc('+i+')" title="Use AI to restructure this description (headings, bullets, paragraphs). The original is kept." style="padding:.15rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">✨ Tidy up</button><label style="font-size:.6rem;font-weight:400;color:var(--g5);display:flex;align-items:center;gap:.2rem;cursor:pointer"><input type="checkbox" id="descHighlightChk" checked onchange="toggleDescHighlight('+i+')" style="cursor:pointer"><mark style="background:#FEF08A;color:#713F12;padding:0 .15rem;border-radius:2px">Highlight</mark> key terms</label>'+translateBtnHtml+'</span></h4><div id="descFmtMsg" style="font-size:.58rem;margin-bottom:.3rem"></div><div id="descContent" style="font-size:.82rem;color:var(--tl);line-height:1.6;white-space:pre-line">'+highlightTermsInHtml(formatDesc(desc.slice(0,5000)),buildJobHighlightTerms(j))+'</div></div>';
   // Match Profiles is the primary action (supply-side matching). Apply link kept as secondary.
   h+='<div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem;flex-wrap:wrap">';
@@ -1883,6 +1886,7 @@ async function viewDet(i){
   ov.classList.add('open');
   // load the saved candidates for this job
   jobCandidatesJobId=j._id||j.jobId||'';
+  loadJobActivity(jobCandidatesJobId);   // #436: assignment + comments (lazy, always fresh)
   _selectedCandidates={};  // #403: selections are per-job
   _currentJobForMatch={skills:j.skills||'',certifications:j.certifications||'',tools:j.tools||'',compliance:j.compliance||'',title:j.title||''};
   // Auto-tidy on first view: shows saved formatting instantly if we have it, otherwise
@@ -1926,6 +1930,100 @@ async function viewDet(i){
   loadJobCandidates();
 }
 var viewDirty=false;
+// ---- #436: job assignment + comments ----
+var _jaAssignees=null,_jaJobId='';
+async function loadJobActivity(jid){
+  _jaJobId=jid;
+  var box=document.getElementById('jobAssignBox');if(!box)return;
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'getJobActivity',jobId:jid})});
+    var d=await r.json();
+    if(_jaJobId!==jid)return;               // popup switched while loading
+    if(d.error){box.textContent='⚠️ '+d.error;return}
+    renderJobActivity(d.assignedTo,d.comments||[]);
+  }catch(e){if(box)box.textContent='⚠️ '+e.message}
+}
+function renderJobActivity(assignedTo,comments){
+  var box=document.getElementById('jobAssignBox');if(!box)return;
+  var ro=mjFromConsultant;                   // #439: read-only from Match Jobs
+  var canAssign=CAP.canEditFields&&!ro;      // manager+ assign
+  var h='';
+  h+='<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.45rem">';
+  h+='<span style="font-weight:600;color:var(--tl)">Assigned to:</span>';
+  if(assignedTo&&assignedTo.email){
+    h+='<span style="background:#EEF2FF;color:#4338CA;padding:.1rem .45rem;border-radius:4px;font-weight:600">'+esc(assignedTo.name||assignedTo.email)+'</span>'
+      +'<span style="color:var(--g4);font-size:.6rem">'+esc(assignedTo.role||'')+' · by '+esc(assignedTo.assignedBy||'')+' · '+(assignedTo.assignedAt?fmtDate(assignedTo.assignedAt):'')+'</span>';
+    if(canAssign)h+='<button onclick="jaUnassign()" style="padding:.1rem .4rem;background:#fff;color:#DC2626;border:1px solid #FCA5A5;border-radius:3px;font-size:.55rem;cursor:pointer">Unassign</button>';
+  }else{
+    h+='<span style="color:var(--g4)">Unassigned</span>';
+  }
+  if(canAssign){
+    h+='<span style="display:flex;gap:.3rem;align-items:center;margin-left:auto">'
+      +'<select id="jaAssigneeSel" style="font-size:.6rem;padding:.15rem .3rem;border:1px solid var(--g2);border-radius:4px;max-width:14rem"><option value="">Select person...</option></select>'
+      +'<button onclick="jaAssign()" style="padding:.18rem .55rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">Assign</button></span>';
+  }
+  h+='</div>';
+  // comments (newest first), system entries styled differently
+  h+='<div style="max-height:11rem;overflow-y:auto;border:1px solid var(--g1);border-radius:5px;padding:.35rem .5rem;background:#FAFBFD">';
+  if(!comments.length)h+='<div style="color:var(--g4)">No comments yet.</div>';
+  comments.slice().reverse().forEach(function(cm){
+    if(cm.system){
+      h+='<div style="padding:.15rem 0;color:var(--g4);font-style:italic;font-size:.6rem">⚙ '+esc(cm.text)+' — '+esc(cm.author||'')+', '+(cm.createdAt?fmtDate(cm.createdAt):'')+'</div>';
+    }else{
+      h+='<div style="padding:.25rem 0;border-bottom:1px solid var(--g1)"><span style="font-weight:600;color:var(--pri)">'+esc(cm.author||'')+'</span> <span style="color:var(--g4);font-size:.58rem">'+(cm.createdAt?fmtDate(cm.createdAt):'')+'</span><div style="color:var(--tl);white-space:pre-wrap">'+esc(cm.text)+'</div></div>';
+    }
+  });
+  h+='</div>';
+  if(!ro){
+    h+='<div style="display:flex;gap:.4rem;margin-top:.4rem"><textarea id="jaCommentText" rows="2" placeholder="Add a comment... (kept as history with this job)" style="flex:1;font-size:.65rem;padding:.3rem .4rem;border:1px solid var(--g2);border-radius:4px;resize:vertical;font-family:inherit"></textarea>'
+      +'<button onclick="jaAddComment()" style="padding:.3rem .7rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600;align-self:flex-end">Comment</button></div>';
+  }
+  box.innerHTML=h;
+  if(canAssign)jaFillAssignees();
+}
+async function jaFillAssignees(){
+  var sel=document.getElementById('jaAssigneeSel');if(!sel)return;
+  if(!_jaAssignees){
+    try{
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'listAssignees'})});
+      var d=await r.json();
+      _jaAssignees=d.users||[];
+    }catch(e){_jaAssignees=[]}
+  }
+  _jaAssignees.forEach(function(u){
+    var o=document.createElement('option');o.value=u.email;
+    o.textContent=(u.name||u.email)+(u.role?' — '+u.role:'');
+    sel.appendChild(o);
+  });
+}
+async function jaAssign(){
+  var sel=document.getElementById('jaAssigneeSel');
+  if(!sel||!sel.value)return;
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'assignJob',jobId:_jaJobId,assigneeEmail:sel.value})});
+    var d=await r.json();
+    if(d.error){alert(d.error);return}
+    loadJobActivity(_jaJobId);
+  }catch(e){alert('Error: '+e.message)}
+}
+async function jaUnassign(){
+  try{
+    await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'unassignJob',jobId:_jaJobId})});
+    loadJobActivity(_jaJobId);
+  }catch(e){alert('Error: '+e.message)}
+}
+async function jaAddComment(){
+  var ta=document.getElementById('jaCommentText');
+  var txt=ta?ta.value.trim():'';
+  if(!txt)return;
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'addJobComment',jobId:_jaJobId,text:txt})});
+    var d=await r.json();
+    if(d.error){alert(d.error);return}
+    loadJobActivity(_jaJobId);
+  }catch(e){alert('Error: '+e.message)}
+}
+
 function closeDet(){
   var ov=document.getElementById('detailOverlay');
   ov.classList.remove('open');
@@ -4220,6 +4318,7 @@ function mjSortValue(m,col){
   if(col==='duration')return m.contractDuration||'';
   return (m[col]||'').toString().toLowerCase();
 }
+var _mjRenderSig='';
 function renderMatchJobs(d){
   mjLastData=d;
   var st=document.getElementById('mjStatus');
@@ -4237,6 +4336,9 @@ function renderMatchJobs(d){
     box.innerHTML='<div style="font-size:.6rem;color:var(--g5);padding:.4rem 0">No matching jobs saved yet. Pick a period and press “Find matching jobs”.</div>';
     return;
   }
+  var sig=(d.matches||[]).map(function(m){return m.jobId+':'+m.overall+(_mjSelected[m.jobId]?'*':'')}).join('|')+':'+mjSortCol+mjSortDir+':'+(d.page||0);
+  if(sig===_mjRenderSig&&document.getElementById('mjTable'))return;   // #438: no identical rebuilds
+  _mjRenderSig=sig;
   var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
   var cols=[['overall','Match',6],['title','Role',24],['company','Company',17],['location','Location',15],['datePosted','Posted',9],['duration','Duration',9]];
   var allSel=list.length&&list.every(function(m){return _mjSelected[m.jobId]});
@@ -4267,7 +4369,7 @@ function renderMatchJobs(d){
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+(m.datePosted?fmtDate(m.datePosted):'—')+'</td>'
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+dur+'</td>'
       +'<td style="padding:.3rem .4rem;text-align:center;white-space:nowrap">'
-        +'<button onclick="event.stopPropagation();mjManageJob(\''+esc(m.jobId)+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">Manage</button>'
+        +'<button onclick="event.stopPropagation();mjManageJob(\''+esc(m.jobId)+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">View</button>'
         +'<button onclick="event.stopPropagation();mjDeleteJob(\''+esc(m.jobId)+'\')" title="Remove from this consultant\'s matches" style="padding:.15rem .4rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer">✕</button>'
       +'</td></tr>';
   });
@@ -4684,17 +4786,23 @@ function addConsultantHtml(){
     +'<div style="background:#fff;border-radius:8px;width:96%;max-width:600px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)">+ Add Consultant Profile</h3><button onclick="closeAddConsultant()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
     +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx or PDF) — AI extraction</label><input type="file" id="acResume" accept=".docx,.pdf" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
-    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">'
-    +f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')+f('acLocation','Location')
-    +f('acCountry','Country')+'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Permanent</option><option>Unknown</option></select></div>'
-    +f('acEmail','Email','email')+f('acPhone','Phone')+f('acLinkedin','LinkedIn URL')+f('acYears','Years Experience','number')
-    +'</div>'
-    +'<div style="margin-top:.5rem"><label style="font-size:.55rem;color:var(--g4)">Skills (comma-separated)</label><input id="acSkills" class="set-input" style="width:100%;font-size:.62rem"></div>'
-    +'<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Certifications (comma-separated)</label><input id="acCerts" class="set-input" style="width:100%;font-size:.62rem"></div>'
-    +'<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Summary</label><textarea id="acSummary" class="set-input" style="width:100%;font-size:.62rem;min-height:50px"></textarea></div>'
+    +acGroup('👤 Identity',f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')
+      +'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Permanent</option><option>Unknown</option></select></div>')
+    +acGroup('📍 Location',f('acLocation','Location (city, state)')+f('acCountry','Country'))
+    +acGroup('✉️ Contact',f('acEmail','Email','email')+f('acPhone','Phone')+f('acLinkedin','LinkedIn URL'))
+    +acGroup('🛡️ Professional',f('acYears','Years Experience','number')
+      +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Skills (comma-separated)</label><input id="acSkills" class="set-input" style="width:100%;font-size:.62rem"></div>'
+      +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Certifications (comma-separated)</label><input id="acCerts" class="set-input" style="width:100%;font-size:.62rem"></div>'
+      +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Summary</label><textarea id="acSummary" class="set-input" style="width:100%;font-size:.62rem;min-height:50px"></textarea></div>')
     +'<div id="acStatus" style="font-size:.6rem;margin-top:.5rem"></div>'
     +'<div style="display:flex;gap:.4rem;margin-top:.6rem;justify-content:flex-end"><button onclick="closeAddConsultant()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer">Cancel</button><button onclick="saveNewConsultant()" style="padding:.35rem .9rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Profile</button></div>'
     +'</div></div>';
+}
+// #437: titled, bordered field group — the grouping pattern for forms/popups.
+function acGroup(title,inner){
+  return '<fieldset style="border:1px solid var(--g2);border-radius:6px;padding:.45rem .55rem .55rem;margin:0 0 .55rem">'
+    +'<legend style="font-size:.58rem;font-weight:700;color:var(--pri);padding:0 .3rem">'+title+'</legend>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem">'+inner+'</div></fieldset>';
 }
 // Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
 var _acResumeFile=null;   // #435: keep the imported file so we can attach it after Save
@@ -4839,7 +4947,8 @@ async function runMatch(page){
   if(page===0)mjResetScoredFeed();   // #432: fresh run clears the live feed
   var st=document.getElementById('matchStatus');
   st.textContent='⏳ Scoring cached consultant profiles...';
-  document.getElementById('matchResults').innerHTML='';
+  // #438: don't blank the results here — clearing on every polling tick made the popup
+  // flash. The table is replaced only when new data actually renders (see renderMatches).
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50})});
     var d=await safeMatchJson(r);
@@ -4961,9 +5070,15 @@ async function pollTopUp(runs,tries){
   }catch(e){st.textContent='⚠️ Error: '+e.message;matchState.polling=false;resetFetchMoreBtn()}
 }
 
+var _matchRenderSig='';
 function renderMatches(d){
   var el=document.getElementById('matchResults');
-  if(!d.matches||!d.matches.length){el.innerHTML='<div style="font-size:.7rem;color:var(--g5);padding:1rem;text-align:center">No consultants scored ≥60% for this role yet. Try "Fetch More from LinkedIn".</div>';document.getElementById('matchPager').style.display='none';return}
+  if(!d.matches||!d.matches.length){el.innerHTML='<div style="font-size:.7rem;color:var(--g5);padding:1rem;text-align:center">No consultants scored ≥60% for this role yet. Try "Fetch More from LinkedIn".</div>';document.getElementById('matchPager').style.display='none';_matchRenderSig='';return}
+  // #438: identical data -> no rebuild. Rebuilding the same table on every poll tick made
+  // the popup flash and lose scroll position.
+  var sig=d.page+':'+d.matches.map(function(m){return (m.sourceId||m.name||'')+m.overall}).join('|')+':'+(d.hasMore?1:0);
+  if(sig===_matchRenderSig)return;
+  _matchRenderSig=sig;
   var h='';
   d.matches.forEach(function(m,i){h+=matchCard(m,d.page*10+i+1)});
   el.innerHTML=h;
