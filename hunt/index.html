@@ -4341,10 +4341,8 @@ function renderMatchJobs(d){
   _mjRenderSig=sig;
   var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
   var cols=[['overall','Match',6],['title','Role',24],['company','Company',17],['location','Location',15],['datePosted','Posted',9],['duration','Duration',9]];
-  var allSel=list.length&&list.every(function(m){return _mjSelected[m.jobId]});
-  var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:112ch"><thead><tr style="background:var(--g1)">';
-  // #422: select-all checkbox
-  h+='<th style="padding:.3rem .3rem;text-align:center;width:4ch"><input type="checkbox" '+(allSel?'checked':'')+' onchange="mjToggleAll(this.checked)" title="Select all" style="cursor:pointer"></th>';
+  var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:108ch"><thead><tr style="background:var(--g1)">';
+  // #441: checkbox column removed — selection is row-click, shown by row highlight.
   // #420: rank column
   h+='<th style="padding:.3rem .3rem;text-align:right;width:4ch">#</th>';
   cols.forEach(function(c){
@@ -4360,7 +4358,6 @@ function renderMatchJobs(d){
     var rowBg=isSel?'background:#F5F3FF;':'';
     // #424: clicking anywhere on the row toggles selection (except the action buttons).
     h+='<tr onclick="mjRowClick(event,\''+esc(m.jobId)+'\')" style="border-top:1px solid var(--g1);cursor:pointer;'+rowBg+'" title="'+esc(m.reason||'')+'" data-mjrow="'+esc(m.jobId)+'">'
-      +'<td style="padding:.3rem .3rem;text-align:center"><span style="font-size:.7rem;color:'+(isSel?'#6C3FBF':'var(--g3)')+'">'+(isSel?'☑':'☐')+'</span></td>'
       +'<td style="padding:.3rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+(ri+1)+'</td>'
       +'<td style="padding:.3rem .4rem;font-weight:700;color:'+scoreColor+';overflow:hidden">'+m.overall+'%'+flag+'</td>'
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.title||'')+'">'+esc(m.title||'—')+'</td>'
@@ -4980,6 +4977,8 @@ async function runMatch(page){
       return;
     }
     renderMatches(d);
+    // #440: replace the perpetual "Scoring..." line with a clear completion message.
+    st.innerHTML='✅ Scoring complete — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'+mjScoredFeedHtml();
     // #404: the Fetch More button lives in its own action bar and is always available.
     // Here we just report what the local cache produced.
     var ci=document.getElementById('cacheInfo');
@@ -5126,7 +5125,7 @@ async function loadJobCandidates(){
     var header='<div style="border-top:2px solid var(--g2);padding-top:.7rem">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">'
       +'<div style="font-size:.72rem;font-weight:700;color:var(--pri)">📋 Matched Candidates'+(list.length?' ('+list.length+')':'')+'</div>'
-      +'<button onclick="loadJobCandidates()" title="Refresh matched candidates" style="padding:.25rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">🔄 Refresh</button>'
+      +(mjFromConsultant?'':'<button onclick="loadJobCandidates()" title="Refresh matched candidates" style="padding:.25rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">🔄 Refresh</button>')
       +'</div>';
     if(!list.length){wrap.innerHTML=header+'<div style="font-size:.62rem;color:var(--g4);padding:.4rem 0">No matched candidates saved for this job yet. Run <strong>Match Profiles</strong> to find some.</div></div>';_candidateNav=[];return}
     // #400: remember the on-screen order so the Manage popup can navigate prev/next
@@ -5159,8 +5158,8 @@ async function loadJobCandidates(){
         +'<td>'+typeBadgeCons(c.engagementType)+'</td>'
         +'<td>'+pipelineBadge(c.pipelineStatus)+'</td>'
         +'<td style="text-align:center;white-space:nowrap;overflow:visible">'
-        +(c._id?'<button class="vb" onclick="openManageProfileFromJob(\''+c._id+'\')" style="font-size:.58rem">'+(CAP.canStatus?'Manage':'View')+'</button> ':'')
-        +(CAP.canStatus?'<button class="cand-del" data-sid="'+esc(c.sourceId)+'" data-name="'+esc(c.name)+'" style="padding:.15rem .5rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Delete</button>':'')
+        +((c._id&&!mjFromConsultant)?'<button class="vb" onclick="openManageProfileFromJob(\''+c._id+'\')" style="font-size:.58rem">'+(CAP.canStatus?'Manage':'View')+'</button> ':'')
+        +((CAP.canStatus&&!mjFromConsultant)?'<button class="cand-del" data-sid="'+esc(c.sourceId)+'" data-name="'+esc(c.name)+'" style="padding:.15rem .5rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Delete</button>':'')
         +'</td></tr>';
     });
     h+='</tbody></table></div></div>';
