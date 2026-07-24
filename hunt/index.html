@@ -1815,7 +1815,7 @@ async function viewDet(i){
   // Status: editable by all except viewer (analyst+). Render as clickable only if canStatus.
   var statusInner=(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1);
   var statusHtml=(CAP.canStatus&&!mjFromConsultant)?'<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+statusInner+'</span>':'<span class="status-badge status-'+(j.status||'new')+'">'+statusInner+'</span>';
-  var h='<div class="dm-meta">'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+[['Job ID',idChip(j._id||j.jobId)],['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',j.remote||'N/A'],['Experience',experienceHtml],['Salary',salaryHtml],['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links (only show section if user has access)
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
@@ -4105,6 +4105,13 @@ function matchedPriorityCerts(certs){
   });
   return hits;
 }
+// #444: compact ID chip with copy-to-clipboard. IDs are Mongo _id values — already
+// unique per record; we only surface them.
+function idChip(id){
+  if(!id)return 'N/A';
+  var s=String(id);
+  return '<span style="font-family:monospace;font-size:.6rem;color:var(--g5)">'+esc(s)+'</span> <span onclick="navigator.clipboard&&navigator.clipboard.writeText(\''+esc(s)+'\');this.textContent=\'✓\';var el=this;setTimeout(function(){el.textContent=\'📋\'},1200)" title="Copy ID" style="cursor:pointer;font-size:.6rem">📋</span>';
+}
 // #430: little 🎯 badge before a consultant's name when they have saved job matches.
 function matchJobsBadge(c){
   var n=c.matchedJobsCount||0;
@@ -4440,6 +4447,7 @@ function renderManageProfile(){
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .6rem;margin-bottom:.6rem;font-size:.58rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.7rem;padding:.6rem;background:var(--g1);border-radius:6px">';
   h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.55rem">LinkedIn ↗</a>':''));
+  h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline));
   h+=fld('Company',esc(c.currentCompany));
   h+=fld('Location',esc(c.location)+(c.country?' ('+esc(c.country)+')':''));

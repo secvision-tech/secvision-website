@@ -261,9 +261,13 @@ exports.handler = async (event) => {
       var filter = {};
       if (body.query) {
         var q = body.query.trim();
+        // #444: a 24-hex query is an ID lookup — find that exact job.
+        if (/^[0-9a-f]{24}$/i.test(q)) {
+          try { filter._id = new (require('mongodb').ObjectId)(q); } catch (e) {}
+        }
         // #352: Search targeted fields. Description is excluded from the general OR because
         // incidental mentions (e.g. "Google Cloud" matching a "Google" search) create noise.
-        filter.$or = [
+        if (!filter._id) filter.$or = [
           { title: { $regex: q, $options: 'i' } },
           { titleClean: { $regex: q, $options: 'i' } },
           { company: { $regex: q, $options: 'i' } },
@@ -1800,6 +1804,22 @@ exports.handler = async (event) => {
         }
 
         // Re-extract compliance (always - merge new with existing, apply proper casing)
+        // #443: re-extract CERTIFICATIONS from the full description (previously we only
+        // cleaned the existing list, so save-time misses could never heal). Strong regex
+        // matches bare Security+/CySA+/CEH etc., not just CompTIA-prefixed forms.
+        var CERT_RE2 = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GCED|GCFA|GCFE|GNFA|GMON|GCDA|GDAT|GSEC|GREM|GWAPT|GXPN|GSLC|GSNA|GPYC|GCTI|GCPN|GRID|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|CompTIA\s*Server\+|CompTIA\s*A\+|CompTIA\s*Linux\+|CompTIA\s*Cloud\+|CompTIA\s*PenTest\+|CompTIA\s*SecurityX|(?<![\w+])Security\+|(?<![\w+])Network\+|(?<![\w+])CySA\+|(?<![\w+])PenTest\+|(?<![\w+])CASP\+|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|MB-\d{3}|MD-\d{3}|CCSP|CCNA|CCNP|CCIE|CRISC|CGEIT|SSCP|CPTS|eJPT|eCPPT|PNPT|SANS|GIAC|ITIL|TOGAF|SABSA|PCNSE|NSE\s*[4-8]|Fortinet\s*NSE|Azure\s*Security\s*Engineer(?:\s*Associate)?|GICSP|DoD\s*8570|DoD\s*8140/gi;
+        var newCertArr = uniqueMatch(fullText, CERT_RE2);
+        if (newCertArr.length) {
+          var existingCerts = (j.certifications && j.certifications !== 'See details') ? j.certifications.split(/,\s*/) : [];
+          var seenCert = {}, mergedCerts = [];
+          existingCerts.concat(newCertArr).forEach(function (cv) {
+            cv = String(cv).trim(); if (!cv) return;
+            var ck = cv.toLowerCase(); if (seenCert[ck]) return; seenCert[ck] = 1;
+            mergedCerts.push(cv);
+          });
+          var mergedCertStr = mergedCerts.join(', ');
+          if (mergedCertStr !== j.certifications) changes.certifications = mergedCertStr;
+        }
         var newCompArr = uniqueMatch(fullText, COMP_RE);
         if (newCompArr.length > 0 || (j.compliance && j.compliance !== 'See details')) {
           var existingComp = (j.compliance && j.compliance !== 'See details') ? j.compliance.split(', ') : [];
@@ -1916,8 +1936,9 @@ exports.handler = async (event) => {
 
         // Cleanup certifications: remove non-cybersecurity certs (CKA, CKAD, CKS)
         var CERT_REMOVE = /^(?:cka|ckad|cks|zero\s*trust)$/i;
-        if (j.certifications && j.certifications !== 'See details') {
-          var certParts = j.certifications.split(/[,\n]+/).map(function(c){return c.trim()}).filter(Boolean);
+        var certBase = changes.certifications !== undefined ? changes.certifications : j.certifications; // #443: respect freshly merged value
+        if (certBase && certBase !== 'See details') {
+          var certParts = certBase.split(/[,\n]+/).map(function(c){return c.trim()}).filter(Boolean);
           var cleanedCerts = certParts.filter(function(c) { return !CERT_REMOVE.test(c); });
           if (cleanedCerts.length < certParts.length) {
             changes.certifications = cleanedCerts.length ? cleanedCerts.join(', ') : 'See details';

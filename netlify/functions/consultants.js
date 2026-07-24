@@ -189,9 +189,12 @@ exports.handler = async function (event) {
     if (action === 'listConsultants') {
       var filter = { managed: true }; // only owned CRM records in the Consultants tab
       var q = (body.query || '').trim();
+      // #444: 24-hex query = consultant ID lookup (keep managed scope).
+      var _qIsId = /^[0-9a-f]{24}$/i.test(q);
+      if (_qIsId) { try { filter._id = new ObjectId(q); } catch (e) { _qIsId = false; } }
       if (q) {
         var re = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        filter.$or = [
+        if(!_qIsId)filter.$or = [
           { name: { $regex: re, $options: 'i' } },
           { headline: { $regex: re, $options: 'i' } },
           { currentRole: { $regex: re, $options: 'i' } },
