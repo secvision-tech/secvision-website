@@ -152,6 +152,14 @@ exports.handler = async function (event) {
   var jobs = db.collection('jobs');
   var ObjectId = require('mongodb').ObjectId;
 
+  // The Entra JWT carries email/name but NO role — roles live in the users collection.
+  // Without this lookup user.role is undefined and admin-gated actions 403 for EVERYONE.
+  try {
+    var emailRe = new RegExp('^' + user.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+    var udoc = await db.collection('users').findOne({ email: emailRe });
+    user.role = udoc ? udoc.role : '';
+  } catch (e) { user.role = ''; }
+
   async function findJob(jobId) {
     var j = null;
     try { j = await jobs.findOne({ _id: new ObjectId(jobId) }); } catch (e) {}
