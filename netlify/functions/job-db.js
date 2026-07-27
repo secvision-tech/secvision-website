@@ -590,6 +590,15 @@ exports.handler = async (event) => {
         { $limit: 10 }
       ])).toArray();
 
+      // Per-role tool demand: which technologies does EACH role actually require?
+      // Raw (role, tool) pairs here; canonicalization + top-10 + distinctiveness in JS below.
+      var roleToolPairs = await col.aggregate(SM.concat([
+        { $match: { titleClean: { $ne: null }, tools: { $nin: [null, '', 'See details'] } } },
+        { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$tools', ', '] } } },
+        { $unwind: '$items' },
+        { $group: { _id: { role: '$role', tool: { $toLower: '$items' } }, count: { $sum: 1 } } }
+      ])).toArray();
+
       // Skills distribution (comma-separated) - case insensitive
       var skillCounts = await col.aggregate(SM.concat([
         { $match: { skills: { $ne: 'See details' } } },
@@ -848,13 +857,41 @@ exports.handler = async (event) => {
           return { _id: k, count: m.count, avgExp: m.expCount > 0 ? (m.expSum / m.expCount) : null };
         }).sort(function(a, b) { return b.count - a.count; });
       })();
+      // Per-role top tools: canonicalize role (VARIANTS) + tool names, merge, take top 10.
+      // A tool is DISTINCTIVE for a role when its share within that role is ≥2× its share
+      // across all roles — that's what technically differentiates roles from each other.
+      var roleTools = [];
+      (function buildRoleTools() {
+        var byRole = {}, roleTotals = {}, globalTool = {}, globalTotal = 0;
+        roleToolPairs.forEach(function (pr) {
+          var rKey = (pr._id.role || '').toLowerCase().trim();
+          var role = VARIANTS[rKey] || titleCase(pr._id.role || '');
+          var tKey = (pr._id.tool || '').toLowerCase().trim();
+          if (!tKey) return;
+          var tool = VARIANTS[tKey] || titleCase(pr._id.tool || '');
+          if (!byRole[role]) { byRole[role] = {}; roleTotals[role] = 0; }
+          byRole[role][tool] = (byRole[role][tool] || 0) + pr.count;
+          roleTotals[role] += pr.count;
+          globalTool[tool] = (globalTool[tool] || 0) + pr.count;
+          globalTotal += pr.count;
+        });
+        Object.keys(byRole).forEach(function (role) {
+          var tools = Object.keys(byRole[role]).map(function (t) {
+            var c = byRole[role][t];
+            var shareInRole = c / (roleTotals[role] || 1);
+            var shareGlobal = (globalTool[t] || 0) / (globalTotal || 1);
+            return { t: t, c: c, d: (c >= 3 && shareInRole >= 2 * shareGlobal) };
+          }).sort(function (a, b) { return b.c - a.c; }).slice(0, 10);
+          roleTools.push({ role: role, tools: tools });
+        });
+      })();
       contractSkills = normList(contractSkills);
       contractCerts = normList(contractCerts);
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
         certCounts, complianceCounts, toolsCounts, locationCounts, recentScans,
-        partnerTargets, roleCounts, skillCounts, salaryJobs,
+        partnerTargets, roleCounts, skillCounts, salaryJobs, roleTools,
         contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, contractCerts, avgRate,
         _scope: { role: authRole, countries: authScope.countries, regions: authScope.regions, scoped: scopeFilter() !== null }
       })};
