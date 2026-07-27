@@ -271,7 +271,12 @@ exports.handler = async function (event) {
       }
 
       var okCount = 0, skipped = 0;
+      // Time budget: 10 sequential LLM calls exceed the 26s function limit and the
+      // gateway kills the connection ("Inactivity Timeout"). Stop starting new jobs
+      // after ~17s; the frontend chains calls until the requested total is reached.
+      var DEADLINE = Date.now() + 17000;
       for (var i = 0; i < pending.length; i++) {
+        if (Date.now() > DEADLINE) break;
         var p = pending[i];
         // Don't spend on descriptions that are already well structured.
         if (!needsTidying(p.description || '')) {

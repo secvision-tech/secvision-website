@@ -2555,12 +2555,21 @@ async function runFormatBatch(){
   var st=document.getElementById('fmtBatchStatus');
   var btn=document.getElementById('fmtBatchBtn');
   btn.disabled=true;btn.style.opacity='.5';
-  st.textContent='✨ Tidying up to 10 descriptions (this takes ~20-40s)...';
+  // The backend time-boxes each call (~17s) to stay under the 26s function limit;
+  // we chain calls here until 10 are processed or nothing is pending.
+  var totalDone=0,totalSkipped=0,remaining=-1,rounds=0;
   try{
-    var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'formatBatch',days:30,limit:10})});
-    var d=await r.json();
-    if(d.error){st.textContent='⚠️ '+d.error}
-    else{st.textContent='✅ Tidied '+d.done+(d.skipped?', skipped '+d.skipped+' (output looked wrong)':'')+'. '+d.remaining+' still pending.'}
+    while(totalDone+totalSkipped<10&&rounds<5){
+      rounds++;
+      st.textContent='✨ Tidying descriptions... ('+(totalDone+totalSkipped)+' of up to 10 processed)';
+      var r=await authFetch('/.netlify/functions/format-desc',{method:'POST',body:JSON.stringify({action:'formatBatch',days:30,limit:10-(totalDone+totalSkipped)})});
+      var d=await r.json();
+      if(d.error){st.textContent='⚠️ '+d.error;btn.disabled=false;btn.style.opacity='1';return}
+      totalDone+=d.done||0;totalSkipped+=d.skipped||0;remaining=d.remaining;
+      if(!d.done&&!d.skipped)break;       // nothing progressed — stop
+      if(remaining===0)break;
+    }
+    st.textContent='✅ Tidied '+totalDone+(totalSkipped?', skipped '+totalSkipped+' (clean or output looked wrong)':'')+'. '+(remaining>=0?remaining+' still pending.':'');
   }catch(e){st.textContent='⚠️ '+e.message}
   btn.disabled=false;btn.style.opacity='1';
 }
