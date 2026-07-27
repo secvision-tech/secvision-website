@@ -690,8 +690,20 @@ exports.handler = async (event) => {
       }
       // Merge known variants
       var VARIANTS = {
-        'cybersecurity analyst': 'Cybersecurity Analyst',
-        'cyber security analyst': 'Cybersecurity Analyst',
+        // Role synonym merges (user observation): these are the SAME role under
+        // different market names, so they must be ONE series in the trend graph.
+        // 'SOC Analyst' stays separate from 'Security Analyst' deliberately —
+        // shift-based alert triage is a distinct operational role.
+        'soc analyst': 'SOC Analyst',
+        'security operations center analyst': 'SOC Analyst',
+        'security operations center (soc) analyst': 'SOC Analyst',
+        'security operations analyst': 'SOC Analyst',
+        'cyber security operations center analyst': 'SOC Analyst',
+        'security analyst': 'Security Analyst',
+        'cybersecurity analyst': 'Security Analyst',
+        'cyber security analyst': 'Security Analyst',
+        'information security analyst': 'Security Analyst',
+        'it security analyst': 'Security Analyst',
         'cybersecurity engineer': 'Cybersecurity Engineer',
         'cyber security engineer': 'Cybersecurity Engineer',
         'microsoft sentinel': 'Microsoft Sentinel',
