@@ -607,6 +607,20 @@ exports.handler = async (event) => {
         { $group: { _id: { role: '$role', tool: { $toLower: '$items' } }, count: { $sum: 1 } } }
       ])).toArray();
 
+      // #450: per-role certifications and compliance (same shape)
+      var roleCertPairs = await col.aggregate(SM.concat([
+        { $match: { titleClean: { $ne: null }, certifications: { $nin: [null, '', 'See details'] } } },
+        { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$certifications', ', '] } } },
+        { $unwind: '$items' },
+        { $group: { _id: { role: '$role', tool: { $toLower: '$items' } }, count: { $sum: 1 } } }
+      ])).toArray();
+      var roleCompPairs = await col.aggregate(SM.concat([
+        { $match: { titleClean: { $ne: null }, compliance: { $nin: [null, '', 'See details'] } } },
+        { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$compliance', ', '] } } },
+        { $unwind: '$items' },
+        { $group: { _id: { role: '$role', tool: { $toLower: '$items' } }, count: { $sum: 1 } } }
+      ])).toArray();
+
       // Skills distribution (comma-separated) - case insensitive
       var skillCounts = await col.aggregate(SM.concat([
         { $match: { skills: { $ne: 'See details' } } },
@@ -744,6 +758,8 @@ exports.handler = async (event) => {
         'pci dss': 'PCI-DSS',
         'soc 2': 'SOC 2',
         'ci/cd': 'CI/CD', 'sast': 'SAST', 'dast': 'DAST', 'devsecops': 'DevSecOps',
+        'rbac': 'RBAC', 'grc': 'GRC', 'osint': 'OSINT', 'api': 'API', 'iot': 'IoT', 'ot': 'OT',
+        'mitre att&ck': 'MITRE ATT&CK', 'mitre': 'MITRE',
         'tcp/ip': 'TCP/IP', 'dns': 'DNS', 'vpn': 'VPN', 'ipsec': 'IPSec', 'ids/ips': 'IDS/IPS',
         'soc2': 'SOC 2',
         'cyber kill chain': 'Cyber Kill Chain',
@@ -897,10 +913,17 @@ exports.handler = async (event) => {
       }
       var perRoleTools = buildPerRole(roleToolPairs, 10);
       var perRoleSkills = buildPerRole(roleSkillPairs, 5);   // #449
+      var perRoleCerts = buildPerRole(roleCertPairs, 5);     // #450
+      var perRoleComp = buildPerRole(roleCompPairs, 5);      // #450
       var roleTools = [];
-      Object.keys(perRoleTools).concat(Object.keys(perRoleSkills)).forEach(function (role) {
-        if (roleTools.some(function (x) { return x.role === role; })) return;
-        roleTools.push({ role: role, tools: perRoleTools[role] || [], skills: perRoleSkills[role] || [] });
+      var _allRoles = {};
+      [perRoleTools, perRoleSkills, perRoleCerts, perRoleComp].forEach(function (mp) {
+        Object.keys(mp).forEach(function (r) { _allRoles[r] = 1; });
+      });
+      Object.keys(_allRoles).forEach(function (role) {
+        roleTools.push({ role: role,
+          tools: perRoleTools[role] || [], skills: perRoleSkills[role] || [],
+          certs: perRoleCerts[role] || [], compliance: perRoleComp[role] || [] });
       });
       contractSkills = normList(contractSkills);
       contractCerts = normList(contractCerts);
