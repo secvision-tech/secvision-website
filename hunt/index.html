@@ -5659,7 +5659,9 @@ function renderSkillsInsight(certs,tools,skills,roles,roleTools){
       if(rt){
         html+=chipRow(rt.tools,'Tools');
         html+=chipRow(rt.skills,'Skills');   // #449: top-5 skills per role
-        if((rt.tools&&rt.tools.length)||(rt.skills&&rt.skills.length))html+='<div style="height:.2rem"></div>';
+        html+=chipRow(rt.certs,'Certs');     // #450: top-5 certifications per role
+        html+=chipRow(rt.compliance,'Compliance');   // #450: top-5 frameworks per role
+        if((rt.tools&&rt.tools.length)||(rt.skills&&rt.skills.length)||(rt.certs&&rt.certs.length)||(rt.compliance&&rt.compliance.length))html+='<div style="height:.2rem"></div>';
       }
     });
   }
