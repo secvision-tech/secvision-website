@@ -1244,7 +1244,12 @@ exports.handler = async function (event) {
     if (action === 'removeCandidate') {
       var jr = await findJobDoc(body.jobId);
       if (!jr) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
-      await db.collection('jobs').updateOne({ _id: jr._id }, { $pull: { candidateProfiles: { sourceId: body.sourceId } } });
+      // #447: also remember the removal so reverse matching (matchJobs) won't re-add
+      // this consultant to this job. Manual addCandidates deliberately ignores this list.
+      await db.collection('jobs').updateOne({ _id: jr._id }, {
+        $pull: { candidateProfiles: { sourceId: body.sourceId } },
+        $addToSet: { candidatesRemoved: body.sourceId }
+      });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ removed: true }) };
     }
 
@@ -1376,6 +1381,31 @@ exports.handler = async function (event) {
         .sort(function (a, b) { return b.overall - a.overall; });
       try { await cacheCol.updateOne({ _id: consultant._id }, { $set: { matchedJobs: mergedList } }); } catch (e) {}
 
+      // #447: two-sided persistence — a consultant matched to a job should also appear in
+      // that JOB's Matched Candidates. Same lean entry shape as addCandidates; guarded so
+      // we never duplicate and never resurrect a candidate the user removed from the job.
+      try {
+        var wbSid = consultant.sourceId;
+        if (!wbSid) {
+          // manual consultants have no sourceId — assign one so candidate hydration works
+          wbSid = String(consultant._id);
+          await cacheCol.updateOne({ _id: consultant._id }, { $set: { sourceId: wbSid } });
+          consultant.sourceId = wbSid;
+        }
+        var wbOps = all.map(function (m) {
+          return { updateOne: {
+            filter: { _id: m.job._id,
+              candidatesRemoved: { $ne: wbSid },
+              'candidateProfiles.sourceId': { $ne: wbSid } },
+            update: { $push: { candidateProfiles: {
+              sourceId: wbSid, overall: m.overall, addedAt: new Date(),
+              addedBy: authUser ? authUser.email : '', via: 'matchJobs'
+            } } }
+          } };
+        });
+        if (wbOps.length) await jobsCol.bulkWrite(wbOps, { ordered: false });
+      } catch (e) { /* write-back is best-effort; the consultant-side list is authoritative */ }
+
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         matches: pageItems.map(function (m) {
           return {
@@ -1433,6 +1463,18 @@ exports.handler = async function (event) {
         $pull: { matchedJobs: { jobId: dJobId } },
         $addToSet: { matchedJobsRemoved: dJobId }
       });
+      // #447: mirror the deletion on the job side — but ONLY entries added via matchJobs;
+      // candidates added manually through Match Profiles are left untouched.
+      try {
+        var dCons = await dcCol.findOne(dFilter);
+        var dSid = dCons && dCons.sourceId;
+        if (dSid) {
+          var dOID = require('mongodb').ObjectId;
+          var dJFilter; try { dJFilter = { _id: new dOID(dJobId) }; } catch (e) { dJFilter = { jobId: dJobId }; }
+          await db.collection('jobs').updateOne(dJFilter,
+            { $pull: { candidateProfiles: { sourceId: dSid, via: 'matchJobs' } } });
+        }
+      } catch (e) { /* best-effort sync */ }
       var dcCons = await dcCol.findOne(dFilter);
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         removed: true, remaining: (dcCons && dcCons.matchedJobs ? dcCons.matchedJobs.length : 0)
