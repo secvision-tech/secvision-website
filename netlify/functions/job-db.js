@@ -599,6 +599,14 @@ exports.handler = async (event) => {
         { $group: { _id: { role: '$role', tool: { $toLower: '$items' } }, count: { $sum: 1 } } }
       ])).toArray();
 
+      // #449: per-role skill demand (same shape as roleToolPairs, from the skills field)
+      var roleSkillPairs = await col.aggregate(SM.concat([
+        { $match: { titleClean: { $ne: null }, skills: { $nin: [null, '', 'See details'] } } },
+        { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$skills', ', '] } } },
+        { $unwind: '$items' },
+        { $group: { _id: { role: '$role', tool: { $toLower: '$items' } }, count: { $sum: 1 } } }
+      ])).toArray();
+
       // Skills distribution (comma-separated) - case insensitive
       var skillCounts = await col.aggregate(SM.concat([
         { $match: { skills: { $ne: 'See details' } } },
@@ -735,6 +743,8 @@ exports.handler = async (event) => {
         'pci-dss': 'PCI-DSS',
         'pci dss': 'PCI-DSS',
         'soc 2': 'SOC 2',
+        'ci/cd': 'CI/CD', 'sast': 'SAST', 'dast': 'DAST', 'devsecops': 'DevSecOps',
+        'tcp/ip': 'TCP/IP', 'dns': 'DNS', 'vpn': 'VPN', 'ipsec': 'IPSec', 'ids/ips': 'IDS/IPS',
         'soc2': 'SOC 2',
         'cyber kill chain': 'Cyber Kill Chain',
         'owasp top 10': 'OWASP Top 10',
@@ -860,31 +870,38 @@ exports.handler = async (event) => {
       // Per-role top tools: canonicalize role (VARIANTS) + tool names, merge, take top 10.
       // A tool is DISTINCTIVE for a role when its share within that role is ≥2× its share
       // across all roles — that's what technically differentiates roles from each other.
-      var roleTools = [];
-      (function buildRoleTools() {
-        var byRole = {}, roleTotals = {}, globalTool = {}, globalTotal = 0;
-        roleToolPairs.forEach(function (pr) {
+      function buildPerRole(pairs, topN) {
+        var byRole = {}, roleTotals = {}, globalT = {}, globalTotal = 0;
+        pairs.forEach(function (pr) {
           var rKey = (pr._id.role || '').toLowerCase().trim();
           var role = VARIANTS[rKey] || titleCase(pr._id.role || '');
           var tKey = (pr._id.tool || '').toLowerCase().trim();
           if (!tKey) return;
-          var tool = VARIANTS[tKey] || titleCase(pr._id.tool || '');
+          var item = VARIANTS[tKey] || titleCase(pr._id.tool || '');
           if (!byRole[role]) { byRole[role] = {}; roleTotals[role] = 0; }
-          byRole[role][tool] = (byRole[role][tool] || 0) + pr.count;
+          byRole[role][item] = (byRole[role][item] || 0) + pr.count;
           roleTotals[role] += pr.count;
-          globalTool[tool] = (globalTool[tool] || 0) + pr.count;
+          globalT[item] = (globalT[item] || 0) + pr.count;
           globalTotal += pr.count;
         });
+        var out = {};
         Object.keys(byRole).forEach(function (role) {
-          var tools = Object.keys(byRole[role]).map(function (t) {
+          out[role] = Object.keys(byRole[role]).map(function (t) {
             var c = byRole[role][t];
             var shareInRole = c / (roleTotals[role] || 1);
-            var shareGlobal = (globalTool[t] || 0) / (globalTotal || 1);
+            var shareGlobal = (globalT[t] || 0) / (globalTotal || 1);
             return { t: t, c: c, d: (c >= 3 && shareInRole >= 2 * shareGlobal) };
-          }).sort(function (a, b) { return b.c - a.c; }).slice(0, 10);
-          roleTools.push({ role: role, tools: tools });
+          }).sort(function (a, b) { return b.c - a.c; }).slice(0, topN);
         });
-      })();
+        return out;
+      }
+      var perRoleTools = buildPerRole(roleToolPairs, 10);
+      var perRoleSkills = buildPerRole(roleSkillPairs, 5);   // #449
+      var roleTools = [];
+      Object.keys(perRoleTools).concat(Object.keys(perRoleSkills)).forEach(function (role) {
+        if (roleTools.some(function (x) { return x.role === role; })) return;
+        roleTools.push({ role: role, tools: perRoleTools[role] || [], skills: perRoleSkills[role] || [] });
+      });
       contractSkills = normList(contractSkills);
       contractCerts = normList(contractCerts);
 

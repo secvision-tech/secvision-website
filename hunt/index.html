@@ -5639,7 +5639,7 @@ function renderSkillsInsight(certs,tools,skills,roles,roleTools){
   var el=document.getElementById('skillsInsight');if(!el)return;
   var html='<div class="dash-insight-title">💡 Consultant Hiring & Training Priorities</div>';
   // quick lookup: canonical role -> its top tools
-  var rtMap={};(roleTools||[]).forEach(function(rt){rtMap[rt.role]=rt.tools});
+  var rtMap={};(roleTools||[]).forEach(function(rt){rtMap[rt.role]=rt});
   // Roles in demand — each with its top-10 tool profile beneath the bar
   if(roles&&roles.length){
     html+='<div style="margin-top:.5rem;font-size:.7rem;font-weight:600;color:var(--pri)">Most Requested Roles <span style="font-weight:400;color:var(--g5)">— with each role\u2019s top technologies; <span style="color:#B45309;font-weight:700">amber</span> = distinctive to that role vs the overall market</span></div>';
@@ -5649,11 +5649,17 @@ function renderSkillsInsight(certs,tools,skills,roles,roleTools){
       var expLabel=(r.avgExp&&r.avgExp>0)?' <span style="color:#D97706;font-weight:700">· ~'+Math.round(r.avgExp)+'y exp</span>':'';
       html+='<div class="dash-insight-row"><span class="dash-insight-label">'+(r._id||'Unknown').slice(0,35)+'</span><div class="dash-insight-bar" style="width:'+pct+'%;background:'+PIE_COLORS[0]+'"></div><span class="dash-insight-pct">'+r.count+' jobs'+expLabel+'</span></div>';
       var rt=rtMap[r._id];
-      if(rt&&rt.length){
-        html+='<div style="margin:.05rem 0 .35rem .4rem;line-height:1.9">'+rt.map(function(x){
+      var chipRow=function(items,label){
+        if(!items||!items.length)return '';
+        return '<div style="margin:.05rem 0 .15rem .4rem;line-height:1.9"><span style="font-size:.5rem;color:var(--g4);font-weight:700;margin-right:.25rem;text-transform:uppercase;letter-spacing:.4px">'+label+'</span>'+items.map(function(x){
           var st=x.d?'background:#FEF3C7;color:#B45309;border:1px solid #FDE68A;font-weight:700':'background:var(--g50);color:var(--g5);border:1px solid var(--g100)';
           return '<span title="'+x.c+' job'+(x.c===1?'':'s')+' for this role'+(x.d?' — distinctive to this role':'')+'" style="display:inline-block;font-size:.55rem;padding:.05rem .35rem;border-radius:3px;margin-right:.22rem;'+st+'">'+esc(x.t)+'</span>';
         }).join('')+'</div>';
+      };
+      if(rt){
+        html+=chipRow(rt.tools,'Tools');
+        html+=chipRow(rt.skills,'Skills');   // #449: top-5 skills per role
+        if((rt.tools&&rt.tools.length)||(rt.skills&&rt.skills.length))html+='<div style="height:.2rem"></div>';
       }
     });
   }
