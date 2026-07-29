@@ -853,7 +853,21 @@ exports.handler = async function (event) {
 
       var page = body.page || 0;
       // Pull cached profiles that haven't been scored for this job yet, plus already-scored ones
-      var cached = await cacheCol.find({}).limit(400).toArray();
+      var cached = await cacheCol.find({}).limit(600).toArray();
+      // Same-country profiles score FIRST. Without this, batch scoring walks the cache in
+      // insertion order (mostly US fetches), so an in-country consultant for a Canada/UK
+      // job can sit unevaluated behind hundreds of cross-country profiles that the
+      // location penalty caps below the threshold anyway.
+      try {
+        var mcJobCountry = canonCountry(req.country || '');
+        if (mcJobCountry) {
+          cached.sort(function (a, b) {
+            var ac = profileCountry(a) === mcJobCountry ? 0 : 1;
+            var bc = profileCountry(b) === mcJobCountry ? 0 : 1;
+            return ac - bc;
+          });
+        }
+      } catch (e) { /* ordering is an optimization; never fail the match */ }
       if (!cached.length) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ matches: [], page: page, hasMore: false, cachedCount: 0, needsTopUp: true }) };
       }
