@@ -695,9 +695,16 @@ function locationFit(req, profile) {
 const DEFAULT_SOURCING = {
   variants: [
     { suffix: 'Consultant', limit: 35 },
-    { suffix: 'Contractor', limit: 15 }
+    { suffix: 'Contractor', limit: 15 },
+    // Contract-intent variants: surface people already signalling independent/contract
+    // work — the population the bench converts fastest. Modest limits control cost.
+    { suffix: 'Freelance', limit: 10 },
+    { suffix: 'Independent Consultant', limit: 10 }
   ]
 };
+
+// Signals that a profile is contract-oriented (headline/summary/about text).
+const CONTRACT_INTENT_RE = /freelanc|independent\s+consultant|contract(?:or|ing)?|open\s+to\s+(?:contract|work)|c2c|corp[\s-]*to[\s-]*corp|immediate\s+joiner|available\s+for\s+(?:projects|consulting)|hire\s+me/i;
 
 async function getSourcingConfig(db) {
   try {
@@ -1065,6 +1072,17 @@ exports.handler = async function (event) {
               if (!p.name && !p.headline) { rejectedJunk++; return false; }
               return true;
             });
+            // Contract-intent tagging: mark profiles whose headline/summary signal
+            // contract readiness, and hint engagementType so the existing Contractor
+            // filter in the Consultants tab surfaces them. Never overrides a value a
+            // user has already set.
+            norm.forEach(function (p) {
+              var blob = ((p.headline || '') + ' ' + (p.summary || '') + ' ' + (p.about || ''));
+              if (CONTRACT_INTENT_RE.test(blob)) {
+                p.contractSignal = true;
+                if (!p.engagementType || p.engagementType === 'Unknown') p.engagementType = 'Contractor';
+              }
+            });
             // Country gate: the actor's location filter is unreliable, so enforce it here.
             // A run tagged with an expected country only admits profiles that resolve to it.
             var wantCountry = canonCountry(runList[rj].country || '');
@@ -1092,6 +1110,7 @@ exports.handler = async function (event) {
               update: {
                 $set: {
                   name: np.name, headline: np.headline, location: np.location, industry: np.industry,
+                  contractSignal: np.contractSignal || false,
                   linkedinUrl: np.linkedinUrl, profilePicture: np.profilePicture,
                   skills: np.skills, certifications: np.certifications, currentRole: np.currentRole,
                   currentCompany: np.currentCompany, yearsExperience: np.yearsExperience,
@@ -1101,7 +1120,7 @@ exports.handler = async function (event) {
                   availability: np.availability, rateExpectation: np.rateExpectation,
                   source: np.source, sourceId: np.sourceId, fetchedAt: np.fetchedAt
                 },
-                $setOnInsert: { createdAt: new Date(), matchCache: {} }
+                $setOnInsert: { createdAt: new Date(), matchCache: {}, engagementType: np.engagementType || 'Unknown' }
               },
               upsert: true
             }

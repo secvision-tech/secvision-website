@@ -4155,7 +4155,7 @@ function renderConsultants(){
     if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
     h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
       +'<td style="padding:.4rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+rowNum+'</td>'
-      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+matchJobsBadge(c)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
+      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+matchJobsBadge(c)+(c.contractSignal?' <span title="Profile signals contract/freelance intent" style="font-size:.5rem;background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;padding:.02rem .25rem;border-radius:3px;font-weight:700">⚡C2C</span>':'')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
       +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
