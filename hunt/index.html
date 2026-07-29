@@ -4269,6 +4269,7 @@ function runMatchJobs(page){
     action:'matchJobs',consultantId:cid,period:period,page:page,evalCap:mjState.evalCap
   })}).then(function(r){return r.json()}).then(function(d){
     if(btn){btn.disabled=false;btn.style.opacity='1'}
+    if(d&&typeof d.evaluated==='number'&&d.evaluated>(mjState.evalCap||0)){mjState.evalCap=d.evaluated}  // sync cap with server
     if(d.error){st.innerHTML='⚠️ '+esc(d.error);return}
     if(d.moreToScore){
       st.textContent='⏳ Scoring jobs... ('+(d.totalMatches||0)+' matches so far)';
@@ -4966,6 +4967,10 @@ async function runMatch(page){
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50})});
     var d=await safeMatchJson(r);
+    // Sync the cap with the server's evaluated count — otherwise reopening the popup resets
+    // the local counter and Score-more clicks send caps below what's already evaluated,
+    // scoring nothing (dead clicks).
+    if(d&&typeof d.evaluated==='number'&&d.evaluated>(matchState.evalCap||0)){matchState.evalCap=d.evaluated}
     if(d.error){
       // Scoring timeouts are transient — each pass saves progress, so auto-retry a few times
       if(/timed out|too long|gateway/i.test(d.error)&&(matchState._retries||0)<6){
