@@ -329,13 +329,13 @@ function extractContractDuration(desc) {
   var d = (desc || '');
   var patterns = [
     // Range patterns FIRST (before single-number patterns)
-    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)/i,
-    /\b(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|initial|assignment)/i,
+    /\b(?:duration|length|term|period)\s*(?:[\-–—:]\s*)?(\d+)\s*(?:[\-–—]|to)\s*(\d+)\s*(?:months?|mos?)/i,
+    /\b(\d+)\s*(?:[\-–—]|to)\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|initial|assignment)/i,
     // Single-number patterns ([\s-]* allows "12-month")
     /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)(?:\s*(?:initial|rolling|extendable|minimum|\+\s*extension))?/i,
     /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:contract|engagement|assignment|initial|rolling|duration)/i,
     /\b(?:initial\s*)?(?:contract|engagement)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
-    /\b(?:contract|engagement)\s*\(\s*(\d+)[\s-]*(?:months?|mos?)(?:\s*(?:with|plus|renewable|extendable|potential)[\w\s]*)?\s*\)/i,
+    /\b(?:contract|engagement)(?:\s+\w+){0,2}\s*\(\s*(\d+)[\s-]*(?:months?|mos?)(?:\s*(?:with|plus|renewable|extendable|potential)[\w\s]*)?\s*\)/i,
     /\b(?:contract[\s-]*to[\s-]*hire|c2h|temp[\s-]*to[\s-]*perm)\s*(?:after\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
     /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:\+\s*(?:\d+\s*)?(?:months?|extension))/i,
     /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:weeks?)/i,

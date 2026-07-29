@@ -1827,13 +1827,43 @@ exports.handler = async (event) => {
     }
 
     if (action === 'reExtract') {
-      var allJobs = await col.find({}).project({ _id: 1, title: 1, titleClean: 1, description: 1, jobType: 1, jobTypeUpdatedAt: 1, remote: 1, tools: 1, compliance: 1, certifications: 1, experience: 1, salary: 1 }).toArray();
+      var allJobs = await col.find({}).project({ _id: 1, title: 1, titleClean: 1, description: 1, jobType: 1, jobTypeUpdatedAt: 1, remote: 1, tools: 1, compliance: 1, certifications: 1, experience: 1, salary: 1, contractDuration: 1 }).toArray();
       var TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|365))?|Microsoft\s*Sentinel|Azure\s*Sentinel|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM|Stack)|Chronicle|Google\s*Chronicle|Tenable|Qualys|Nessus|Rapid7|InsightVM|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|XSOAR|Phantom|Swimlane|KQL|SPL|YARA|Sigma|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|NetWitness|ArcSight|AWS|Amazon\s*Web\s*Services|GuardDuty|AWS\s*(?:Security\s*Hub|CloudTrail|WAF|Shield|Inspector|Config|Macie)|GCP|Google\s*Cloud(?:\s*Platform)?|Security\s*Command\s*Center|Cloud\s*Armor|Prisma\s*Cloud|Wiz|Lacework|Orca\s*Security|Snyk|Aqua\s*Security|HashiCorp\s*Vault|Terraform|Ansible|Kubernetes|Docker|Jenkins|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|CWPP|CNAPP|IAM|PAM|MFA|SSO|UEBA|TCP\/IP|DNS|VPN|IPSec|SAST|DAST|CI\/CD|DevSecOps/gi;
       var COMP_RE = /SOC\s*2|SOC2|ISO\s*27001|ISO\s*27002|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*(?:SP\s*)?800-37|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|CIS\s*Benchmarks|MITRE\s*ATT&CK|Zero\s*Trust|COSO|ITAR|NERC\s*CIP|FERPA|GLBA|DFARS|ISMS|ISO\s*22301|CSA\s*STAR|cyber\s*kill\s*chain|OWASP\s*Top\s*10|STRIDE|DREAD|FAIR|OCTAVE|ISO\s*31000|NIST\s*RMF|STIX[\s\/]*TAXII|\bNIST\b/gi;
+      // #454: canonical casing for stored values — without this, matches are stored
+      // exactly as the JD wrote them ('zero trust' stays lowercase forever).
+      var STORE_CASE = { 'zero trust': 'Zero Trust', 'mitre att&ck': 'MITRE ATT&CK', 'cyber kill chain': 'Cyber Kill Chain', 'soc2': 'SOC 2', 'nist csf': 'NIST CSF', 'nist rmf': 'NIST RMF', 'pci dss': 'PCI-DSS', 'owasp top 10': 'OWASP Top 10' };
       function uniqueMatch(text, re) {
         if (!text) return [];
         var m = text.match(re) || [], seen = {};
-        return m.filter(function(v) { var k = v.toLowerCase().trim(); if (seen[k]) return false; seen[k] = true; return true; }).slice(0, 12);
+        return m.filter(function(v) { var k = v.toLowerCase().trim(); if (seen[k]) return false; seen[k] = true; return true; })
+          .map(function(v) { return STORE_CASE[v.toLowerCase().trim()] || v; }).slice(0, 12);
+      }
+      // #452/#453: reExtract must also backfill contract durations — jobs scanned before
+      // the duration extractor existed have none, and nothing else ever fills them.
+      function extractCD(desc) {
+        var d = (desc || '');
+        var pats = [
+          new RegExp('\\b(?:duration|length|term|period)\\s*(?:[\\-\u2013\u2014:]\\s*)?(\\d+)\\s*(?:[\\-\u2013\u2014]|to)\\s*(\\d+)\\s*(?:months?|mos?)', 'i'),
+          new RegExp('\\b(\\d+)\\s*(?:[\\-\u2013\u2014]|to)\\s*(\\d+)\\s*(?:months?|mos?)\\s*(?:contract|engagement|initial|assignment)', 'i'),
+          new RegExp('\\b(?:duration|length|term|period)\\s*(?:[\\-\u2013:]\\s*)?(\\d+)[\\s-]*(?:months?|mos?)', 'i'),
+          new RegExp('\\b(\\d+)[\\s-]*(?:months?|mos?)\\s*(?:contract|engagement|assignment|initial|rolling|duration)', 'i'),
+          new RegExp('\\b(?:initial\\s*)?(?:contract|engagement)(?:\\s+\\w+){0,2}\\s*(?:[\\-\u2013:(]\\s*)?(\\d+)[\\s-]*(?:months?|mos?)', 'i'),
+          new RegExp('\\b(\\d+)[\\s-]*(?:year|yr)s?\\s*(?:\\w+\\s+){0,2}?(?:contract|engagement|assignment|role|position)', 'i')
+        ];
+        for (var i = 0; i < pats.length; i++) {
+          var m = d.match(pats[i]);
+          if (!m) continue;
+          if (m[2] && i <= 1) {
+            var r1 = parseInt(m[1]), r2 = parseInt(m[2]);
+            if (r1 >= 1 && r1 <= 36 && r2 <= 36 && r2 > r1) return r1 + '-' + r2 + ' months';
+            continue;
+          }
+          var n = parseInt(m[1]);
+          if (i === 5) { if (n >= 1 && n <= 5) return n === 1 ? '1 year' : n + ' years'; continue; }
+          if (n >= 1 && n <= 36) return n + ' months';
+        }
+        return '';
       }
       var updated = 0, ops = [];
       allJobs.forEach(function(j) {
@@ -1865,6 +1895,10 @@ exports.handler = async (event) => {
         else if (/\bintern(?:ship)?\b/i.test(t)) newType = 'Internship';
         // Only update if not manually edited (no jobTypeUpdatedAt) or still default
         if (!j.jobTypeUpdatedAt && j.jobType !== newType) changes.jobType = newType;
+
+        // #452/#453: backfill/refresh contract duration (never clears an existing value)
+        var cd = extractCD(d);
+        if (cd && cd !== j.contractDuration) changes.contractDuration = cd;
 
         // Re-detect remote (always re-evaluate)
         var newRemote = 'No';

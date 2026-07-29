@@ -419,7 +419,7 @@ exports.handler = async function(event) {
 
       function uniqueMatch(text, re) {
         if (!text) return [];
-        var NORM = {'siem':'SIEM','soar':'SOAR','edr':'EDR','xdr':'XDR','ndr':'NDR','ids/ips':'IDS/IPS','dlp':'DLP','waf':'WAF','casb':'CASB','cspm':'CSPM','cwpp':'CWPP','cnapp':'CNAPP','iam':'IAM','pam':'PAM','mfa':'MFA','sso':'SSO','ueba':'UEBA','tcp/ip':'TCP/IP','dns':'DNS','vpn':'VPN','ipsec':'IPSec','sast':'SAST','dast':'DAST','ci/cd':'CI/CD','devsecops':'DevSecOps','spl':'SPL','kql':'KQL','yara':'YARA','aws':'AWS','gcp':'GCP','azure':'Azure','python':'Python','bash':'Bash','powershell':'PowerShell','golang':'Golang','splunk':'Splunk','crowdstrike':'CrowdStrike','sentinelone':'SentinelOne','microsoft sentinel':'Microsoft Sentinel','microsoft defender':'Microsoft Defender'};
+        var NORM = {'siem':'SIEM','soar':'SOAR','edr':'EDR','xdr':'XDR','ndr':'NDR','ids/ips':'IDS/IPS','dlp':'DLP','waf':'WAF','casb':'CASB','cspm':'CSPM','cwpp':'CWPP','cnapp':'CNAPP','iam':'IAM','pam':'PAM','mfa':'MFA','sso':'SSO','ueba':'UEBA','tcp/ip':'TCP/IP','dns':'DNS','vpn':'VPN','ipsec':'IPSec','sast':'SAST','dast':'DAST','ci/cd':'CI/CD','devsecops':'DevSecOps','spl':'SPL','kql':'KQL','yara':'YARA','aws':'AWS','gcp':'GCP','azure':'Azure','python':'Python','bash':'Bash','powershell':'PowerShell','golang':'Golang','splunk':'Splunk','crowdstrike':'CrowdStrike','sentinelone':'SentinelOne','microsoft sentinel':'Microsoft Sentinel','microsoft defender':'Microsoft Defender','zero trust':'Zero Trust','mitre att&ck':'MITRE ATT&CK','cyber kill chain':'Cyber Kill Chain','rbac':'RBAC','grc':'GRC','osint':'OSINT'};
         var m = text.match(re) || [], seen = {};
         return m.filter(function(v) { var k = v.toLowerCase().trim(); if (seen[k]) return false; seen[k] = true; return true; }).map(function(v) {
           var k = v.toLowerCase().trim(); return NORM[k] || v;
@@ -654,13 +654,13 @@ function extractContractDuration(desc) {
   var d = String(desc || '');
   var patterns = [
     // Ranges first, so "6-12 months" doesn't match as just "6 months"
-    /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)/i,
-    /\b(\d+)\s*[\-–]\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|initial|assignment)/i,
+    /\b(?:duration|length|term|period)\s*(?:[\-–—:]\s*)?(\d+)\s*(?:[\-–—]|to)\s*(\d+)\s*(?:months?|mos?)/i,
+    /\b(\d+)\s*(?:[\-–—]|to)\s*(\d+)\s*(?:months?|mos?)\s*(?:contract|engagement|initial|assignment)/i,
     // Single values — covers "Contract Length: 18 Months", "Duration - 12 months"
     /\b(?:contract\s*)?(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
     /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:contract|engagement|assignment|initial|rolling|duration)/i,
     /\b(?:initial\s*)?(?:contract|engagement)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
-    /\b(?:contract|engagement)\s*\(\s*(\d+)[\s-]*(?:months?|mos?)[^)]*\)/i,
+    /\b(?:contract|engagement)(?:\s+\w+){0,2}\s*\(\s*(\d+)[\s-]*(?:months?|mos?)[^)]*\)/i,
     /\b(?:contract[\s-]*to[\s-]*hire|c2h|temp[\s-]*to[\s-]*perm)\s*(?:after\s*)?(\d+)[\s-]*(?:months?|mos?)/i,
     /\b(\d+)[\s-]*(?:months?|mos?)\s*(?:\+\s*(?:\d+\s*)?(?:months?|extension))/i,
     /\b(?:duration|length|term|period)\s*(?:[\-–:]\s*)?(\d+)[\s-]*(?:weeks?)/i,
