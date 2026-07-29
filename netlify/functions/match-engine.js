@@ -900,7 +900,7 @@ exports.handler = async function (event) {
       //   2. Enough matches — once we have (page+1)*PAGE_SIZE matches, the current page is
       //      full, so stop. Further scoring happens only when the user asks (Next / Fetch More).
       // Both are overridable per-request so "Next" can push further into the cache.
-      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 200);
+      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 600);  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
       var NEED_MATCHES = (page + 1) * PAGE_SIZE;
 
       var SCORE_CAP = 8;
@@ -1304,7 +1304,7 @@ exports.handler = async function (event) {
 
       var page = parseInt(body.page) || 0;
       var PAGE = 10;
-      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 200);
+      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 600);  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
       var NEED = (page + 1) * PAGE;
       var SCORE_CAP = 8;
 
