@@ -239,21 +239,36 @@ function normalizeLocationToEnglish(loc) {
   return dedup.join(', ');
 }
 
-function normalizeApifyProfile(p) {
-  var exp = Array.isArray(p.experience) ? p.experience : [];
-  // #459: total experience. The old version summed each position's "N yr" — overlapping
-  // roles double-counted, "8 mos" counted as zero, and date-range-only entries counted
-  // as zero. Now: parse each position's date range, merge overlapping intervals, and sum
-  // the merged span (months included). Falls back to yr+mo sums when no dates parse.
+// #459: total experience from a position list. Parses each position's date range,
+// merges overlapping intervals (concurrent roles don't double-count), sums the merged
+// span with months included; falls back to "N yrs M mos" sums when no dates parse.
+// Handles "Jan 2019 - Present", "Jan 2015 - Mar 2020", bare "2015 - 2020", and
+// structured {startDate:{year,month},endDate:{...}} entries.
+function computeYearsFromExperience(exp) {
   var MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
   var intervals = [], fallbackMonths = 0;
-  exp.forEach(function (e) {
+  (Array.isArray(exp) ? exp : []).forEach(function (e) {
+    // structured dates from some actors
+    var sd = e.startDate || e.starts_at, ed = e.endDate || e.ends_at;
+    if (sd && (sd.year || typeof sd === 'number')) {
+      var sy = sd.year || sd, sm = (sd.month ? sd.month - 1 : 0);
+      var start0 = new Date(parseInt(sy), sm, 1);
+      var end0 = (ed && (ed.year || typeof ed === 'number')) ? new Date(parseInt(ed.year || ed), (ed.month ? ed.month - 1 : 11), 1) : new Date();
+      if (end0 > start0) { intervals.push([start0.getTime(), end0.getTime()]); return; }
+    }
     var txt = (e.duration || '') + ' ' + (e.dateRange || e.dates || '');
     var r = txt.match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{4})\s*[-\u2013\u2014]\s*(?:(Present|Current|Now)|([A-Za-z]{3})[a-z]*\.?\s+(\d{4}))/i);
     if (r && MONTHS[r[1].toLowerCase()] !== undefined) {
       var start = new Date(parseInt(r[2]), MONTHS[r[1].toLowerCase()], 1);
       var end = r[3] ? new Date() : (r[4] && MONTHS[r[4].toLowerCase()] !== undefined ? new Date(parseInt(r[5]), MONTHS[r[4].toLowerCase()], 1) : null);
       if (end && end > start) { intervals.push([start.getTime(), end.getTime()]); return; }
+    }
+    // bare year range: "2015 - 2020" / "2019 - Present"
+    var ry = txt.match(/\b(19|20)(\d{2})\s*[-\u2013\u2014]\s*(?:(Present|Current|Now)|(19|20)(\d{2}))\b/i);
+    if (ry) {
+      var ys = parseInt(ry[1] + ry[2], 10);
+      var ye = ry[3] ? new Date().getFullYear() : parseInt(ry[4] + ry[5], 10);
+      if (ye >= ys) { intervals.push([new Date(ys, 0, 1).getTime(), new Date(ye, 11, 1).getTime()]); return; }
     }
     var ym = txt.match(/(\d+)\s*yrs?/i), mm = txt.match(/(\d+)\s*mos?/i);
     fallbackMonths += (ym ? parseInt(ym[1]) * 12 : 0) + (mm ? parseInt(mm[1]) : 0);
@@ -271,7 +286,12 @@ function normalizeApifyProfile(p) {
   } else {
     totalYears = fallbackMonths / 12;
   }
-  totalYears = Math.round(totalYears);
+  return Math.round(totalYears);
+}
+
+function normalizeApifyProfile(p) {
+  var exp = Array.isArray(p.experience) ? p.experience : [];
+  var totalYears = computeYearsFromExperience(exp);
   var certs = (Array.isArray(p.certifications) ? p.certifications : [])
     .map(function (c) { return (typeof c === 'string') ? c : (c.name || ''); }).filter(Boolean);
   // Fallback: if actor didn't return a certifications field, scan about/headline/experience text
@@ -872,6 +892,26 @@ exports.handler = async function (event) {
     }
 
     // ---- ACTION: matchCached — score already-cached profiles for this job ----
+    if (action === 'recalcExperience') {
+      // #459 backfill: recompute yearsExperience for every stored consultant from their
+      // saved position history — no re-fetch needed. Pure CPU + one bulk write.
+      var reDocs = await cacheCol.find({ experience: { $exists: true, $type: 'array', $ne: [] } })
+        .project({ experience: 1, yearsExperience: 1 }).toArray();
+      var reOps = [], unchanged = 0;
+      reDocs.forEach(function (dc) {
+        var ny = computeYearsFromExperience(dc.experience);
+        if (ny > 0 && ny !== dc.yearsExperience) {
+          reOps.push({ updateOne: { filter: { _id: dc._id }, update: { $set: { yearsExperience: ny } } } });
+        } else { unchanged++; }
+      });
+      if (reOps.length) await cacheCol.bulkWrite(reOps, { ordered: false });
+      var totalDocs = await cacheCol.countDocuments({});
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+        checked: reDocs.length, updated: reOps.length, unchanged: unchanged,
+        noData: totalDocs - reDocs.length
+      }) };
+    }
+
     if (action === 'matchCached') {
       var req = await getReq(body.jobId);
       if (!req) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
