@@ -1793,7 +1793,10 @@ async function viewDet(i){
       }}
     }catch(e){console.error('Failed to fetch details:',e)}
   }
-  document.getElementById('detTitle').innerHTML=esc(j.titleClean||j.title)+(j.contractDuration?' <span title="Contract duration" style="font-size:.6rem;background:#EEF6FF;color:#1D4ED8;border:1px solid #BFDBFE;padding:.1rem .4rem;border-radius:4px;font-weight:700;vertical-align:middle">⏱ '+esc(j.contractDuration)+'</span>':'');
+  var _tNorm=(j.titleClean||j.title||'').toLowerCase().replace(/[^0-9a-z]/g,'');
+  var _dNorm=(j.contractDuration||'').toLowerCase().replace(/[^0-9a-z]/g,'');
+  var _showDur=j.contractDuration&&_dNorm&&_tNorm.indexOf(_dNorm)===-1;   // #463: title already says it
+  document.getElementById('detTitle').innerHTML=esc(j.titleClean||j.title)+(_showDur?' <span title="Contract duration" style="font-size:.6rem;background:#EEF6FF;color:#1D4ED8;border:1px solid #BFDBFE;padding:.1rem .4rem;border-radius:4px;font-weight:700;vertical-align:middle">⏱ '+esc(j.contractDuration)+'</span>':'');
   var desc=j.description||'No description available.';
   var quals=Array.isArray(j.qualifications)?j.qualifications:[];
   var resps=Array.isArray(j.responsibilities)?j.responsibilities:[];
@@ -5002,6 +5005,7 @@ async function safeMatchJson(r){
 
 async function runMatch(page,navOnly){
   matchState.page=page;
+  if(page===0&&!navOnly)_matchRenderSig='';   // #464: fresh open must render even if results are identical
   matchState._navOnly=!!navOnly;   // #456: pure navigation — never score
   if(page===0)mjResetScoredFeed();   // #432: fresh run clears the live feed
   var st=document.getElementById('matchStatus');
@@ -5141,7 +5145,7 @@ function renderMatches(d){
   if(!d.matches||!d.matches.length){el.innerHTML='<div style="font-size:.7rem;color:var(--g5);padding:1rem;text-align:center">No consultants scored ≥60% for this role yet. Try "Fetch More from LinkedIn".</div>';document.getElementById('matchPager').style.display='none';_matchRenderSig='';return}
   // #438: identical data -> no rebuild. Rebuilding the same table on every poll tick made
   // the popup flash and lose scroll position.
-  var sig=d.page+':'+d.matches.map(function(m){return (m.sourceId||m.name||'')+m.overall}).join('|')+':'+(d.hasMore?1:0);
+  var sig=(matchState.jobId||'')+':'+d.page+':'+d.matches.map(function(m){return (m.sourceId||m.name||'')+m.overall}).join('|')+':'+(d.hasMore?1:0);
   if(sig===_matchRenderSig)return;
   _matchRenderSig=sig;
   var h='';
