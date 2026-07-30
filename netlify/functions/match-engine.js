@@ -1653,7 +1653,11 @@ exports.handler = async function (event) {
 function formatMatch(m) {
   return {
     sourceId: m.profile.sourceId,
-    managed: !!m.profile.managed,   // your bench vs scraped prospect — UI badges these
+    managed: !!m.profile.managed,
+    // #461: availability signals — the UI flags people you cannot place right now
+    availability: m.profile.availability || '',
+    pipelineStatus: m.profile.pipelineStatus || '',
+    engagementType: m.profile.engagementType || '',
     name: m.profile.name,
     headline: m.profile.headline,
     location: m.profile.location,

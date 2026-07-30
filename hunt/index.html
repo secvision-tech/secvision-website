@@ -473,7 +473,7 @@ body.role-viewer .edit-btn{display:none!important}
   <div class="footer">&copy; 2025 - 2026 SecVision Technologies, LLP. All Rights Reserved.</div>
 </div>
 <div class="do" id="detailOverlay" onclick="if(event.target===this)closeDet()">
-  <div class="dm"><div class="dm-h"><h3 id="detTitle">Details</h3><button class="dm-close" onclick="closeDet()">&times;</button></div><div class="dm-body" id="detBody"></div></div>
+  <div class="dm"><div class="dm-h"><button onclick="detNav(-1)" id="detPrevBtn" title="Previous job" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin-right:.4rem">‹</button><h3 id="detTitle">Details</h3><button onclick="detNav(1)" id="detNextBtn" title="Next job" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin:0 .4rem">›</button><button class="dm-close" onclick="closeDet()">&times;</button></div><div class="dm-body" id="detBody"></div></div>
 </div>
 <script>
 var msalConfig={auth:{clientId:'dc517c46-dcf0-4d38-80e0-3cda854a5d59',authority:'https://login.microsoftonline.com/06f8ce50-3995-4966-9e25-7cfd7cd94a81',redirectUri:location.origin+'/hunt/',postLogoutRedirectUri:location.origin+'/hunt/'},cache:{cacheLocation:'sessionStorage'}};
@@ -1761,10 +1761,22 @@ async function safeApiFetch(url,opts){
     throw new Error('Invalid response: '+txt.slice(0,100));
   }
 }
+// #461: what matters in match results is availability — flag people you CANNOT place.
+function availBadge(m){
+  var av=(m.availability||'').toLowerCase();
+  if(m.pipelineStatus==='placed'||av==='placed')return ' <span title="Currently placed — not available" style="font-size:.5rem;background:#FEE2E2;color:#B91C1C;padding:.05rem .3rem;border-radius:3px;font-weight:700">💼 PLACED</span>';
+  if(av&&av!=='available')return ' <span title="Availability: '+esc(av)+'" style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:700">⏸ '+esc(av.toUpperCase())+'</span>';
+  if(m.engagementType==='Permanent')return ' <span title="Permanent employee — not open to contract placement" style="font-size:.5rem;background:var(--g50);color:var(--g5);padding:.05rem .3rem;border-radius:3px;font-weight:700">🏢 PERMANENT</span>';
+  return '';
+}
+function detNav(d){var n=currentViewIdx+d;if(n>=0&&n<allJobs.length)viewDet(n)}   // #460
 async function viewDet(i){
   mjFromConsultant=!!_mjPending;_mjPending=false;  // #418: one-shot; normal opens default to false
   currentViewIdx=i;
   var j=allJobs[i];if(!j)return;
+  var pb=document.getElementById('detPrevBtn'),nb=document.getElementById('detNextBtn');
+  if(pb)pb.style.visibility=i>0?'visible':'hidden';
+  if(nb)nb.style.visibility=i<allJobs.length-1?'visible':'hidden';
   // If description missing (DB search excludes it), fetch full record
   if(!j.description&&(j._id||j.jobId)){
     try{
@@ -4195,6 +4207,12 @@ function consGoPage(p){var tp=Math.ceil(consultantsData.length/consPerPage);if(p
 function consRowClick(e,el){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.closest('a')||e.target.closest('button'))return;el.classList.toggle('row-hl')}
 // ---- Manage Profile popup ----
 var manageProfileId=null,manageProfileData=null,_pendingMpMsg=null,_refreshCandidatesOnClose=false;
+function mpNav(d){   // #462: browse consultants in list order from inside the popup
+  var i=consultantsData.findIndex(function(x){return String(x._id)===String(window._mpCurId)});
+  var n=i+d;
+  if(i<0||n<0||n>=consultantsData.length)return;
+  openManageProfile(String(consultantsData[n]._id));
+}
 async function editConsYears(id,cur){
   var v=prompt('Years of experience (e.g. 6.8). Manually set values are never overwritten by Recalc:',cur);
   if(v===null)return;
@@ -4207,7 +4225,7 @@ async function editConsYears(id,cur){
     openManageProfile(id);   // re-render with the corrected value
   }catch(e){alert(e.message)}
 }
-async function openManageProfile(id){
+async function openManageProfile(id){window._mpCurId=id;(function(){var i=consultantsData.findIndex(function(x){return String(x._id)===String(id)});setTimeout(function(){var p=document.getElementById('mpPrevBtn'),nx=document.getElementById('mpNextBtn');if(p)p.style.visibility=i>0?'visible':'hidden';if(nx)nx.style.visibility=(i>=0&&i<consultantsData.length-1)?'visible':'hidden'},60)})();
   manageProfileId=id;
   // if not opened via the job candidates table, there's no job context or candidate navigation
   if(!_refreshCandidatesOnClose){_matchJobContext=null;_candidateNavIdx=-1}
@@ -4251,7 +4269,7 @@ function manageProfileHtml(){
   return '<div id="manageProfilePopup" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,.85);z-index:1200;justify-content:center;align-items:center">'
     +'<div style="background:#fff;border-radius:8px;width:96%;max-width:640px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;gap:.5rem">'
-    +'<h3 id="mpTitle" style="margin:0;font-size:.85rem;color:var(--pri);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Manage Profile</h3>'
+    +'<button onclick="mpNav(-1)" id="mpPrevBtn" title="Previous consultant" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin-right:.4rem">‹</button><h3 id="mpTitle" style="margin:0;font-size:.85rem;color:var(--pri);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Manage Profile</h3><button onclick="mpNav(1)" id="mpNextBtn" title="Next consultant" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin:0 .4rem">›</button>'
     +'<div id="mpNav" style="display:none;align-items:center;gap:.3rem;white-space:nowrap">'
     +'<button id="mpPrevBtn" onclick="candidateNavGo(-1)" style="padding:.2rem .5rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">‹ Prev</button>'
     +'<span id="mpNavInfo" style="font-size:.55rem;color:var(--g5)"></span>'
@@ -5305,7 +5323,7 @@ function matchCard(m,rank){
   var cardId='mc'+rank;
   return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
-    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+(m.managed?' <span title="Your managed consultant (bench)" style="font-size:.5rem;background:#EDE9FE;color:#6C3FBF;padding:.05rem .3rem;border-radius:3px;font-weight:700">🎯 BENCH</span>':'')+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
+    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+availBadge(m)+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
     +'<div style="font-size:.6rem;color:var(--g5)">'+esc(m.headline||m.currentRole||'')+'</div>'
     +'<div style="font-size:.55rem;color:var(--g4)">'+esc(m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
     +'<div style="text-align:center;flex-shrink:0"><div style="font-size:1.3rem;font-weight:800;color:'+col+';line-height:1">'+m.overall+'%</div><div style="font-size:.5rem;color:var(--g4)">match</div></div>'
