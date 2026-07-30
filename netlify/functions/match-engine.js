@@ -241,12 +241,37 @@ function normalizeLocationToEnglish(loc) {
 
 function normalizeApifyProfile(p) {
   var exp = Array.isArray(p.experience) ? p.experience : [];
-  // total years from experience durations (rough)
-  var totalYears = 0;
+  // #459: total experience. The old version summed each position's "N yr" — overlapping
+  // roles double-counted, "8 mos" counted as zero, and date-range-only entries counted
+  // as zero. Now: parse each position's date range, merge overlapping intervals, and sum
+  // the merged span (months included). Falls back to yr+mo sums when no dates parse.
+  var MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
+  var intervals = [], fallbackMonths = 0;
   exp.forEach(function (e) {
-    var m = (e.duration || '').match(/(\d+)\s*yr/);
-    if (m) totalYears += parseInt(m[1]);
+    var txt = (e.duration || '') + ' ' + (e.dateRange || e.dates || '');
+    var r = txt.match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{4})\s*[-\u2013\u2014]\s*(?:(Present|Current|Now)|([A-Za-z]{3})[a-z]*\.?\s+(\d{4}))/i);
+    if (r && MONTHS[r[1].toLowerCase()] !== undefined) {
+      var start = new Date(parseInt(r[2]), MONTHS[r[1].toLowerCase()], 1);
+      var end = r[3] ? new Date() : (r[4] && MONTHS[r[4].toLowerCase()] !== undefined ? new Date(parseInt(r[5]), MONTHS[r[4].toLowerCase()], 1) : null);
+      if (end && end > start) { intervals.push([start.getTime(), end.getTime()]); return; }
+    }
+    var ym = txt.match(/(\d+)\s*yrs?/i), mm = txt.match(/(\d+)\s*mos?/i);
+    fallbackMonths += (ym ? parseInt(ym[1]) * 12 : 0) + (mm ? parseInt(mm[1]) : 0);
   });
+  var totalYears = 0;
+  if (intervals.length) {
+    intervals.sort(function (a, b) { return a[0] - b[0]; });
+    var mergedMs = 0, curS = intervals[0][0], curE = intervals[0][1];
+    for (var ii = 1; ii < intervals.length; ii++) {
+      if (intervals[ii][0] <= curE) { curE = Math.max(curE, intervals[ii][1]); }
+      else { mergedMs += curE - curS; curS = intervals[ii][0]; curE = intervals[ii][1]; }
+    }
+    mergedMs += curE - curS;
+    totalYears = mergedMs / (365.25 * 24 * 3600 * 1000) + fallbackMonths / 12;
+  } else {
+    totalYears = fallbackMonths / 12;
+  }
+  totalYears = Math.round(totalYears);
   var certs = (Array.isArray(p.certifications) ? p.certifications : [])
     .map(function (c) { return (typeof c === 'string') ? c : (c.name || ''); }).filter(Boolean);
   // Fallback: if actor didn't return a certifications field, scan about/headline/experience text
@@ -911,6 +936,8 @@ exports.handler = async function (event) {
         }
       });
 
+      // #456: pure page navigation — return existing scores, never start scoring.
+      if (body.noScore) { toScore = []; }
       // Score the unscored ones — but CAP per request to stay under Netlify's 26s limit.
       // Score in small sub-batches, persisting each, so a timeout doesn't lose all progress.
       // #416: Don't grind through the entire cache. Two stopping rules:
