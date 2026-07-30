@@ -248,20 +248,34 @@ function computeYearsFromExperience(exp) {
   var MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, oct:9, nov:10, dec:11 };
   var intervals = [], fallbackMonths = 0;
   (Array.isArray(exp) ? exp : []).forEach(function (e) {
-    // structured dates from some actors
-    var sd = e.startDate || e.starts_at, ed = e.endDate || e.ends_at;
-    if (sd && (sd.year || typeof sd === 'number')) {
-      var sy = sd.year || sd, sm = (sd.month ? sd.month - 1 : 0);
-      var start0 = new Date(parseInt(sy), sm, 1);
-      var end0 = (ed && (ed.year || typeof ed === 'number')) ? new Date(parseInt(ed.year || ed), (ed.month ? ed.month - 1 : 11), 1) : new Date();
-      if (end0 > start0) { intervals.push([start0.getTime(), end0.getTime()]); return; }
+    // structured dates from some actors: {year,month} objects, ISO strings, or bare numbers
+    var sd = e.startDate || e.starts_at || e.start, ed = e.endDate || e.ends_at || e.end;
+    function toDate(v, isEnd) {
+      if (!v) return isEnd ? new Date() : null;
+      if (v.year) return new Date(parseInt(v.year), (v.month ? v.month - 1 : (isEnd ? 11 : 0)), 1);
+      if (typeof v === 'number') return new Date(v, isEnd ? 11 : 0, 1);
+      if (typeof v === 'string') { var d0 = new Date(v); if (!isNaN(d0.getTime())) return d0; }
+      return null;
+    }
+    if (sd) {
+      var start0 = toDate(sd, false), end0 = toDate(ed, true);
+      if (start0 && end0 && end0 > start0) { intervals.push([start0.getTime(), end0.getTime()]); return; }
     }
     var txt = (e.duration || '') + ' ' + (e.dateRange || e.dates || '');
     var r = txt.match(/([A-Za-z]{3})[a-z]*\.?\s+(\d{4})\s*[-\u2013\u2014]\s*(?:(Present|Current|Now)|([A-Za-z]{3})[a-z]*\.?\s+(\d{4}))/i);
     if (r && MONTHS[r[1].toLowerCase()] !== undefined) {
       var start = new Date(parseInt(r[2]), MONTHS[r[1].toLowerCase()], 1);
-      var end = r[3] ? new Date() : (r[4] && MONTHS[r[4].toLowerCase()] !== undefined ? new Date(parseInt(r[5]), MONTHS[r[4].toLowerCase()], 1) : null);
+      // LinkedIn counts months INCLUSIVELY (Jan-Mar = 3 mos), so the end month itself counts:
+      // use the first day of the FOLLOWING month as the interval end.
+      var end = r[3] ? new Date() : (r[4] && MONTHS[r[4].toLowerCase()] !== undefined ? new Date(parseInt(r[5]), MONTHS[r[4].toLowerCase()] + 1, 1) : null);
       if (end && end > start) { intervals.push([start.getTime(), end.getTime()]); return; }
+    }
+    // numeric ranges: 06/2019 - 03/2021, 06-2019 to 03-2021, 2019/06 variants
+    var rn = txt.match(/\b(\d{1,2})[\/\-](\d{4})\s*(?:[-\u2013\u2014]|to)\s*(?:(Present|Current|Now)|(\d{1,2})[\/\-](\d{4}))/i);
+    if (rn) {
+      var sN = new Date(parseInt(rn[2]), parseInt(rn[1]) - 1, 1);
+      var eN = rn[3] ? new Date() : new Date(parseInt(rn[5]), parseInt(rn[4]), 1);
+      if (eN > sN) { intervals.push([sN.getTime(), eN.getTime()]); return; }
     }
     // bare year range: "2015 - 2020" / "2019 - Present"
     var ry = txt.match(/\b(19|20)(\d{2})\s*[-\u2013\u2014]\s*(?:(Present|Current|Now)|(19|20)(\d{2}))\b/i);
@@ -286,7 +300,8 @@ function computeYearsFromExperience(exp) {
   } else {
     totalYears = fallbackMonths / 12;
   }
-  return Math.round(totalYears);
+  // one decimal — "6.8 yrs" keeps the months that integer rounding threw away
+  return Math.round(totalYears * 10) / 10;
 }
 
 function normalizeApifyProfile(p) {

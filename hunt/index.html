@@ -4473,7 +4473,7 @@ function renderManageProfile(){
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline));
   h+=fld('Company',esc(c.currentCompany));
-  h+=fld('Location',(c.location||c.country?'<a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a> ':'')+esc(c.location)+(c.country?' ('+esc(c.country)+')':''));
+  h+=fld('Location',esc(c.location)+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
   h+=fld('Experience',(c.yearsExperience||0)+' yrs');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual')));
   h+='</div>';
@@ -4816,7 +4816,7 @@ function addConsultantHtml(){
     +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx or PDF) — AI extraction</label><input type="file" id="acResume" accept=".docx,.pdf" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
     +acGroup('👤 Identity',f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')
       +'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Permanent</option><option>Unknown</option></select></div>')
-    +acGroup('📍 Location','<div style="display:flex;gap:.3rem;align-items:center"><a href="#" onclick="var v=document.getElementById(\'acLocation\').value;var cn=document.getElementById(\'acCountry\').value;if(v||cn)window.open(\'https://www.google.com/maps/search/?api=1&query=\'+encodeURIComponent((v?v+\', \':\'\')+cn),\'_blank\');return false" title="Open this location on Google Maps" style="text-decoration:none;font-size:.9rem">📍</a><div style="flex:1">'+f('acLocation','Location (city, state)')+'</div></div>'+f('acCountry','Country'))
+    +acGroup('📍 Location','<div style="display:flex;gap:.3rem;align-items:center"><div style="flex:1">'+f('acLocation','Location (city, state)')+'</div><a href="#" onclick="var v=document.getElementById(\'acLocation\').value;var cn=document.getElementById(\'acCountry\').value;if(v||cn)window.open(\'https://www.google.com/maps/search/?api=1&query=\'+encodeURIComponent((v?v+\', \':\'\')+cn),\'_blank\');return false" title="Open this location on Google Maps" style="text-decoration:none;font-size:.9rem">📍</a></div>'+f('acCountry','Country'))
     +acGroup('✉️ Contact',f('acEmail','Email','email')+f('acPhone','Phone')+f('acLinkedin','LinkedIn URL'))
     +acGroup('🛡️ Professional',f('acYears','Years Experience','number')
       +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Skills (comma-separated)</label><input id="acSkills" class="set-input" style="width:100%;font-size:.62rem"></div>'
