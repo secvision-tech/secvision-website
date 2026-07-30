@@ -4195,6 +4195,18 @@ function consGoPage(p){var tp=Math.ceil(consultantsData.length/consPerPage);if(p
 function consRowClick(e,el){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.closest('a')||e.target.closest('button'))return;el.classList.toggle('row-hl')}
 // ---- Manage Profile popup ----
 var manageProfileId=null,manageProfileData=null,_pendingMpMsg=null,_refreshCandidatesOnClose=false;
+async function editConsYears(id,cur){
+  var v=prompt('Years of experience (e.g. 6.8). Manually set values are never overwritten by Recalc:',cur);
+  if(v===null)return;
+  var n=parseFloat(v);
+  if(isNaN(n)||n<0||n>50){alert('Enter a number between 0 and 50');return}
+  try{
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{yearsExperience:Math.round(n*10)/10,yearsManual:true}})});
+    var d=await r.json();
+    if(d.error){alert(d.error);return}
+    openManageProfile(id);   // re-render with the corrected value
+  }catch(e){alert(e.message)}
+}
 async function openManageProfile(id){
   manageProfileId=id;
   // if not opened via the job candidates table, there's no job context or candidate navigation
@@ -4474,7 +4486,7 @@ function renderManageProfile(){
   h+=fld('Role',esc(c.currentRole||c.headline));
   h+=fld('Company',esc(c.currentCompany));
   h+=fld('Location',esc(c.location)+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
-  h+=fld('Experience',(c.yearsExperience||0)+' yrs');
+  h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.5rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual')));
   h+='</div>';
   // Stage 3: reverse matching — which open roles does this consultant fit?

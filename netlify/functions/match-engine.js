@@ -300,13 +300,21 @@ function computeYearsFromExperience(exp) {
   } else {
     totalYears = fallbackMonths / 12;
   }
-  // one decimal — "6.8 yrs" keeps the months that integer rounding threw away
-  return Math.round(totalYears * 10) / 10;
+  return Math.round(totalYears * 10) / 10;   // one decimal keeps the months
+}
+
+// Profiles state their own experience ("5+ years of hands-on experience"). When the
+// position history is mangled by the scraper (real roles shredded, durations lost),
+// the person's stated claim is a better floor than the broken math.
+function statedYears(textBlob) {
+  var m = (textBlob || '').match(/(\d{1,2})\s*\+?\s*years?(?:\s+of)?\s+(?:hands[- ]on\s+|professional\s+|industry\s+|work(?:ing)?\s+)?experience/i);
+  return m ? parseInt(m[1], 10) : 0;
 }
 
 function normalizeApifyProfile(p) {
   var exp = Array.isArray(p.experience) ? p.experience : [];
-  var totalYears = computeYearsFromExperience(exp);
+  var totalYears = Math.max(computeYearsFromExperience(exp),
+    statedYears((p.summary || '') + ' ' + (p.headline || '')));
   var certs = (Array.isArray(p.certifications) ? p.certifications : [])
     .map(function (c) { return (typeof c === 'string') ? c : (c.name || ''); }).filter(Boolean);
   // Fallback: if actor didn't return a certifications field, scan about/headline/experience text
@@ -911,10 +919,12 @@ exports.handler = async function (event) {
       // #459 backfill: recompute yearsExperience for every stored consultant from their
       // saved position history — no re-fetch needed. Pure CPU + one bulk write.
       var reDocs = await cacheCol.find({ experience: { $exists: true, $type: 'array', $ne: [] } })
-        .project({ experience: 1, yearsExperience: 1 }).toArray();
+        .project({ experience: 1, yearsExperience: 1, summary: 1, headline: 1, yearsManual: 1 }).toArray();
       var reOps = [], unchanged = 0;
       reDocs.forEach(function (dc) {
-        var ny = computeYearsFromExperience(dc.experience);
+        if (dc.yearsManual) { unchanged++; return; }   // user-set values always win
+        var ny = Math.max(computeYearsFromExperience(dc.experience),
+          statedYears((dc.summary || '') + ' ' + (dc.headline || '')));
         if (ny > 0 && ny !== dc.yearsExperience) {
           reOps.push({ updateOne: { filter: { _id: dc._id }, update: { $set: { yearsExperience: ny } } } });
         } else { unchanged++; }
