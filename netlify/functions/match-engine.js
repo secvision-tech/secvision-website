@@ -853,20 +853,38 @@ exports.handler = async function (event) {
 
       var page = body.page || 0;
       // Pull cached profiles that haven't been scored for this job yet, plus already-scored ones
-      var cached = await cacheCol.find({}).limit(600).toArray();
-      // Same-country profiles score FIRST. Without this, batch scoring walks the cache in
-      // insertion order (mostly US fetches), so an in-country consultant for a Canada/UK
-      // job can sit unevaluated behind hundreds of cross-country profiles that the
-      // location penalty caps below the threshold anyway.
+      // Three targeted fetches, merged and deduped — a single blind window misses exactly
+      // the profiles that matter once the collection outgrows it:
+      //   (1) managed consultants (your bench) ALWAYS load — they are the proposable people;
+      //   (2) same-country profiles ALWAYS load — the only ones an onsite job can use;
+      //   (3) the general window fills the rest.
+      var mcFetches = [ cacheCol.find({ managed: true }).limit(200).toArray() ];
+      try {
+        if (req.country) {
+          var cRe = new RegExp(req.country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+          mcFetches.push(cacheCol.find({ $or: [ { country: cRe }, { location: cRe } ] }).limit(200).toArray());
+        }
+      } catch (e) {}
+      mcFetches.push(cacheCol.find({}).limit(600).toArray());
+      var mcParts = await Promise.all(mcFetches);
+      var mcSeen = {}, cached = [];
+      mcParts.forEach(function (part) {
+        part.forEach(function (p) {
+          var k = String(p._id);
+          if (mcSeen[k]) return;
+          mcSeen[k] = 1; cached.push(p);
+        });
+      });
+      // Scoring order: same-country first, and within each country group the bench
+      // (managed) before scraped prospects.
       try {
         var mcJobCountry = canonCountry(req.country || '');
-        if (mcJobCountry) {
-          cached.sort(function (a, b) {
-            var ac = profileCountry(a) === mcJobCountry ? 0 : 1;
-            var bc = profileCountry(b) === mcJobCountry ? 0 : 1;
-            return ac - bc;
-          });
-        }
+        cached.sort(function (a, b) {
+          var ac = (mcJobCountry && profileCountry(a) === mcJobCountry) ? 0 : 1;
+          var bc = (mcJobCountry && profileCountry(b) === mcJobCountry) ? 0 : 1;
+          if (ac !== bc) return ac - bc;
+          return (a.managed ? 0 : 1) - (b.managed ? 0 : 1);
+        });
       } catch (e) { /* ordering is an optimization; never fail the match */ }
       if (!cached.length) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ matches: [], page: page, hasMore: false, cachedCount: 0, needsTopUp: true }) };
@@ -1543,6 +1561,7 @@ exports.handler = async function (event) {
 function formatMatch(m) {
   return {
     sourceId: m.profile.sourceId,
+    managed: !!m.profile.managed,   // your bench vs scraped prospect — UI badges these
     name: m.profile.name,
     headline: m.profile.headline,
     location: m.profile.location,
