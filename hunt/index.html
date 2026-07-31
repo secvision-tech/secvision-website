@@ -1762,7 +1762,8 @@ async function safeApiFetch(url,opts){
   }
 }
 // #461: what matters in match results is availability — flag people you CANNOT place.
-function availBadge(m){
+// (named matchAvailBadge — availBadge already exists for the consultants table's string chips)
+function matchAvailBadge(m){
   var av=(m.availability||'').toLowerCase();
   if(m.pipelineStatus==='placed'||av==='placed')return ' <span title="Currently placed — not available" style="font-size:.5rem;background:#FEE2E2;color:#B91C1C;padding:.05rem .3rem;border-radius:3px;font-weight:700">💼 PLACED</span>';
   if(av&&av!=='available')return ' <span title="Availability: '+esc(av)+'" style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:700">⏸ '+esc(av.toUpperCase())+'</span>';
@@ -5327,7 +5328,7 @@ function matchCard(m,rank){
   var cardId='mc'+rank;
   return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
-    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+availBadge(m)+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
+    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+matchAvailBadge(m)+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
     +'<div style="font-size:.6rem;color:var(--g5)">'+esc(m.headline||m.currentRole||'')+'</div>'
     +'<div style="font-size:.55rem;color:var(--g4)">'+esc(m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
     +'<div style="text-align:center;flex-shrink:0"><div style="font-size:1.3rem;font-weight:800;color:'+col+';line-height:1">'+m.overall+'%</div><div style="font-size:.5rem;color:var(--g4)">match</div></div>'
