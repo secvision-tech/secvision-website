@@ -1766,7 +1766,7 @@ async function safeApiFetch(url,opts){
 function matchAvailBadge(m){
   var av=(m.availability||'').toLowerCase();
   if(m.pipelineStatus==='placed'||av==='placed')return ' <span title="Currently placed — not available" style="font-size:.5rem;background:#FEE2E2;color:#B91C1C;padding:.05rem .3rem;border-radius:3px;font-weight:700">💼 PLACED</span>';
-  if(av&&av!=='available')return ' <span title="Availability: '+esc(av)+'" style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:700">⏸ '+esc(av.toUpperCase())+'</span>';
+  if(av&&av!=='available'&&av!=='unknown'&&av!=='n/a')return ' <span title="Availability: '+esc(av)+'" style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:700">⏸ '+esc(av.toUpperCase())+'</span>';
   if(m.engagementType==='Permanent')return ' <span title="Permanent employee — not open to contract placement" style="font-size:.5rem;background:var(--g50);color:var(--g5);padding:.05rem .3rem;border-radius:3px;font-weight:700">🏢 PERMANENT</span>';
   return '';
 }
