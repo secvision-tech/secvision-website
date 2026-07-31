@@ -3236,7 +3236,6 @@ function renderContractTable(data){
   // #426: table-layout:fixed with ch widths so columns are drag-resizable (see attachColResizers).
   var cols=[['Rank',5],['Company',22],['Type',12],['Size',8],['Contracts',9],['Rate/Salary',14],['Pipeline',16],['Job Locations',18]];
   var html='<div style="overflow-x:auto"><table id="ctcTable" class="dash-table" style="table-layout:fixed;min-width:118ch"><thead><tr>';
-  html+='<th style="width:4ch;text-align:center"><input type="checkbox" onchange="ctcToggleAll(this.checked)" title="Select all" style="cursor:pointer"></th>';
   cols.forEach(function(c){html+='<th style="width:'+c[1]+'ch;overflow:hidden">'+c[0]+'</th>'});
   html+='<th style="width:12ch">Action</th></tr></thead><tbody>';
   data.forEach(function(d,i){
@@ -3256,7 +3255,6 @@ function renderContractTable(data){
     var isSel=!!_ctcSelected[company];
     var rowBg=isSel?'background:#EEF2FF;':'';
     html+='<tr onclick="ctcRowClick(event,\''+company.replace(/'/g,"\\'").replace(/"/g,'&quot;')+'\')" style="cursor:pointer;'+rowBg+'">'
-      +'<td style="text-align:center"><span style="font-size:.7rem;color:'+(isSel?'var(--pri)':'var(--g3)')+'">'+(isSel?'☑':'☐')+'</span></td>'
       +'<td style="text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+(i+1)+'</td>'
       +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+companyLink+'</td>'
       +'<td style="overflow:hidden">'+typeBadge+'</td>'
