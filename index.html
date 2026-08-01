@@ -900,7 +900,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <div style="background:#fff;border-radius:10px;max-width:520px;width:100%;max-height:92vh;overflow-y:auto;padding:1.4rem">
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 style="color:var(--pri);font-size:1.05rem">Register as a Consultant</h3><button onclick="document.getElementById('consModal').style.display='none'" style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:var(--g5)">&times;</button></div>
 <p style="font-size:.78rem;color:var(--tl);margin-bottom:.8rem">Free and non-exclusive. We contact you only when a concrete engagement fits your profile.</p>
-<form name="consultant-registration" method="POST" data-netlify="true" netlify-honeypot="bot-field" enctype="multipart/form-data" onsubmit="return submitConsForm(event)">
+<form name="consultant-registration" method="POST" data-netlify="true" data-netlify-recaptcha="true" netlify-honeypot="bot-field" enctype="multipart/form-data" onsubmit="return submitConsForm(event)">
 <input type="hidden" name="form-name" value="consultant-registration"><p style="display:none"><input name="bot-field"></p>
 <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
 <input required name="name" placeholder="Full name *" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
@@ -915,8 +915,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <input name="experience" placeholder="Years of experience" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
 </div>
 <select name="availability" style="width:100%;margin-top:.5rem;padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem;color:var(--g5)"><option value="">Availability</option><option>Immediately available</option><option>Available with notice period</option><option>Open to future engagements</option></select>
-<label style="display:block;margin-top:.5rem;font-size:.72rem;color:var(--g5)">Resume / CV (PDF or Word)<input type="file" name="resume" accept=".pdf,.doc,.docx" style="display:block;margin-top:.25rem;font-size:.75rem"></label>
+<label style="display:block;margin-top:.5rem;font-size:.72rem;color:var(--g5)">Resume / CV (PDF or Word) *<input required type="file" name="resume" accept=".pdf,.doc,.docx" style="display:block;margin-top:.25rem;font-size:.75rem"></label>
 <label style="display:flex;gap:.4rem;margin-top:.6rem;font-size:.68rem;color:var(--g5);align-items:flex-start"><input required type="checkbox" name="consent" value="yes" style="margin-top:.15rem">I consent to SecVision storing my details to match me with relevant engagements. *</label>
+<div data-netlify-recaptcha="true" style="margin-top:.6rem"></div>
 <button class="bp" type="submit" style="width:100%;margin-top:.8rem">Submit Registration</button>
 <div id="consFormMsg" style="font-size:.75rem;margin-top:.5rem;text-align:center"></div>
 </form></div></div>

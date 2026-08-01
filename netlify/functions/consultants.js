@@ -274,6 +274,15 @@ exports.handler = async function (event) {
 
     // ---- CREATE (manual add) ----
     if (action === 'createConsultant') {
+      // Duplicate guard: email is the unique consultant identity. Case-insensitive.
+      if (body.email) {
+        var dupRe = new RegExp('^' + String(body.email).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+        var dup = await col.findOne({ email: dupRe }, { projection: { _id: 1, name: 1 } });
+        if (dup) return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+          duplicate: true, existingId: String(dup._id), existingName: dup.name || '',
+          error: 'A consultant with this email already exists: ' + (dup.name || dup._id)
+        }) };
+      }
       var c = body.consultant || {};
       if (!c.name) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Name required' }) };
       var doc = {
