@@ -240,7 +240,7 @@ footer a{color:rgba(255,255,255,.4);text-decoration:none;transition:color .3s}fo
     <div class="serve-card an d3"><div class="serve-icon">📜</div><h4>Demand-Driven Growth</h4><p>We tell you which certifications the market is actually asking for — SC-200, cloud security, IR — so your next study month pays off in billable work.</p></div>
     <div class="serve-card an d4"><div class="serve-icon">🔓</div><h4>Free & Non-Exclusive</h4><p>Registration costs nothing and does not lock you in. Keep your job or other clients — commit engagement by engagement.</p></div>
   </div>
-  <div style="text-align:center;margin-top:1.4rem"><button class="bp" onclick="openModal()">Register as a Consultant</button></div>
+  <div style="text-align:center;margin-top:1.4rem"><button class="bp" onclick="openConsModal()">Register as a Consultant</button></div>
 </div></section>
 
 <section id="about"><div class="si">
@@ -895,6 +895,35 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
+</script>
+<div id="consModal" style="display:none;position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:200;align-items:center;justify-content:center;padding:1rem" onclick="if(event.target===this)this.style.display='none'">
+<div style="background:#fff;border-radius:10px;max-width:520px;width:100%;max-height:92vh;overflow-y:auto;padding:1.4rem">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 style="color:var(--pri);font-size:1.05rem">Register as a Consultant</h3><button onclick="document.getElementById('consModal').style.display='none'" style="border:none;background:none;font-size:1.3rem;cursor:pointer;color:var(--g5)">&times;</button></div>
+<p style="font-size:.78rem;color:var(--tl);margin-bottom:.8rem">Free and non-exclusive. We contact you only when a concrete engagement fits your profile.</p>
+<form name="consultant-registration" method="POST" data-netlify="true" netlify-honeypot="bot-field" enctype="multipart/form-data" onsubmit="return submitConsForm(event)">
+<input type="hidden" name="form-name" value="consultant-registration"><p style="display:none"><input name="bot-field"></p>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">
+<input required name="name" placeholder="Full name *" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+<input required type="email" name="email" placeholder="Email *" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+<input name="phone" placeholder="Phone / WhatsApp" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+<input required name="location" placeholder="City, Country *" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+</div>
+<input name="linkedin" placeholder="LinkedIn profile URL" style="width:100%;margin-top:.5rem;padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+<input required name="specialization" placeholder="Primary role & key skills * (e.g. SOC Analyst — Sentinel, Splunk, IR)" style="width:100%;margin-top:.5rem;padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.5rem">
+<input name="certifications" placeholder="Certifications (SC-200, CISSP...)" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+<input name="experience" placeholder="Years of experience" style="padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem">
+</div>
+<select name="availability" style="width:100%;margin-top:.5rem;padding:.5rem;border:1px solid var(--g100);border-radius:5px;font-size:.8rem;color:var(--g5)"><option value="">Availability</option><option>Immediately available</option><option>Available with notice period</option><option>Open to future engagements</option></select>
+<label style="display:block;margin-top:.5rem;font-size:.72rem;color:var(--g5)">Resume / CV (PDF or Word)<input type="file" name="resume" accept=".pdf,.doc,.docx" style="display:block;margin-top:.25rem;font-size:.75rem"></label>
+<label style="display:flex;gap:.4rem;margin-top:.6rem;font-size:.68rem;color:var(--g5);align-items:flex-start"><input required type="checkbox" name="consent" value="yes" style="margin-top:.15rem">I consent to SecVision storing my details to match me with relevant engagements. *</label>
+<button class="bp" type="submit" style="width:100%;margin-top:.8rem">Submit Registration</button>
+<div id="consFormMsg" style="font-size:.75rem;margin-top:.5rem;text-align:center"></div>
+</form></div></div>
+<script>
+function openConsModal(){document.getElementById('consModal').style.display='flex'}
+function submitConsForm(e){e.preventDefault();var f=e.target,m=document.getElementById('consFormMsg');m.textContent='Submitting...';
+fetch('/',{method:'POST',body:new FormData(f)}).then(function(r){if(r.ok){m.style.color='#047857';m.textContent='✅ Registered! We will review your profile and reach out when an engagement fits.';f.reset()}else{throw new Error()}}).catch(function(){m.style.color='#DC2626';m.textContent='Something went wrong — please email your CV to talent@secvisiontech.com'});return false}
 </script>
 </body>
 </html>
