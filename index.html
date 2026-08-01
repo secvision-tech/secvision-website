@@ -922,9 +922,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="consFormMsg" style="font-size:.75rem;margin-top:.5rem;text-align:center"></div>
 </form></div></div>
 <script>
-function openConsModal(){document.getElementById('consModal').style.display='flex'}
-function submitConsForm(e){e.preventDefault();var f=e.target,m=document.getElementById('consFormMsg');m.textContent='Submitting...';
-fetch('/',{method:'POST',body:new FormData(f)}).then(function(r){if(r.ok){m.style.color='#047857';m.textContent='✅ Registered! We will review your profile and reach out when an engagement fits.';f.reset()}else{throw new Error()}}).catch(function(){m.style.color='#DC2626';m.textContent='Something went wrong — please email your CV to talent@secvisiontech.com'});return false}
+function openConsModal(){document.getElementById('consModal').style.display='flex';if(window.grecaptcha){try{grecaptcha.reset()}catch(e){}}}
+function submitConsForm(e){e.preventDefault();var f=e.target,m=document.getElementById('consFormMsg');if(window.grecaptcha&&!grecaptcha.getResponse()){m.style.color='#DC2626';m.textContent='Please complete the captcha before submitting.';return false}m.style.color='var(--g5)';m.textContent='Submitting...';
+fetch('/',{method:'POST',body:new FormData(f)}).then(function(r){if(r.ok){m.style.color='#047857';m.textContent='✅ Registered! We will review your profile and reach out when an engagement fits.';f.reset();if(window.grecaptcha){try{grecaptcha.reset()}catch(e){}}}else{throw new Error()}}).catch(function(){m.style.color='#DC2626';m.textContent='Something went wrong — please email your CV to talent@secvisiontech.com'});return false}
 </script>
 </body>
 </html>
