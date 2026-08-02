@@ -275,8 +275,9 @@ exports.handler = async function (event) {
     // ---- CREATE (manual add) ----
     if (action === 'createConsultant') {
       // Duplicate guard: email is the unique consultant identity. Case-insensitive.
-      if (body.email) {
-        var dupRe = new RegExp('^' + String(body.email).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
+      var dupEmail = (body.consultant && body.consultant.email) || body.email;
+      if (dupEmail) {
+        var dupRe = new RegExp('^' + String(dupEmail).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i');
         var dup = await col.findOne({ email: dupRe }, { projection: { _id: 1, name: 1 } });
         if (dup) return { statusCode: 200, headers: hdrs, body: JSON.stringify({
           duplicate: true, existingId: String(dup._id), existingName: dup.name || '',
