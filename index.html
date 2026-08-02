@@ -497,7 +497,7 @@ footer a{color:rgba(255,255,255,.4);text-decoration:none;transition:color .3s}fo
     </div>
     <div class="modal-body" id="formBody">
       <p style="font-size:.88rem;color:var(--tl);margin-bottom:1rem">Fill in the details below and our team will reach out within 24 hours with a tailored deployment plan.</p>
-      <form id="contactForm" name="briefing-request" method="POST" data-netlify="true" netlify-honeypot="bot-field" onsubmit="return submitForm(event)">
+      <form id="contactForm" name="briefing-request" method="POST" data-netlify="true" data-netlify-recaptcha="true" netlify-honeypot="bot-field" onsubmit="return submitForm(event)">
         <input type="hidden" name="form-name" value="briefing-request">
         <p style="display:none"><label>Don't fill this out: <input name="bot-field"></label></p>
         <div class="form-row">
@@ -528,6 +528,7 @@ footer a{color:rgba(255,255,255,.4);text-decoration:none;transition:color .3s}fo
         <div class="form-row">
           <div class="form-group full"><label>Additional Details</label><textarea name="details" id="fDetails" placeholder="Tell us about your current SOC needs, platforms used, and timeline..."></textarea></div>
         </div>
+        <div data-netlify-recaptcha="true" style="margin-bottom:.6rem"></div>
         <button type="submit" class="form-submit">Submit Request</button>
         <div class="form-note">We'll respond within 24 hours. No spam, no obligations.</div>
       </form>
@@ -542,11 +543,13 @@ footer a{color:rgba(255,255,255,.4);text-decoration:none;transition:color .3s}fo
 </div>
 
 <script>
-function openModal(){document.getElementById('modalOverlay').classList.add('open');document.body.style.overflow='hidden'}
+function openModal(){document.getElementById('modalOverlay').classList.add('open');document.body.style.overflow='hidden';if(window.grecaptcha){try{grecaptcha.reset(0)}catch(e){}}}
 function closeModal(){document.getElementById('modalOverlay').classList.remove('open');document.body.style.overflow=''}
 function submitForm(e){
   e.preventDefault();
   var form = document.getElementById('contactForm');
+  if(window.grecaptcha){var ok=false;try{ok=!!grecaptcha.getResponse(0)}catch(e2){ok=true}
+    if(!ok){var fm=document.getElementById('formMsg');if(fm){fm.style.color='#DC2626';fm.textContent='Please complete the captcha before submitting.'}else{alert('Please complete the captcha before submitting.')}return false}}
   var formData = new FormData(form);
   var submitBtn = form.querySelector('.form-submit');
   var originalText = submitBtn.textContent;
@@ -739,6 +742,34 @@ document.querySelectorAll('.sc,.tc,.pc,.bc2,.ab-card,.serve-card').forEach(el=>{
 
   <!-- Chat Messages -->
   <div class="chat-msgs" id="chatMsgs"></div>
+<script>
+function startTopic(topic,seed){if(typeof SUBTOPICS!=='undefined'&&SUBTOPICS[topic]){showSubtopics(topic,seed)}else{beginChat(topic,seed)}}
+var SUBTOPICS={
+'Cloud Security':['Microsoft Defender for Cloud setup','Azure Security best practices','AWS GuardDuty & Security Hub','GCP Security Command Center','CSPM — posture management','Container & Kubernetes security','Cloud IAM misconfigurations','Serverless security','Multi-cloud visibility','Cloud incident response'],
+'SIEM & XDR':['Microsoft Sentinel analytics rules','KQL query help','Splunk SPL query help','QRadar rule tuning','CrowdStrike Falcon queries','Cortex XDR detection','Log source onboarding','Alert noise reduction','SOAR integration','Detection engineering basics'],
+'Network Security':['Firewall rule review','IPS/IDS tuning','WAF configuration','Network segmentation design','SD-WAN security','Palo Alto configuration','Fortinet FortiGate help','Check Point policies','VPN & IPSec issues','DNS security'],
+'Endpoint Security':['Microsoft Defender for Endpoint','CrowdStrike deployment','SentinelOne policies','EDR alert investigation','Ransomware protection','Device control & USB policy','Attack surface reduction rules','macOS/Linux endpoint security','Endpoint hardening baselines','BYOD security'],
+'Threat Hunting':['MITRE ATT&CK mapping','Hunting hypothesis building','IOC & IOA analysis','Threat intel enrichment','Sentinel hunting queries','Splunk hunting searches','Persistence techniques','Lateral movement detection','C2 traffic hunting','Living-off-the-land binaries'],
+'Incident Response':['IR playbook creation','Containment strategies','Forensic evidence collection','Memory & disk forensics','Phishing incident response','Ransomware incident response','Business email compromise','SOAR playbook automation','Post-incident review','Breach notification basics'],
+'Identity & Zero Trust':['Entra ID security','Conditional Access policies','PIM configuration','PAM solutions','SSO & federation','MFA rollout & bypass risks','Identity governance','Service account security','Zero Trust roadmap','Identity threat detection'],
+'AppSec & OWASP':['OWASP Top 10 explained','SAST tool selection','DAST scanning','Secure SDLC design','API security','Secrets management','Dependency & SCA scanning','Pen test scoping','Secure code review','DevSecOps pipeline'],
+'Compliance':['SOC 2 readiness','ISO 27001 controls','NIST CSF mapping','CIS Controls implementation','GDPR security requirements','HIPAA safeguards','PCI-DSS scoping','Risk assessment methodology','Audit evidence preparation','Policy templates'],
+'SOC Operations':['Alert triage workflow','SOC metrics & KPIs','SLA management','Shift handover practices','L1-L4 tier responsibilities','Runbook creation','Case management','Analyst training paths','SOC maturity assessment','Burnout & staffing models']
+};
+var _origTopicsHtml=null;
+function showSubtopics(topic,seed){
+  var box=document.getElementById('chatTopics');
+  if(_origTopicsHtml===null)_origTopicsHtml=box.innerHTML;
+  var subs=SUBTOPICS[topic]||[];
+  var h='<h5><a href="#" onclick="backToTopics();return false" style="color:#22D3EE;text-decoration:none">‹ Topics</a> · '+topic+'</h5><div class="chat-topics-grid">';
+  subs.forEach(function(s){
+    h+='<button class="chat-topic-btn" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+('Help me with '+topic+': '+s).replace(/'/g,"\\'")+'\')">'+s+'</button>';
+  });
+  h+='</div><div class="chat-ask-anything" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+seed.replace(/'/g,"\\'")+'\')"><div class="aa-title">💬 Ask my own '+topic+' question</div></div>';
+  box.innerHTML=h;
+}
+function backToTopics(){if(_origTopicsHtml!==null)document.getElementById('chatTopics').innerHTML=_origTopicsHtml}
+</script>
 
   <!-- Input Area -->
   <div class="chat-input-area" id="chatInputArea">
@@ -770,7 +801,7 @@ function showTopics() {
   document.getElementById('chatMsgs').innerHTML = '';
 }
 
-function startTopic(topicName, systemContext) {
+function beginChat(topicName, systemContext) {
   document.getElementById('chatTopics').style.display = 'none';
   document.getElementById('chatMsgs').classList.add('active');
   document.getElementById('chatInputArea').classList.add('active');
