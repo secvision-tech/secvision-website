@@ -12,7 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
-:root{--pri:#0F2341;--pm:#1B3A5C;--ac:#0891B2;--al:#22D3EE;--w:#FFF;--off:#F7F9FC;--g100:#DDE4ED;--g3:#8FA0B8;--g5:#5A6F87;--g7:#344054;--tx:#1D2939;--tl:#475467;--bd:rgba(8,145,178,.1);--sh:0 4px 20px rgba(15,35,65,.06)}
+:root{--g2:#D8DFE9;--pri:#0F2341;--pm:#1B3A5C;--ac:#0891B2;--al:#22D3EE;--w:#FFF;--off:#F7F9FC;--g100:#DDE4ED;--g3:#8FA0B8;--g5:#5A6F87;--g7:#344054;--tx:#1D2939;--tl:#475467;--bd:rgba(8,145,178,.1);--sh:0 4px 20px rgba(15,35,65,.06)}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:var(--off);color:var(--tx);min-height:100vh;display:flex;flex-direction:column}
 a{color:var(--ac);text-decoration:none}a:hover{text-decoration:underline}
@@ -4836,7 +4836,7 @@ function openAddConsultant(){
   if(!pop){document.body.insertAdjacentHTML('beforeend',addConsultantHtml());pop=document.getElementById('addConsultantPopup')}
   pop.style.display='flex';
   ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
-  document.getElementById('acType').value='Contractor';
+  document.getElementById('acType').value='Contractor';var rf=document.getElementById('acResume');if(rf)rf.value='';var rs=document.getElementById('acResumeStatus');if(rs)rs.textContent='';_acResumeFile=null;
   document.getElementById('acStatus').textContent='';
 }
 function closeAddConsultant(){var p=document.getElementById('addConsultantPopup');if(p)p.style.display='none'}
@@ -4861,7 +4861,7 @@ function addConsultantHtml(){
 // #437: titled, bordered field group — the grouping pattern for forms/popups.
 function acGroup(title,inner){
   return '<fieldset style="border:1px solid var(--g2);border-radius:6px;padding:.45rem .55rem .55rem;margin:0 0 .55rem">'
-    +'<legend style="font-size:.58rem;font-weight:700;color:var(--pri);padding:0 .3rem">'+title+'</legend>'
+    +'<legend style="font-size:.58rem;font-weight:700;color:var(--pri);padding:0 .3rem;border-bottom:2px solid var(--ac)">'+title+'</legend>'
     +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:.45rem">'+inner+'</div></fieldset>';
 }
 // Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
