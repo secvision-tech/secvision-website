@@ -756,6 +756,11 @@ var SUBTOPICS={
 'Compliance':['SOC 2 readiness','ISO 27001 controls','NIST CSF mapping','CIS Controls implementation','GDPR security requirements','HIPAA safeguards','PCI-DSS scoping','Risk assessment methodology','Audit evidence preparation','Policy templates'],
 'SOC Operations':['Alert triage workflow','SOC metrics & KPIs','SLA management','Shift handover practices','L1-L4 tier responsibilities','Runbook creation','Case management','Analyst training paths','SOC maturity assessment','Burnout & staffing models']
 };
+function exploreSub(sub){
+  var q='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three';
+  var inp=document.getElementById('chatInput');
+  if(inp){inp.value=q;sendMessage()}
+}
 var _origTopicsHtml=null;
 function showSubtopics(topic,seed){
   var box=document.getElementById('chatTopics');
@@ -763,7 +768,7 @@ function showSubtopics(topic,seed){
   var subs=SUBTOPICS[topic]||[];
   var h='<h5><a href="#" onclick="backToTopics();return false" style="color:#22D3EE;text-decoration:none">‹ Topics</a> · '+topic+'</h5><div class="chat-topics-grid">';
   subs.forEach(function(s){
-    h+='<button class="chat-topic-btn" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+('Help me with '+topic+': '+s).replace(/'/g,"\\'")+'\')">'+s+'</button>';
+    h+='<button class="chat-topic-btn" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\'\');exploreSub(\''+(topic+' — '+s).replace(/'/g,"\\'")+'\')">'+s+'</button>';
   });
   h+='</div><div class="chat-ask-anything" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+seed.replace(/'/g,"\\'")+'\')"><div class="aa-title">💬 Ask my own '+topic+' question</div></div>';
   box.innerHTML=h;
@@ -904,7 +909,22 @@ async function sendMessage() {
     var reply = data.reply || 'I apologize, I could not generate a response. Please try again.';
 
     chatHistory.push({ role: 'assistant', content: reply });
-    addMessage(reply, 'bot');
+    // #471: drill-down — if the reply ends with a NEXT: line, render it as clickable chips
+    var nx=reply.match(/\nNEXT:\s*(.+)\s*$/);
+    if(nx){
+      addMessage(reply.replace(/\nNEXT:[\s\S]*$/,'').trim(),'bot');
+      var items=nx[1].split('|').map(function(s){return s.trim()}).filter(Boolean).slice(0,10);
+      if(items.length){
+        var chips='<div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-top:.3rem">'+items.map(function(s){
+          return '<button class="chat-topic-btn" style="font-size:.62rem;padding:.3rem .5rem" onclick="exploreSub(this.textContent)">'+s.replace(/</g,'&lt;')+'</button>';
+        }).join('')+'</div>';
+        var mdiv=document.createElement('div');mdiv.className='msg bot';mdiv.innerHTML='<div class="msg-b">Explore deeper:'+chips+'</div>';
+        document.getElementById('chatMsgs').appendChild(mdiv);
+        document.getElementById('chatMsgs').scrollTop=1e9;
+      }
+    } else {
+      addMessage(reply,'bot');
+    }
 
   } catch (err) {
     removeTyping();
