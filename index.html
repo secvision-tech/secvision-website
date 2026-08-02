@@ -757,9 +757,9 @@ var SUBTOPICS={
 'SOC Operations':['Alert triage workflow','SOC metrics & KPIs','SLA management','Shift handover practices','L1-L4 tier responsibilities','Runbook creation','Case management','Analyst training paths','SOC maturity assessment','Burnout & staffing models']
 };
 function exploreSub(sub){
-  var q='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three';
+  _hiddenPrompt='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three';
   var inp=document.getElementById('chatInput');
-  if(inp){inp.value=q;sendMessage()}
+  if(inp){inp.value=sub;sendMessage()}
 }
 var _origTopicsHtml=null;
 function showSubtopics(topic,seed){
@@ -768,7 +768,7 @@ function showSubtopics(topic,seed){
   var subs=SUBTOPICS[topic]||[];
   var h='<h5><a href="#" onclick="backToTopics();return false" style="color:#22D3EE;text-decoration:none">‹ Topics</a> · '+topic+'</h5><div class="chat-topics-grid">';
   subs.forEach(function(s){
-    h+='<button class="chat-topic-btn" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\'\');exploreSub(\''+(topic+' — '+s).replace(/'/g,"\\'")+'\')">'+s+'</button>';
+    h+='<button class="chat-topic-btn" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+seed.replace(/'/g,"\\'")+'\');exploreSub(\''+(topic+' — '+s).replace(/'/g,"\\'")+'\')">'+s+'</button>';
   });
   h+='</div><div class="chat-ask-anything" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+seed.replace(/'/g,"\\'")+'\')"><div class="aa-title">💬 Ask my own '+topic+' question</div></div>';
   box.innerHTML=h;
@@ -879,10 +879,12 @@ function removeTyping() {
   if (el) el.remove();
 }
 
+var _hiddenPrompt=null;
 async function sendMessage() {
   var input = document.getElementById('chatInput');
   var text = input.value.trim();
   if (!text || chatIsLoading) return;
+  var sendText = _hiddenPrompt || text; _hiddenPrompt = null;
 
   chatIsLoading = true;
   document.getElementById('chatSendBtn').disabled = true;
@@ -890,7 +892,7 @@ async function sendMessage() {
   input.style.height = 'auto';
 
   addMessage(text, 'user');
-  chatHistory.push({ role: 'user', content: text });
+  chatHistory.push({ role: 'user', content: sendText });
 
   showTyping();
 
