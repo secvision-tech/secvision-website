@@ -714,7 +714,7 @@ document.querySelectorAll('.sc,.tc,.pc,.bc2,.ab-card,.serve-card').forEach(el=>{
   <div class="chat-hdr">
     <div class="chat-hdr-icon"><svg viewBox="0 0 24 24"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm0 6c1.1 0 2 .9 2 2s-.9 2-2 2-2-.9-2-2 .9-2 2-2zm4 10H8v-1c0-1.33 2.67-2 4-2s4 .67 4 2v1z"/></svg></div>
     <div class="chat-hdr-info"><h4>SecVision Security Assistant</h4><p>AI-Powered Cybersecurity Expert</p></div>
-    <button class="chat-hdr-close" onclick="toggleChat()" title="Close">&times;</button>
+    <button onclick="exportChatPdf()" title="Export this conversation as a PDF" style="background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:5px;font-size:.62rem;padding:.25rem .5rem;cursor:pointer;margin-right:.4rem">⬇ PDF</button><button class="chat-hdr-close" onclick="toggleChat()" title="Close">&times;</button>
   </div>
 
   <button class="chat-back-btn" id="chatBackBtn" onclick="showTopics()">← Back to Topics</button>
@@ -773,6 +773,37 @@ function showSubtopics(topic,seed){
   });
   h+='</div><div class="chat-ask-anything" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+seed.replace(/'/g,"\\'")+'\')"><div class="aa-title">💬 Ask my own '+topic+' question</div></div>';
   box.innerHTML=h;
+}
+function exportChatPdf(){
+  var msgs=document.querySelectorAll('#chatMsgs .msg');
+  if(!msgs.length){alert('No conversation to export yet.');return}
+  var body='';
+  msgs.forEach(function(m){
+    var isUser=m.className.indexOf('user')>=0;
+    var t=(m.innerText||'').trim();
+    if(!t||t.indexOf('Explore deeper:')===0)return;   // skip chip rows
+    body+='<div class="'+(isUser?'q':'a')+'"><div class="who">'+(isUser?'Question':'CyberAssist')+'</div><div class="txt">'+t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')+'</div></div>';
+  });
+  var path=_drillPath.length?_drillPath.join(' → '):'General Cybersecurity';
+  var w=window.open('','_blank');
+  w.document.write('<html><head><title>SecVision CyberAssist — Technical Guidance</title><style>'
+   +'body{font-family:Segoe UI,Arial,sans-serif;color:#1D2939;margin:40px;line-height:1.55}'
+   +'.hd{border-bottom:3px solid #0891B2;padding-bottom:12px;margin-bottom:22px}'
+   +'.hd h1{margin:0;font-size:20px;color:#0F2341}.hd p{margin:4px 0 0;font-size:11px;color:#5A6F87}'
+   +'.q{margin:16px 0 6px}.a{margin:0 0 14px;page-break-inside:avoid}'
+   +'.who{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0891B2;margin-bottom:3px}'
+   +'.q .who{color:#B45309}.txt{font-size:12.5px;white-space:pre-wrap}'
+   +'.ft{margin-top:26px;border-top:1px solid #DDE4ED;padding-top:10px;font-size:9.5px;color:#8FA0B8}'
+   +'@media print{body{margin:16mm}}'
+   +'</style></head><body>'
+   +'<div class="hd"><h1>🛡️ SecVision CyberAssist — Technical Guidance</h1>'
+   +'<p>Topic: '+path.replace(/</g,'&lt;')+' &nbsp;·&nbsp; Generated '+new Date().toLocaleDateString()+' &nbsp;·&nbsp; www.secvisiontech.com</p></div>'
+   +body
+   +'<div class="ft">AI-generated guidance from SecVision CyberAssist — review and validate before production use. '
+   +'For expert hands-on help: talent@secvisiontech.com · SecVision Technologies LLP, Pune, India.</div>'
+   +'</body></html>');
+  w.document.close();
+  setTimeout(function(){w.print()},400);
 }
 function backToTopics(){_drillPath=[];_drillDepth=0;if(_origTopicsHtml!==null)document.getElementById('chatTopics').innerHTML=_origTopicsHtml}
 </script>
