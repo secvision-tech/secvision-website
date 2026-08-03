@@ -786,6 +786,10 @@ function exportChatPdf(){
     var inner=isUser?t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>'):m.innerHTML.replace(/<button[\s\S]*?<\/button>/g,'');
     // #473/#477: markdown links -> clickable anchors
     inner=inner.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2">$1</a>');
+    // #480: markdown headings (#, ##, ###) -> styled headings, not literal hashes
+    inner=inner.replace(/(^|<br\s*\/?>)\s*###\s*([^<]+)/g,'$1<div class="mdh3">$2</div>')
+               .replace(/(^|<br\s*\/?>)\s*##\s*([^<]+)/g,'$1<div class="mdh2">$2</div>')
+               .replace(/(^|<br\s*\/?>)\s*#\s*([^<]+)/g,'$1<div class="mdh1">$2</div>');
     // #474: markdown pipe-tables -> real tables
     inner=inner.replace(/((?:\|[^<\n]*\|\s*(?:<br\s*\/?>|\n|$))+)/g,function(block){
       var rows=block.split(/<br\s*\/?>|\n/).map(function(r){return r.trim()}).filter(function(r){return r.indexOf('|')===0});
@@ -813,6 +817,8 @@ function exportChatPdf(){
    +'.who{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0891B2;margin-bottom:3px}'
    +'.q .who{color:#B45309}.txt{font-size:12.5px;white-space:pre-wrap}'
    +'.ft{margin-top:26px;border-top:1px solid #DDE4ED;padding-top:10px;font-size:9.5px;color:#8FA0B8}'
+   +'@page{margin:14mm}'
+   +'.mdh1{font-size:16px;font-weight:700;color:#0F2341;margin:14px 0 6px}.mdh2{font-size:14px;font-weight:700;color:#0F2341;margin:12px 0 5px}.mdh3{font-size:12.5px;font-weight:700;color:#1B3A5C;margin:10px 0 4px}'
    +'table.mdtbl{border-collapse:collapse;margin:8px 0;font-size:11.5px}table.mdtbl th,table.mdtbl td{border:1px solid #C6D0DE;padding:4px 8px;text-align:left}table.mdtbl th{background:#EEF2F7;color:#0F2341}a{color:#0891B2}'
    +'@media print{body{margin:16mm}}'
    +'</style></head><body>'
