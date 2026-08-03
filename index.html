@@ -774,62 +774,85 @@ function showSubtopics(topic,seed){
   h+='</div><div class="chat-ask-anything" onclick="beginChat(\''+topic.replace(/'/g,"\\'")+'\',\''+seed.replace(/'/g,"\\'")+'\')"><div class="aa-title">💬 Ask my own '+topic+' question</div></div>';
   box.innerHTML=h;
 }
+function _mdRuns(s){
+  var runs=[],re=/\[([^\]]+)\]\((https?:[^)\s]+)\)|\*\*([^*]+)\*\*/g,last=0,x;
+  while((x=re.exec(s))){
+    if(x.index>last)runs.push({text:s.slice(last,x.index)});
+    if(x[2])runs.push({text:x[1],link:x[2],color:'#0891B2',decoration:'underline'});
+    else runs.push({text:x[3],bold:true});
+    last=re.lastIndex;
+  }
+  if(last<s.length)runs.push({text:s.slice(last)});
+  return runs.length?runs:[{text:s}];
+}
+function _mdBlocks(txt){
+  var out=[],lines=txt.split('\n'),i=0;
+  while(i<lines.length){
+    var L=lines[i];
+    if(/^\s*\|.*\|\s*$/.test(L)){
+      var rows=[];
+      while(i<lines.length&&/^\s*\|.*\|\s*$/.test(lines[i])){
+        var r=lines[i].trim();
+        if(!/^\|[\s:|-]+\|$/.test(r))rows.push(r.replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim()}));
+        i++;
+      }
+      if(rows.length){
+        var w=rows[0].map(function(){return '*'});
+        out.push({table:{headerRows:1,widths:w,body:rows.map(function(rr,ri){return rr.map(function(cl){return ri===0?{text:cl,bold:true,fillColor:'#EEF2F7',fontSize:8.5}:{text:_mdRuns(cl),fontSize:8.5}})})},layout:'lightHorizontalLines',margin:[0,4,0,8]});
+      }
+      continue;
+    }
+    var h=L.match(/^(#{1,3})\s+(.*)/);
+    if(h){out.push({text:h[2],bold:true,fontSize:h[1].length===1?13:(h[1].length===2?11.5:10.5),color:h[1].length<3?'#0F2341':'#1B3A5C',margin:[0,8,0,3]});i++;continue}
+    var b=L.match(/^\s*(?:[-*]|\d+\.)\s+(.*)/);
+    if(b){
+      var items=[];
+      while(i<lines.length&&(b=lines[i].match(/^\s*(?:[-*]|\d+\.)\s+(.*)/))){items.push({text:_mdRuns(b[1]),fontSize:9.5});i++}
+      out.push({ul:items,margin:[6,2,0,6]});continue;
+    }
+    if(L.trim())out.push({text:_mdRuns(L),fontSize:9.5,margin:[0,0,0,4],lineHeight:1.25});
+    i++;
+  }
+  return out;
+}
 function exportChatPdf(){
   var msgs=document.querySelectorAll('#chatMsgs .chat-msg, #chatMsgs .msg');
   if(!msgs.length){alert('No conversation to export yet.');return}
-  var body='';
-  msgs.forEach(function(m){
-    var isUser=m.className.indexOf('user')>=0;
-    var t=(m.innerText||'').trim();
-    if(!t||t.indexOf('Explore deeper:')===0)return;   // skip chip rows
-    // bot messages: keep the chat's own rendered formatting (lists, bold, code) in the PDF
-    var inner=isUser?t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>'):m.innerHTML.replace(/<button[\s\S]*?<\/button>/g,'');
-    // #473/#477: markdown links -> clickable anchors
-    inner=inner.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2">$1</a>');
-    // #480: markdown headings (#, ##, ###) -> styled headings, not literal hashes
-    inner=inner.replace(/(^|<br\s*\/?>)\s*###\s*([^<]+)/g,'$1<div class="mdh3">$2</div>')
-               .replace(/(^|<br\s*\/?>)\s*##\s*([^<]+)/g,'$1<div class="mdh2">$2</div>')
-               .replace(/(^|<br\s*\/?>)\s*#\s*([^<]+)/g,'$1<div class="mdh1">$2</div>');
-    // #474: markdown pipe-tables -> real tables
-    inner=inner.replace(/((?:\|[^<\n]*\|\s*(?:<br\s*\/?>|\n|$))+)/g,function(block){
-      var rows=block.split(/<br\s*\/?>|\n/).map(function(r){return r.trim()}).filter(function(r){return r.indexOf('|')===0});
-      if(rows.length<2)return block;
-      var h='<table class="mdtbl">',first=true;
-      rows.forEach(function(r){
-        if(/^\|[\s:|-]+\|$/.test(r))return;   // separator row
-        var cells=r.replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim()});
-        h+='<tr>'+cells.map(function(x){return (first?'<th>':'<td>')+x+(first?'</th>':'</td>')}).join('')+'</tr>';
-        first=false;
-      });
-      return h+'</table>';
+  function go(){
+    var pp=_drillPath.slice();
+    if(pp.length>1&&pp[1].indexOf(pp[0])===0)pp.shift();
+    var path=pp.length?pp.join(' \u2192 '):'General Cybersecurity';
+    var d=new Date(),tz='';
+    try{tz=new Intl.DateTimeFormat(undefined,{timeZoneName:'short'}).formatToParts(d).filter(function(p){return p.type==='timeZoneName'})[0].value}catch(e){}
+    var stamp=d.toLocaleDateString()+', '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(tz?' ('+tz+')':'');
+    var content=[
+      {columns:[{svg:'<svg viewBox="0 0 34 34" width="30" height="30"><defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0891B2"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="url(#pg)"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg>',width:30},
+        {text:[{text:'SecVision CyberAssist',fontSize:16,bold:true,color:'#0F2341'},{text:'  Technical Guidance',fontSize:16,color:'#5A6F87'}],margin:[8,6,0,0]}]},
+      {text:[{text:'Topic: ',bold:true},path,'   \u00B7   Generated '+stamp+'   \u00B7   ',{text:'www.secvisiontech.com',link:'https://www.secvisiontech.com',color:'#0891B2'}],fontSize:8.5,color:'#5A6F87',margin:[0,4,0,2]},
+      {canvas:[{type:'line',x1:0,y1:0,x2:515,y2:0,lineWidth:2,lineColor:'#0891B2'}],margin:[0,2,0,12]}
+    ];
+    msgs.forEach(function(mm){
+      var isUser=mm.className.indexOf('user')>=0;
+      var t=(mm.innerText||'').trim();
+      if(!t||t.indexOf('Explore deeper:')===0)return;
+      content.push({text:isUser?'QUESTION':'CYBERASSIST',fontSize:7.5,bold:true,characterSpacing:1,color:isUser?'#B45309':'#0891B2',margin:[0,isUser?10:4,0,2]});
+      if(isUser)content.push({text:t,fontSize:10,bold:true,color:'#1D2939',margin:[0,0,0,2]});
+      else content=content.concat(_mdBlocks(t));
     });
-    body+='<div class="'+(isUser?'q':'a')+'"><div class="who">'+(isUser?'Question':'CyberAssist')+'</div><div class="txt">'+inner+'</div></div>';
-  });
-  var pp=_drillPath.slice();
-  if(pp.length>1&&pp[1].indexOf(pp[0])===0)pp.shift();   // subtopic labels already include the topic
-  var path=pp.length?pp.join(' → '):'General Cybersecurity';
-  var w=window.open('','_blank');
-  w.document.write('<html><head><title>SecVision CyberAssist — Technical Guidance</title><style>'
-   +'body{font-family:Segoe UI,Arial,sans-serif;color:#1D2939;margin:40px;line-height:1.55}'
-   +'.hd{border-bottom:3px solid #0891B2;padding-bottom:12px;margin-bottom:22px}'
-   +'.hd h1{margin:0;font-size:20px;color:#0F2341}.hd p{margin:4px 0 0;font-size:11px;color:#5A6F87}'
-   +'.q{margin:16px 0 6px}.a{margin:0 0 14px;page-break-inside:avoid}'
-   +'.who{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0891B2;margin-bottom:3px}'
-   +'.q .who{color:#B45309}.txt{font-size:12.5px;white-space:pre-wrap}'
-   +'.ft{margin-top:26px;border-top:1px solid #DDE4ED;padding-top:10px;font-size:9.5px;color:#8FA0B8}'
-   +'@page{margin:14mm}'
-   +'.mdh1{font-size:16px;font-weight:700;color:#0F2341;margin:14px 0 6px}.mdh2{font-size:14px;font-weight:700;color:#0F2341;margin:12px 0 5px}.mdh3{font-size:12.5px;font-weight:700;color:#1B3A5C;margin:10px 0 4px}'
-   +'table.mdtbl{border-collapse:collapse;margin:8px 0;font-size:11.5px}table.mdtbl th,table.mdtbl td{border:1px solid #C6D0DE;padding:4px 8px;text-align:left}table.mdtbl th{background:#EEF2F7;color:#0F2341}a{color:#0891B2}'
-   +'@media print{body{margin:16mm}}'
-   +'</style></head><body>'
-   +'<div class="hd"><h1><svg style="width:22px;height:22px;vertical-align:-3px" viewBox="0 0 34 34"><defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0891B2"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="url(#pg)"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg> SecVision CyberAssist — Technical Guidance</h1>'
-   +'<p>Topic: '+path.replace(/</g,'&lt;')+' &nbsp;·&nbsp; Generated '+(function(){var d=new Date();var tz='';try{tz=new Intl.DateTimeFormat(undefined,{timeZoneName:'short'}).formatToParts(d).filter(function(p){return p.type==='timeZoneName'})[0].value}catch(e){}return d.toLocaleDateString()+', '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(tz?' ('+tz+')':'')})()+' &nbsp;·&nbsp; <a href="https://www.secvisiontech.com">www.secvisiontech.com</a></p></div>'
-   +body
-   +'<div class="ft"><b>Disclaimer:</b> This document is AI-generated guidance from SecVision CyberAssist. The data and text are not owned by SecVision Technologies LLP, Pune, and no guarantee of accuracy is provided — treat the content as general guidance for information purposes only, and validate before production use. '
-   +'For expert hands-on help: <a href="mailto:info@secvisiontech.com">info@secvisiontech.com</a> · <a href="https://www.secvisiontech.com">SecVision Technologies LLP</a>, Pune, India.</div>'
-   +'</body></html>');
-  w.document.close();
-  setTimeout(function(){w.print()},400);
+    pdfMake.createPdf({
+      pageMargins:[42,42,42,64],
+      content:content,
+      footer:function(cur,total){return {stack:[
+        {canvas:[{type:'line',x1:42,y1:0,x2:553,y2:0,lineWidth:.5,lineColor:'#DDE4ED'}]},
+        {columns:[{text:[{text:'Disclaimer: ',bold:true},'AI-generated guidance. Data and text are not owned by SecVision Technologies LLP, Pune; no guarantee of accuracy \u2014 treat as general guidance and validate before production use.  ',{text:'info@secvisiontech.com',link:'mailto:info@secvisiontech.com',color:'#0891B2'}],fontSize:6.8,color:'#8FA0B8',width:'*',margin:[42,4,4,0]},{text:cur+' / '+total,fontSize:7,color:'#8FA0B8',alignment:'right',margin:[0,4,42,0],width:60}]}
+      ]}},
+      defaultStyle:{fontSize:9.5,color:'#1D2939'}
+    }).download('SecVision_CyberAssist_Guidance.pdf');
+  }
+  if(window.pdfMake){go();return}
+  var s1=document.createElement('script');s1.src='https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js';
+  s1.onload=function(){var s2=document.createElement('script');s2.src='https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js';s2.onload=go;document.head.appendChild(s2)};
+  document.head.appendChild(s1);
 }
 function backToTopics(){_drillPath=[];_drillDepth=0;if(_origTopicsHtml!==null)document.getElementById('chatTopics').innerHTML=_origTopicsHtml}
 </script>
