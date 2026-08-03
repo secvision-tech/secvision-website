@@ -758,7 +758,7 @@ var SUBTOPICS={
 };
 function exploreSub(sub){
   _drillPath.push(sub);_drillDepth++;
-  _hiddenPrompt='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three';
+  _hiddenPrompt='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three. Where helpful, include 1-3 authoritative reference links (vendor docs, NIST, MITRE) as markdown links in the brief.';
   var inp=document.getElementById('chatInput');
   if(inp){inp.value=sub;sendMessage()}
 }
@@ -784,6 +784,21 @@ function exportChatPdf(){
     if(!t||t.indexOf('Explore deeper:')===0)return;   // skip chip rows
     // bot messages: keep the chat's own rendered formatting (lists, bold, code) in the PDF
     var inner=isUser?t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>'):m.innerHTML.replace(/<button[\s\S]*?<\/button>/g,'');
+    // #473/#477: markdown links -> clickable anchors
+    inner=inner.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g,'<a href="$2">$1</a>');
+    // #474: markdown pipe-tables -> real tables
+    inner=inner.replace(/((?:\|[^<\n]*\|\s*(?:<br\s*\/?>|\n|$))+)/g,function(block){
+      var rows=block.split(/<br\s*\/?>|\n/).map(function(r){return r.trim()}).filter(function(r){return r.indexOf('|')===0});
+      if(rows.length<2)return block;
+      var h='<table class="mdtbl">',first=true;
+      rows.forEach(function(r){
+        if(/^\|[\s:|-]+\|$/.test(r))return;   // separator row
+        var cells=r.replace(/^\||\|$/g,'').split('|').map(function(x){return x.trim()});
+        h+='<tr>'+cells.map(function(x){return (first?'<th>':'<td>')+x+(first?'</th>':'</td>')}).join('')+'</tr>';
+        first=false;
+      });
+      return h+'</table>';
+    });
     body+='<div class="'+(isUser?'q':'a')+'"><div class="who">'+(isUser?'Question':'CyberAssist')+'</div><div class="txt">'+inner+'</div></div>';
   });
   var pp=_drillPath.slice();
@@ -798,13 +813,14 @@ function exportChatPdf(){
    +'.who{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#0891B2;margin-bottom:3px}'
    +'.q .who{color:#B45309}.txt{font-size:12.5px;white-space:pre-wrap}'
    +'.ft{margin-top:26px;border-top:1px solid #DDE4ED;padding-top:10px;font-size:9.5px;color:#8FA0B8}'
+   +'table.mdtbl{border-collapse:collapse;margin:8px 0;font-size:11.5px}table.mdtbl th,table.mdtbl td{border:1px solid #C6D0DE;padding:4px 8px;text-align:left}table.mdtbl th{background:#EEF2F7;color:#0F2341}a{color:#0891B2}'
    +'@media print{body{margin:16mm}}'
    +'</style></head><body>'
-   +'<div class="hd"><h1>🛡️ SecVision CyberAssist — Technical Guidance</h1>'
-   +'<p>Topic: '+path.replace(/</g,'&lt;')+' &nbsp;·&nbsp; Generated '+new Date().toLocaleDateString()+' &nbsp;·&nbsp; www.secvisiontech.com</p></div>'
+   +'<div class="hd"><h1><svg style="width:22px;height:22px;vertical-align:-3px" viewBox="0 0 34 34"><defs><linearGradient id="pg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0891B2"/><stop offset="1" stop-color="#22D3EE"/></linearGradient></defs><path d="M17 2L30 8.5V19C30 25.5 24 31 17 33 10 31 4 25.5 4 19V8.5Z" fill="url(#pg)"/><path d="M11 17L15 21L24 12" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round"/></svg> SecVision CyberAssist — Technical Guidance</h1>'
+   +'<p>Topic: '+path.replace(/</g,'&lt;')+' &nbsp;·&nbsp; Generated '+(function(){var d=new Date();var tz='';try{tz=new Intl.DateTimeFormat(undefined,{timeZoneName:'short'}).formatToParts(d).filter(function(p){return p.type==='timeZoneName'})[0].value}catch(e){}return d.toLocaleDateString()+', '+d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})+(tz?' ('+tz+')':'')})()+' &nbsp;·&nbsp; <a href="https://www.secvisiontech.com">www.secvisiontech.com</a></p></div>'
    +body
-   +'<div class="ft">AI-generated guidance from SecVision CyberAssist — review and validate before production use. '
-   +'For expert hands-on help: talent@secvisiontech.com · SecVision Technologies LLP, Pune, India.</div>'
+   +'<div class="ft"><b>Disclaimer:</b> This document is AI-generated guidance from SecVision CyberAssist. The data and text are not owned by SecVision Technologies LLP, Pune, and no guarantee of accuracy is provided — treat the content as general guidance for information purposes only, and validate before production use. '
+   +'For expert hands-on help: <a href="mailto:info@secvisiontech.com">info@secvisiontech.com</a> · <a href="https://www.secvisiontech.com">SecVision Technologies LLP</a>, Pune, India.</div>'
    +'</body></html>');
   w.document.close();
   setTimeout(function(){w.print()},400);
@@ -930,7 +946,7 @@ function chatQuotaOk(){
 }
 function exploreDetail(){
   var chain=_drillPath.join(' → ')||'the selected topic';
-  _hiddenPrompt='Provide detailed, practical guidance on: '+chain+'. Structure it with concrete steps, examples, tools, and common pitfalls. Do NOT include a NEXT line or suggest further sub-topics.';
+  _hiddenPrompt='Provide detailed, practical guidance on: '+chain+'. Structure it with concrete steps, examples, tools, and common pitfalls, and include authoritative reference links (vendor documentation, NIST, MITRE) as markdown links where relevant. Do NOT include a NEXT line or suggest further sub-topics.';
   var inp=document.getElementById('chatInput');
   if(inp){inp.value='Detailed guidance: '+(_drillPath[_drillPath.length-1]||chain);sendMessage()}
 }
@@ -940,7 +956,7 @@ async function sendMessage() {
   if (!text || chatIsLoading) return;
   var sendText = _hiddenPrompt || text; _hiddenPrompt = null;
   if(!chatQuotaOk()){
-    addMessage("You've reached today's free assistant limit. For hands-on help, email talent@secvisiontech.com or use Schedule a Briefing — we're happy to go deeper directly.",'bot');
+    addMessage("You've reached today's free assistant limit. For hands-on help, email info@secvisiontech.com or use Schedule a Briefing — we're happy to go deeper directly.",'bot');
     input.value='';return;
   }
 
