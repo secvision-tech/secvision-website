@@ -775,16 +775,20 @@ function showSubtopics(topic,seed){
   box.innerHTML=h;
 }
 function exportChatPdf(){
-  var msgs=document.querySelectorAll('#chatMsgs .msg');
+  var msgs=document.querySelectorAll('#chatMsgs .chat-msg, #chatMsgs .msg');
   if(!msgs.length){alert('No conversation to export yet.');return}
   var body='';
   msgs.forEach(function(m){
     var isUser=m.className.indexOf('user')>=0;
     var t=(m.innerText||'').trim();
     if(!t||t.indexOf('Explore deeper:')===0)return;   // skip chip rows
-    body+='<div class="'+(isUser?'q':'a')+'"><div class="who">'+(isUser?'Question':'CyberAssist')+'</div><div class="txt">'+t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>')+'</div></div>';
+    // bot messages: keep the chat's own rendered formatting (lists, bold, code) in the PDF
+    var inner=isUser?t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'<br>'):m.innerHTML.replace(/<button[\s\S]*?<\/button>/g,'');
+    body+='<div class="'+(isUser?'q':'a')+'"><div class="who">'+(isUser?'Question':'CyberAssist')+'</div><div class="txt">'+inner+'</div></div>';
   });
-  var path=_drillPath.length?_drillPath.join(' → '):'General Cybersecurity';
+  var pp=_drillPath.slice();
+  if(pp.length>1&&pp[1].indexOf(pp[0])===0)pp.shift();   // subtopic labels already include the topic
+  var path=pp.length?pp.join(' → '):'General Cybersecurity';
   var w=window.open('','_blank');
   w.document.write('<html><head><title>SecVision CyberAssist — Technical Guidance</title><style>'
    +'body{font-family:Segoe UI,Arial,sans-serif;color:#1D2939;margin:40px;line-height:1.55}'
