@@ -758,7 +758,7 @@ var SUBTOPICS={
 };
 function exploreSub(sub){
   _drillPath.push(sub);_drillDepth++;
-  _hiddenPrompt='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three. Where helpful, include 1-3 authoritative reference links (vendor docs, NIST, MITRE) as markdown links in the brief.';
+  _hiddenPrompt='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three. Where helpful, include 1-3 reference links as markdown links, but ONLY to official sources you are certain exist \u2014 prefer section landing pages (e.g. https://attack.mitre.org, https://learn.microsoft.com/security, https://csrc.nist.gov, https://owasp.org, https://www.cisecurity.org) over deep article URLs; if unsure of an exact URL, name the resource WITHOUT a link.';
   var inp=document.getElementById('chatInput');
   if(inp){inp.value=sub;sendMessage()}
 }
@@ -838,6 +838,7 @@ function exportChatPdf(){
       var isUser=mm.className.indexOf('user')>=0;
       var t=(mm.innerText||'').trim();
       if(!t||t.indexOf('Explore deeper:')===0)return;
+      if(t.indexOf("You've reached today's free assistant limit")===0)return;   // UI notice, not content
       content.push({text:isUser?'QUESTION':'SECURITY ASSISTANT',fontSize:7.5,bold:true,characterSpacing:1,color:isUser?'#B45309':'#0891B2',margin:[0,isUser?10:4,0,2]});
       if(isUser)content.push({text:t+(/[?.!]$/.test(t)?'':'?'),fontSize:11,bold:true,color:'#1D2939',margin:[0,0,0,2]});
       else content=content.concat(_mdBlocks(t));
@@ -979,7 +980,7 @@ function chatQuotaOk(){
 }
 function exploreDetail(){
   var chain=_drillPath.join(' → ')||'the selected topic';
-  _hiddenPrompt='Provide detailed, practical guidance on: '+chain+'. Structure it with concrete steps, examples, tools, and common pitfalls, and include authoritative reference links (vendor documentation, NIST, MITRE) as markdown links where relevant. Do NOT include a NEXT line or suggest further sub-topics.';
+  _hiddenPrompt='Provide detailed, practical guidance on: '+chain+'. Structure it with concrete steps, examples, tools, and common pitfalls, and include reference links as markdown links ONLY to official sources you are certain exist \u2014 prefer section landing pages (learn.microsoft.com/security, csrc.nist.gov, attack.mitre.org, owasp.org, cisecurity.org, docs.aws.amazon.com, cloud.google.com/security) over deep article URLs, and if unsure of an exact URL name the resource without a link. Do NOT include a NEXT line or suggest further sub-topics.';
   var inp=document.getElementById('chatInput');
   if(inp){inp.value='Detailed guidance: '+(_drillPath[_drillPath.length-1]||chain);sendMessage()}
 }
