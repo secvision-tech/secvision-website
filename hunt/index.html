@@ -4836,7 +4836,7 @@ function openAddConsultant(){
   if(!pop){document.body.insertAdjacentHTML('beforeend',addConsultantHtml());pop=document.getElementById('addConsultantPopup')}
   pop.style.display='flex';
   ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
-  document.getElementById('acType').value='Contractor';var rf=document.getElementById('acResume');if(rf)rf.value='';var rs=document.getElementById('acResumeStatus');if(rs)rs.textContent='';_acResumeFile=null;
+  document.getElementById('acType').value='Contractor';var rf=document.getElementById('acResume');if(rf)rf.value='';var lu=document.getElementById('acLiUrl');if(lu)lu.value='';var ls=document.getElementById('acLiStatus');if(ls)ls.textContent='';var rs=document.getElementById('acResumeStatus');if(rs)rs.textContent='';_acResumeFile=null;
   document.getElementById('acStatus').textContent='';
 }
 function closeAddConsultant(){var p=document.getElementById('addConsultantPopup');if(p)p.style.display='none'}
@@ -4846,6 +4846,7 @@ function addConsultantHtml(){
     +'<div style="background:#fff;border-radius:8px;width:96%;max-width:600px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)">+ Add Consultant Profile</h3><button onclick="closeAddConsultant()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
     +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx or PDF) — AI extraction</label><input type="file" id="acResume" accept=".docx,.pdf" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
+    +'<div style="background:#EFF8FB;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#0E7490;font-weight:600">🔗 Or import from a LinkedIn profile URL</label><div style="display:flex;gap:.35rem;margin-top:.3rem"><input id="acLiUrl" placeholder="https://www.linkedin.com/in/username" style="flex:1;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><button type="button" onclick="acFetchLinkedIn()" id="acLiBtn" style="padding:.3rem .6rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Fetch</button></div><div id="acLiStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
     +acGroup('👤 Identity',f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')
       +'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Permanent</option><option>Unknown</option></select></div>')
     +acGroup('📍 Location','<div style="display:flex;gap:.3rem;align-items:center"><div style="flex:1">'+f('acLocation','Location (city, state)')+'</div><a href="#" onclick="var v=document.getElementById(\'acLocation\').value;var cn=document.getElementById(\'acCountry\').value;if(v||cn)window.open(\'https://www.google.com/maps/search/?api=1&query=\'+encodeURIComponent((v?v+\', \':\'\')+cn),\'_blank\');return false" title="Open this location on Google Maps" style="text-decoration:none;font-size:.9rem">📍</a></div>'+f('acCountry','Country'))
@@ -4866,6 +4867,43 @@ function acGroup(title,inner){
 }
 // Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
 var _acResumeFile=null;   // #435: keep the imported file so we can attach it after Save
+async function acFetchLinkedIn(){
+  var url=(document.getElementById('acLiUrl').value||'').trim();
+  var st=document.getElementById('acLiStatus'),btn=document.getElementById('acLiBtn');
+  if(!/linkedin\.com\/in\//i.test(url)){st.textContent='⚠️ Paste a profile URL like linkedin.com/in/username';return}
+  btn.disabled=true;btn.style.opacity='.5';
+  st.textContent='🔗 Starting LinkedIn fetch (typically 30-60s)...';
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startProfileScrape',urls:[url]})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;btn.disabled=false;btn.style.opacity='1';return}
+    var runId=d.runId,dsId=d.datasetId,tries=0;
+    var poll=async function(){
+      tries++;
+      if(tries>30){st.textContent='⚠️ Timed out — try again in a minute.';btn.disabled=false;btn.style.opacity='1';return}
+      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkProfileScrape',runId:runId,datasetId:dsId})});
+      var pd=await pr.json();
+      if(!pd.done){st.textContent='⏳ Fetching profile... ('+(tries*4)+'s)';setTimeout(poll,4000);return}
+      if(pd.error||!pd.profiles||!pd.profiles.length){st.textContent='⚠️ '+(pd.error||'No profile data returned — check the URL is public.');btn.disabled=false;btn.style.opacity='1';return}
+      var p=pd.profiles[0];
+      var setIf=function(id,v){var el=document.getElementById(id);if(el&&v&&!el.value)el.value=v};
+      setIf('acName',p.name||((p.firstName||'')+' '+(p.lastName||'')).trim());
+      setIf('acRole',p.headline||p.currentRole||(p.experience&&p.experience[0]&&p.experience[0].title));
+      setIf('acCompany',p.currentCompany||(p.experience&&p.experience[0]&&(p.experience[0].companyName||p.experience[0].company)));
+      var loc=p.location||p.geoLocationName||'';
+      setIf('acLocation',loc.replace(/,\s*India$/i,''));
+      if(/india/i.test(loc))setIf('acCountry','India');else if(loc.indexOf(',')>0)setIf('acCountry',loc.split(',').pop().trim());
+      setIf('acLinkedin',url);
+      setIf('acSummary',(p.about||p.summary||'').slice(0,1500));
+      // rough years from position durations (yr/mo sums; server recalc refines later)
+      var months=0;(p.experience||[]).forEach(function(e){var t=(e.duration||'')+' ';var y=t.match(/(\d+)\s*yrs?/i),mo=t.match(/(\d+)\s*mos?/i);months+=(y?parseInt(y[1])*12:0)+(mo?parseInt(mo[1]):0)});
+      if(months)setIf('acYears',String(Math.round(months/1.2)/10));
+      st.textContent='✅ Profile imported — review the fields, add email & rate, then Save. (Email is required to prevent duplicates.)';
+      btn.disabled=false;btn.style.opacity='1';
+    };
+    setTimeout(poll,4000);
+  }catch(e){st.textContent='⚠️ '+e.message;btn.disabled=false;btn.style.opacity='1'}
+}
 async function extractResumeText(file){
   var buf=await file.arrayBuffer();
   if(/\.pdf$/i.test(file.name)){
