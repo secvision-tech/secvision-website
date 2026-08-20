@@ -282,7 +282,7 @@ exports.handler = async function(event) {
           body: JSON.stringify({
             action: 'get-profiles',
             keywords: profileUrls,
-            profileFields: ['about', 'experience', 'organizations']
+            profileFields: ['about','experience','organizations','education','certifications','skills','location','headline']
           })
         });
         var run = await resp.json();
