@@ -4868,6 +4868,7 @@ function acGroup(title,inner){
 }
 // Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
 var _acResumeFile=null;   // #435: keep the imported file so we can attach it after Save
+var _liAttempt=0;
 async function acFetchLinkedIn(){
   var url=(document.getElementById('acLiUrl').value||'').trim();
   var st=document.getElementById('acLiStatus'),btn=document.getElementById('acLiBtn');
@@ -4885,7 +4886,18 @@ async function acFetchLinkedIn(){
       var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkProfileScrape',runId:runId,datasetId:dsId,url:url})});
       var pd=await pr.json();
       if(!pd.done){st.textContent='⏳ Fetching profile... ('+(tries*4)+'s)';setTimeout(poll,4000);return}
-      if(pd.error||!pd.profiles||!pd.profiles.length){st.textContent='⚠️ '+(pd.error||'No profile data returned — check the URL is public.');btn.disabled=false;btn.style.opacity='1';return}
+      if(pd.error||!pd.profiles||!pd.profiles.length){
+        // #490d: actor account-pool flakiness — an identical search can succeed on retry
+        if(!pd.error&&_liAttempt<2){
+          _liAttempt++;
+          st.textContent='🔄 Empty result (actor flakiness) — retrying automatically ('+_liAttempt+'/2)...';
+          btn.disabled=false;btn.style.opacity='1';
+          acFetchLinkedIn();return;
+        }
+        _liAttempt=0;
+        st.textContent='⚠️ '+(pd.error||'No profile found after retries — the scraper may be having a bad run; try again in a few minutes, or check the run log at console.apify.com.');
+        btn.disabled=false;btn.style.opacity='1';return}
+      _liAttempt=0;
       var p=pd.profiles[0];
       var setIf=function(id,v){var el=document.getElementById(id);if(el&&v&&!el.value)el.value=v};
       setIf('acName',p.name||((p.firstName||'')+' '+(p.lastName||'')).trim());
