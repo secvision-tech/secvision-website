@@ -4835,7 +4835,7 @@ function openAddConsultant(){
   var pop=document.getElementById('addConsultantPopup');
   if(!pop){document.body.insertAdjacentHTML('beforeend',addConsultantHtml());pop=document.getElementById('addConsultantPopup')}
   pop.style.display='flex';
-  ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
+  ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears','acRate'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
   document.getElementById('acType').value='Contractor';var rf=document.getElementById('acResume');if(rf)rf.value='';var lu=document.getElementById('acLiUrl');if(lu)lu.value='';var ls=document.getElementById('acLiStatus');if(ls)ls.textContent='';var rs=document.getElementById('acResumeStatus');if(rs)rs.textContent='';_acResumeFile=null;
   document.getElementById('acStatus').textContent='';
 }
@@ -4848,7 +4848,8 @@ function addConsultantHtml(){
     +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx or PDF) — AI extraction</label><input type="file" id="acResume" accept=".docx,.pdf" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
     +'<div style="background:#EFF8FB;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#0E7490;font-weight:600">🔗 Or import from a LinkedIn profile URL</label><div style="display:flex;gap:.35rem;margin-top:.3rem"><input id="acLiUrl" placeholder="https://www.linkedin.com/in/username" style="flex:1;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><button type="button" onclick="acFetchLinkedIn()" id="acLiBtn" style="padding:.3rem .6rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Fetch</button></div><div id="acLiStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
     +acGroup('👤 Identity',f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')
-      +'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Permanent</option><option>Unknown</option></select></div>')
+      +'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Sub-Contractor</option><option>Permanent</option><option>Unknown</option></select></div>'
+      +'<div><label style="font-size:.55rem;color:var(--g4)">Expected Rate (e.g. $40/hr or ₹6000/day)</label><input id="acRate" class="set-input" style="width:100%;font-size:.62rem" placeholder="rate + unit"></div>')
     +acGroup('📍 Location','<div style="display:flex;gap:.3rem;align-items:center"><div style="flex:1">'+f('acLocation','Location (city, state)')+'</div><a href="#" onclick="var v=document.getElementById(\'acLocation\').value;var cn=document.getElementById(\'acCountry\').value;if(v||cn)window.open(\'https://www.google.com/maps/search/?api=1&query=\'+encodeURIComponent((v?v+\', \':\'\')+cn),\'_blank\');return false" title="Open this location on Google Maps" style="text-decoration:none;font-size:.9rem">📍</a></div>'+f('acCountry','Country'))
     +acGroup('✉️ Contact',f('acEmail','Email','email')+f('acPhone','Phone')+f('acLinkedin','LinkedIn URL'))
     +acGroup('🛡️ Professional',f('acYears','Years Experience','number')
@@ -4907,6 +4908,12 @@ async function acFetchLinkedIn(){
         summ=lines.slice(0,cut).join('\n');
       })();
       setIf('acSummary',summ.slice(0,2500));
+      // #490c: contact extraction from profile text (summary/headline/about)
+      var rawTxt=(p.summary||'')+' '+(p.about||'')+' '+(p.headline||'');
+      var exEmail=(rawTxt.match(/[\w.+-]+@[\w-]+\.[\w.]+/)||[])[0]||'';
+      var exPhone=(rawTxt.match(/(\+?\d[\d\s().-]{7,}\d)/)||[])[0]||'';
+      if(exEmail)setIf('acEmail',exEmail);
+      if(exPhone)setIf('acPhone',exPhone.trim());
       // #490b: skills & certifications
       if(p.skills&&p.skills.length)setIf('acSkills',p.skills.slice(0,30).join(', '));
       if(p.certifications&&p.certifications.length)setIf('acCerts',p.certifications.map(function(cc){return cc.name||cc}).filter(Boolean).join(', '));
@@ -4925,7 +4932,7 @@ async function acFetchLinkedIn(){
       var stated=((p.summary||p.about||'')+' '+(p.headline||'')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i);
       if(stated){var sv=parseInt(stated[1]);if(sv>sumYears)sumYears=sv}
       if(sumYears)setIf('acYears',String(sumYears));
-      st.textContent='✅ Profile imported — review the fields, add email & rate, then Save. (Email is required to prevent duplicates.)';
+      st.textContent='✅ Profile imported — review the fields'+(document.getElementById('acEmail').value?'':', add Email (required to prevent duplicates)')+', set Expected Rate if known, then Save.';
       btn.disabled=false;btn.style.opacity='1';
     };
     setTimeout(poll,4000);
@@ -4996,7 +5003,8 @@ async function saveNewConsultant(){
     yearsExperience:parseInt(document.getElementById('acYears').value)||0,
     skills:document.getElementById('acSkills').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
     certifications:document.getElementById('acCerts').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
-    summary:document.getElementById('acSummary').value.trim()
+    summary:document.getElementById('acSummary').value.trim(),
+    rate:document.getElementById('acRate').value.trim()
   };
   try{
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'createConsultant',consultant:consultant})});
