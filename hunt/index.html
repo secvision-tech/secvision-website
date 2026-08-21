@@ -4227,7 +4227,7 @@ async function editConsYears(id,cur){
     openManageProfile(id);   // re-render with the corrected value
   }catch(e){alert(e.message)}
 }
-async function openManageProfile(id){window._mpCurId=id;(function(){var i=consultantsData.findIndex(function(x){return String(x._id)===String(id)});setTimeout(function(){var p=document.getElementById('mpPrevBtn'),nx=document.getElementById('mpNextBtn');if(p)p.style.visibility=i>0?'visible':'hidden';if(nx)nx.style.visibility=(i>=0&&i<consultantsData.length-1)?'visible':'hidden'},60)})();
+async function openManageProfile(id){window._mpCurId=id;setTimeout(function(){try{if(document.getElementById('mjPeriod'))runMatchJobs(0,true)}catch(e){}},400);(function(){var i=consultantsData.findIndex(function(x){return String(x._id)===String(id)});setTimeout(function(){var p=document.getElementById('mpPrevBtn'),nx=document.getElementById('mpNextBtn');if(p)p.style.visibility=i>0?'visible':'hidden';if(nx)nx.style.visibility=(i>=0&&i<consultantsData.length-1)?'visible':'hidden'},60)})();
   manageProfileId=id;
   // if not opened via the job candidates table, there's no job context or candidate navigation
   if(!_refreshCandidatesOnClose){_matchJobContext=null;_candidateNavIdx=-1}
@@ -4298,7 +4298,7 @@ function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="f
 
 // ---- Stage 3: Match Jobs (reverse matching from a consultant) ----
 var mjState={consultantId:null,page:0,evalCap:50};
-function runMatchJobs(page){
+function runMatchJobs(page,noScore){
   var c=manageProfileData;
   if(!c)return;
   var cid=c._id||c.sourceId||'';
@@ -4309,9 +4309,9 @@ function runMatchJobs(page){
   var st=document.getElementById('mjStatus');
   var btn=document.getElementById('mjBtn');
   if(btn){btn.disabled=true;btn.style.opacity='.5'}
-  st.textContent='🔍 Scoring recent jobs against this consultant...';
+  st.textContent=noScore?'📦 Loading already-scored matches...':'🔍 Scoring recent jobs against this consultant...';
   authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({
-    action:'matchJobs',consultantId:cid,period:period,page:page,evalCap:mjState.evalCap
+    action:'matchJobs',consultantId:cid,period:period,page:page,evalCap:noScore?0:mjState.evalCap,noScore:!!noScore
   })}).then(function(r){return r.json()}).then(function(d){
     if(btn){btn.disabled=false;btn.style.opacity='1'}
     if(d&&typeof d.evaluated==='number'&&d.evaluated>(mjState.evalCap||0)){mjState.evalCap=d.evaluated}  // sync cap with server

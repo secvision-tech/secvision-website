@@ -1414,7 +1414,7 @@ exports.handler = async function (event) {
 
       var page = parseInt(body.page) || 0;
       var PAGE = 10;
-      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 600);  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
+      var EVAL_CAP = body.noScore ? 0 : Math.min(parseInt(body.evalCap) || 50, 600);   // #491c: noScore returns cached matches only  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
       var NEED = (page + 1) * PAGE;
       var SCORE_CAP = 8;
 
