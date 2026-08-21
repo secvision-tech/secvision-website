@@ -4894,10 +4894,37 @@ async function acFetchLinkedIn(){
       setIf('acLocation',loc.replace(/,\s*India$/i,''));
       if(/india/i.test(loc))setIf('acCountry','India');else if(loc.indexOf(',')>0)setIf('acCountry',loc.split(',').pop().trim());
       setIf('acLinkedin',url);
-      setIf('acSummary',(p.about||p.summary||'').slice(0,1500));
+      // #490b: summary — keep the real About, cut LinkedIn feed junk after the contact line
+      var summ=(p.about||p.summary||'');
+      (function(){
+        var lines=summ.split('\n'),cut=lines.length;
+        for(var li=0;li<lines.length;li++){
+          if(/📧|✉️/.test(lines[li])||/^🌐/.test(lines[li])){cut=li+1;break}
+        }
+        if(cut===lines.length){ // no contact line: cut at first pill-list/feed-looking line
+          for(var lj=1;lj<lines.length;lj++){ if(lines[lj].indexOf(' • ')>=0||/ on LinkedIn$/.test(lines[lj])){cut=lj;break} }
+        }
+        summ=lines.slice(0,cut).join('\n');
+      })();
+      setIf('acSummary',summ.slice(0,2500));
+      // #490b: skills & certifications
+      if(p.skills&&p.skills.length)setIf('acSkills',p.skills.slice(0,30).join(', '));
+      if(p.certifications&&p.certifications.length)setIf('acCerts',p.certifications.map(function(cc){return cc.name||cc}).filter(Boolean).join(', '));
+      // #490b: type from latest real position's employment type — never blind-default
+      var firstReal=(p.experience||[]).filter(function(e){return e.duration})[0];
+      var et=(firstReal&&firstReal.employmentType||'').toLowerCase();
+      var typeEl=document.getElementById('acType');
+      if(typeEl){
+        if(/freelance|self-employed|contract/.test(et))typeEl.value='Contractor';
+        else if(/full-time|part-time/.test(et))typeEl.value='Permanent';
+        else typeEl.value='Unknown';
+      }
       // rough years from position durations (yr/mo sums; server recalc refines later)
       var months=0;(p.experience||[]).forEach(function(e){var t=(e.duration||'')+' ';var y=t.match(/(\d+)\s*yrs?/i),mo=t.match(/(\d+)\s*mos?/i);months+=(y?parseInt(y[1])*12:0)+(mo?parseInt(mo[1]):0)});
-      if(months)setIf('acYears',String(Math.round(months/1.2)/10));
+      var sumYears=months?Math.round(months/1.2)/10:0;
+      var stated=((p.summary||p.about||'')+' '+(p.headline||'')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i);
+      if(stated){var sv=parseInt(stated[1]);if(sv>sumYears)sumYears=sv}
+      if(sumYears)setIf('acYears',String(sumYears));
       st.textContent='✅ Profile imported — review the fields, add email & rate, then Save. (Email is required to prevent duplicates.)';
       btn.disabled=false;btn.style.opacity='1';
     };
