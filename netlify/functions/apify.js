@@ -333,7 +333,13 @@ exports.handler = async function(event) {
           return {
             url: p.linkedinUrl || p.url || '',
             name: ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || p.vanityName || '',
-            company: company, title: title, status: p.status || ''
+            company: company, title: title, status: p.status || '',
+            // #490: pass the rich fields through instead of discarding them
+            headline: p.headline || '', location: p.location || '',
+            summary: p.summary || p.about || '',
+            experience: p.experience || [], education: p.education || [],
+            certifications: p.certifications || [], skills: p.skills || [],
+            linkedinUrl: p.linkedinUrl || p.url || '', vanityName: p.vanityName || ''
           };
         });
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: status, done: true, profiles: results }) };
