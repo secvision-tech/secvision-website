@@ -4402,7 +4402,7 @@ function renderMatchJobs(d){
   if(sig===_mjRenderSig&&document.getElementById('mjTable'))return;   // #438: no identical rebuilds
   _mjRenderSig=sig;
   var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
-  var cols=[['overall','Match',6],['title','Role',24],['company','Company',17],['location','Location',15],['datePosted','Posted',9],['duration','Duration',9]];
+  var cols=[['overall','Match',6],['datePosted','Posted',9],['title','Role',24],['company','Company',17],['location','Location',15],['duration','Duration',9]];
   var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:108ch"><thead><tr style="background:var(--g1)">';
   // #441: checkbox column removed — selection is row-click, shown by row highlight.
   // #420: rank column
@@ -4881,15 +4881,15 @@ async function acFetchLinkedIn(){
     var poll=async function(){
       tries++;
       if(tries>30){st.textContent='⚠️ Timed out — try again in a minute.';btn.disabled=false;btn.style.opacity='1';return}
-      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkProfileScrape',runId:runId,datasetId:dsId})});
+      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkProfileScrape',runId:runId,datasetId:dsId,url:url})});
       var pd=await pr.json();
       if(!pd.done){st.textContent='⏳ Fetching profile... ('+(tries*4)+'s)';setTimeout(poll,4000);return}
       if(pd.error||!pd.profiles||!pd.profiles.length){st.textContent='⚠️ '+(pd.error||'No profile data returned — check the URL is public.');btn.disabled=false;btn.style.opacity='1';return}
       var p=pd.profiles[0];
       var setIf=function(id,v){var el=document.getElementById(id);if(el&&v&&!el.value)el.value=v};
       setIf('acName',p.name||((p.firstName||'')+' '+(p.lastName||'')).trim());
-      setIf('acRole',p.headline||p.currentRole||(p.experience&&p.experience[0]&&p.experience[0].title));
-      setIf('acCompany',p.currentCompany||(p.experience&&p.experience[0]&&(p.experience[0].companyName||p.experience[0].company)));
+      setIf('acRole',p.title||p.headline||p.currentRole||(p.experience&&p.experience[0]&&p.experience[0].title));
+      setIf('acCompany',p.company||p.currentCompany||(p.experience&&p.experience[0]&&(p.experience[0].companyName||p.experience[0].company)));
       var loc=p.location||p.geoLocationName||'';
       setIf('acLocation',loc.replace(/,\s*India$/i,''));
       if(/india/i.test(loc))setIf('acCountry','India');else if(loc.indexOf(',')>0)setIf('acCountry',loc.split(',').pop().trim());

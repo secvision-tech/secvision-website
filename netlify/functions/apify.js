@@ -281,7 +281,14 @@ exports.handler = async function(event) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'get-profiles',
-            keywords: profileUrls,
+            // #490: URL lookup is unreliable; search by slug-derived name and slug-match in results
+            keywords: profileUrls.map(function(u){
+              var slug = String(u).split('/in/')[1] || String(u);
+              slug = slug.replace(/[\/?#].*$/,'');
+              var parts = slug.split('-').filter(function(t){ return !/\d/.test(t) && t.length > 0; });
+              return (parts.join(' ') || slug);
+            }),
+            limit: 5,
             profileFields: ['about','experience','organizations','skills','languages','honors','projects']
           })
         });
@@ -318,6 +325,18 @@ exports.handler = async function(event) {
         // Succeeded — fetch results
         var resultsResp = await fetch('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN + '&format=json');
         var profiles = await resultsResp.json();
+        // #490: when the original url is provided, keep only the slug-matching profile
+        if (body.url) {
+          var wantSlug = (String(body.url).split('/in/')[1] || '').replace(/[\/?#].*$/,'').toLowerCase();
+          if (wantSlug) {
+            var hit = (profiles || []).filter(function(p){
+              var vn = (p.vanityName || '').toLowerCase();
+              var lu = (p.linkedinUrl || p.url || '').toLowerCase();
+              return vn === wantSlug || lu.indexOf('/in/' + wantSlug) >= 0;
+            });
+            if (hit.length) profiles = hit;
+          }
+        }
         var results = (profiles || []).map(function(p) {
           var company = '';
           var title = p.headline || '';
