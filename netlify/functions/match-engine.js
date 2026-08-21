@@ -1441,6 +1441,29 @@ exports.handler = async function (event) {
       // consultant; without this merge those pairs never appear in Match Jobs and the
       // pair gets re-scored with drift. jobMatchCache wins on conflict (same shape).
       var revCache = Object.assign({}, consultant.matchCache || {}, consultant.jobMatchCache || {});
+      // #491b: cache-pinned inclusion — a job already scored for THIS consultant must be
+      // listable even if it fails the discovery gates above (missing extracted skills/tools,
+      // not contract-classified) or falls beyond the 500-newest cap. Window still applies.
+      try {
+        var haveIds = {};
+        candidateJobs.forEach(function (j) { haveIds[String(j._id)] = 1; if (j.jobId) haveIds[String(j.jobId)] = 1; });
+        var missingKeys = Object.keys(revCache).filter(function (k) { return !haveIds[k]; });
+        if (missingKeys.length) {
+          var OID = require('mongodb').ObjectId;
+          var oids = [];
+          missingKeys.forEach(function (k) { try { oids.push(new OID(k)); } catch (e) {} });
+          var pinned = await jobsCol.find({
+            $and: [
+              { $or: [{ _id: { $in: oids } }, { jobId: { $in: missingKeys } }] },
+              { $or: [{ datePosted: { $gte: since } }, { dateScanned: { $gte: since } }] }
+            ]
+          }).project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, salary: 1,
+            datePosted: 1, dateScanned: 1, skills: 1, certifications: 1, compliance: 1, tools: 1,
+            experience: 1, experienceLevel: 1, jobType: 1, remote: 1, contractDuration: 1, applyLink: 1,
+            jobUrl: 1, source: 1, matchCacheRev: 1 }).toArray();
+          candidateJobs = candidateJobs.concat(pinned);
+        }
+      } catch (e) { /* pinning is additive; never fail the match */ }
       var preScored = [], toScore = [];
       candidateJobs.forEach(function (j) {
         var key = String(j._id);
