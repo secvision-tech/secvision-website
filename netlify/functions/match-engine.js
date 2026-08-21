@@ -984,7 +984,7 @@ exports.handler = async function (event) {
       var toScore = [];
       var preScored = [];
       cached.forEach(function (p) {
-        var mc = (p.matchCache || {})[req.jobId];
+        var mc = (p.matchCache || {})[req.jobId] || (p.jobMatchCache || {})[req.jobId];   // #491: union
         // Re-score anything cached before the current scoring version (e.g. entries saved
         // before the location penalty existed), otherwise stale scores would persist forever.
         if (mc && mc.v === SCORING_VERSION) {
@@ -1437,7 +1437,10 @@ exports.handler = async function (event) {
         .sort({ datePosted: -1, dateScanned: -1 }).limit(500).toArray();
 
       // Split into already-scored (cached on the consultant) vs to-score.
-      var revCache = consultant.jobMatchCache || {};
+      // #491: union both caches — job-side scoring writes matchCache[jobId] on this
+      // consultant; without this merge those pairs never appear in Match Jobs and the
+      // pair gets re-scored with drift. jobMatchCache wins on conflict (same shape).
+      var revCache = Object.assign({}, consultant.matchCache || {}, consultant.jobMatchCache || {});
       var preScored = [], toScore = [];
       candidateJobs.forEach(function (j) {
         var key = String(j._id);
