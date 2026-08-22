@@ -1614,7 +1614,40 @@ exports.handler = async function (event) {
       try { lcCons = await lcCol.findOne({ _id: new (require('mongodb').ObjectId)(lcId) }); } catch (e) {}
       if (!lcCons) lcCons = await lcCol.findOne({ sourceId: lcId });
       if (!lcCons) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Consultant not found' }) };
-      var saved = (lcCons.matchedJobs || []).sort(function (a, b) { return b.overall - a.overall; });
+      var saved = (lcCons.matchedJobs || []);
+      // #491e: surface job-side scores too — matchCached writes matchCache[jobId] on this
+      // consultant but never touches the saved matchedJobs list, so pairs visible in a job's
+      // Matched Candidates were invisible here. Merge cache entries (both cache fields, both
+      // key forms), respect deletions and the >=60 display rule, and enrich from the jobs
+      // collection so rows render with title/company/date like saved entries.
+      try {
+        var lcRemoved = {}; (lcCons.matchedJobsRemoved || []).forEach(function (id) { lcRemoved[String(id)] = 1; });
+        var lcHave = {}; saved.forEach(function (m) { if (m.jobId) lcHave[String(m.jobId)] = 1; });
+        var lcCache = Object.assign({}, lcCons.matchCache || {}, lcCons.jobMatchCache || {});
+        var lcKeys = Object.keys(lcCache).filter(function (k) {
+          var e = lcCache[k];
+          return e && e.overall >= 60 && !lcRemoved[k] && !lcHave[k];
+        });
+        if (lcKeys.length) {
+          var LOID = require('mongodb').ObjectId, lcOids = [];
+          lcKeys.forEach(function (k) { try { lcOids.push(new LOID(k)); } catch (e) {} });
+          var lcJobs = await db.collection(JOBS_COLLECTION).find({
+            $or: [{ _id: { $in: lcOids } }, { jobId: { $in: lcKeys } }]
+          }).project({ title: 1, titleClean: 1, company: 1, location: 1, datePosted: 1, contractDuration: 1, jobId: 1, applyLink: 1, jobUrl: 1 }).toArray();
+          lcJobs.forEach(function (j) {
+            var e = lcCache[String(j._id)] || (j.jobId ? lcCache[String(j.jobId)] : null);
+            if (!e) return;
+            var jid = String(j.jobId || j._id);
+            if (lcHave[jid]) return;
+            saved.push({ jobId: jid, title: j.titleClean || j.title || '', company: j.company || '',
+              location: j.location || '', datePosted: j.datePosted || null, duration: j.contractDuration || '',
+              applyLink: j.applyLink || j.jobUrl || '', overall: e.overall, dimensions: e.dimensions,
+              reason: e.reason, fromJobSide: true });
+            lcHave[jid] = 1;
+          });
+        }
+      } catch (e) { /* merge is additive; never fail the list */ }
+      saved.sort(function (a, b) { return b.overall - a.overall; });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         matches: saved, totalMatches: saved.length, consultantCountry: profileCountry(lcCons), saved: true
       }) };

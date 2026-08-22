@@ -4227,7 +4227,7 @@ async function editConsYears(id,cur){
     openManageProfile(id);   // re-render with the corrected value
   }catch(e){alert(e.message)}
 }
-async function openManageProfile(id){window._mpCurId=id;setTimeout(function(){try{if(document.getElementById('mjPeriod'))runMatchJobs(0,true)}catch(e){}},400);(function(){var i=consultantsData.findIndex(function(x){return String(x._id)===String(id)});setTimeout(function(){var p=document.getElementById('mpPrevBtn'),nx=document.getElementById('mpNextBtn');if(p)p.style.visibility=i>0?'visible':'hidden';if(nx)nx.style.visibility=(i>=0&&i<consultantsData.length-1)?'visible':'hidden'},60)})();
+async function openManageProfile(id){window._mpCurId=id;(function(){var i=consultantsData.findIndex(function(x){return String(x._id)===String(id)});setTimeout(function(){var p=document.getElementById('mpPrevBtn'),nx=document.getElementById('mpNextBtn');if(p)p.style.visibility=i>0?'visible':'hidden';if(nx)nx.style.visibility=(i>=0&&i<consultantsData.length-1)?'visible':'hidden'},60)})();
   manageProfileId=id;
   // if not opened via the job candidates table, there's no job context or candidate navigation
   if(!_refreshCandidatesOnClose){_matchJobContext=null;_candidateNavIdx=-1}
