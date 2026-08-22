@@ -1620,20 +1620,28 @@ exports.handler = async function (event) {
       // Matched Candidates were invisible here. Merge cache entries (both cache fields, both
       // key forms), respect deletions and the >=60 display rule, and enrich from the jobs
       // collection so rows render with title/company/date like saved entries.
+      var lcDbg = { cacheKeys: 0, eligible: 0, jobsFetched: 0, merged: 0, skippedLow: 0, skippedRemoved: 0, skippedHave: 0, err: '' };
       try {
         var lcRemoved = {}; (lcCons.matchedJobsRemoved || []).forEach(function (id) { lcRemoved[String(id)] = 1; });
         var lcHave = {}; saved.forEach(function (m) { if (m.jobId) lcHave[String(m.jobId)] = 1; });
         var lcCache = Object.assign({}, lcCons.matchCache || {}, lcCons.jobMatchCache || {});
+        lcDbg.cacheKeys = Object.keys(lcCache).length;
         var lcKeys = Object.keys(lcCache).filter(function (k) {
           var e = lcCache[k];
-          return e && e.overall >= 60 && !lcRemoved[k] && !lcHave[k];
+          if (!e) return false;
+          if (!(e.overall >= 60)) { lcDbg.skippedLow++; return false; }
+          if (lcRemoved[k]) { lcDbg.skippedRemoved++; return false; }
+          if (lcHave[k]) { lcDbg.skippedHave++; return false; }
+          return true;
         });
+        lcDbg.eligible = lcKeys.length;
         if (lcKeys.length) {
           var LOID = require('mongodb').ObjectId, lcOids = [];
           lcKeys.forEach(function (k) { try { lcOids.push(new LOID(k)); } catch (e) {} });
-          var lcJobs = await db.collection(JOBS_COLLECTION).find({
+          var lcJobs = await db.collection('jobs').find({
             $or: [{ _id: { $in: lcOids } }, { jobId: { $in: lcKeys } }]
           }).project({ title: 1, titleClean: 1, company: 1, location: 1, datePosted: 1, contractDuration: 1, jobId: 1, applyLink: 1, jobUrl: 1 }).toArray();
+          lcDbg.jobsFetched = lcJobs.length;
           lcJobs.forEach(function (j) {
             var e = lcCache[String(j._id)] || (j.jobId ? lcCache[String(j.jobId)] : null);
             if (!e) return;
@@ -1643,13 +1651,13 @@ exports.handler = async function (event) {
               location: j.location || '', datePosted: j.datePosted || null, duration: j.contractDuration || '',
               applyLink: j.applyLink || j.jobUrl || '', overall: e.overall, dimensions: e.dimensions,
               reason: e.reason, fromJobSide: true });
-            lcHave[jid] = 1;
+            lcHave[jid] = 1; lcDbg.merged++;
           });
         }
-      } catch (e) { /* merge is additive; never fail the list */ }
+      } catch (e) { lcDbg.err = String(e && e.message || e); }
       saved.sort(function (a, b) { return b.overall - a.overall; });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
-        matches: saved, totalMatches: saved.length, consultantCountry: profileCountry(lcCons), saved: true
+        matches: saved, totalMatches: saved.length, consultantCountry: profileCountry(lcCons), saved: true, mergeDebug: lcDbg
       }) };
     }
 
