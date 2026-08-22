@@ -247,10 +247,27 @@ exports.handler = async function (event) {
         p.hasResume = !!(p.resume && p.resume.data);
         if (p.resume) delete p.resume; // keep list payload light
         // #430: surface a lightweight match indicator; drop the heavy array from the list.
-        p.matchedJobsCount = Array.isArray(p.matchedJobs) ? p.matchedJobs.length : 0;
-        p.topJobMatch = (Array.isArray(p.matchedJobs) && p.matchedJobs.length)
-          ? Math.max.apply(null, p.matchedJobs.map(function (m) { return m.overall || 0; })) : 0;
+        // #492: the 🎯 badge must see job-side scores too (matchCache/jobMatchCache),
+        // not just the saved matchedJobs list — same union rule as the popup display merge:
+        // >=60 only, deletions respected, deduped against saved entries.
+        var savedArr = Array.isArray(p.matchedJobs) ? p.matchedJobs : [];
+        var bRemoved = {}; (p.matchedJobsRemoved || []).forEach(function (id) { bRemoved[String(id)] = 1; });
+        var bHave = {}; savedArr.forEach(function (m) { if (m.jobId) bHave[String(m.jobId)] = 1; });
+        var bCount = savedArr.length;
+        var bTop = savedArr.length ? Math.max.apply(null, savedArr.map(function (m) { return m.overall || 0; })) : 0;
+        var bCache = Object.assign({}, p.matchCache || {}, p.jobMatchCache || {});
+        Object.keys(bCache).forEach(function (k) {
+          var e = bCache[k];
+          if (e && e.overall >= 60 && !bRemoved[k] && !bHave[k]) {
+            bCount++; bHave[k] = 1;
+            if (e.overall > bTop) bTop = e.overall;
+          }
+        });
+        p.matchedJobsCount = bCount;
+        p.topJobMatch = bTop;
         if (p.matchedJobs) delete p.matchedJobs;
+        if (p.matchCache) delete p.matchCache;
+        if (p.jobMatchCache) delete p.jobMatchCache;
         if (p.jobMatchCache) delete p.jobMatchCache; // never needed in the list, can be large
         p._id = p._id.toString();
       });
