@@ -1466,8 +1466,9 @@ exports.handler = async function (event) {
       } catch (e) { /* pinning is additive; never fail the match */ }
       var preScored = [], toScore = [];
       candidateJobs.forEach(function (j) {
-        var key = String(j._id);
-        var mc = revCache[key];
+        // #491d: the job popup keys matchCache by the job's source jobId, not Mongo _id —
+        // look the pair up under BOTH key forms or job-side scores are never found here.
+        var mc = revCache[String(j._id)] || (j.jobId ? revCache[String(j.jobId)] : undefined);
         if (mc && mc.v === SCORING_VERSION) {
           preScored.push({ job: j, overall: mc.overall, dimensions: mc.dimensions, reason: mc.reason,
             locationFit: mc.locationFit || null });
