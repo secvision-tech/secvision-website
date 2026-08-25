@@ -43,7 +43,7 @@ exports.handler = async (event) => {
   };
 
   try {
-    const { messages } = JSON.parse(event.body);
+    const { messages, news } = JSON.parse(event.body);
 
     if (!messages || !Array.isArray(messages)) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Messages array required' }) };
@@ -66,6 +66,8 @@ exports.handler = async (event) => {
         max_tokens: 2048,
         system: SYSTEM_PROMPT,
         messages: messages.slice(-20), // Keep last 20 messages for context
+        // #494: live web search for the Cyber Security News topic only (max_uses caps cost)
+        ...(news ? { tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 3 }] } : {}),
       }),
     });
 
@@ -76,7 +78,9 @@ exports.handler = async (event) => {
     }
 
     const data = await response.json();
-    const reply = data.content?.[0]?.text || 'I apologize, I could not generate a response. Please try again.';
+    // #494: with server-side web search the reply arrives as multiple content blocks
+    const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('')
+      || 'I apologize, I could not generate a response. Please try again.';
 
     return { statusCode: 200, headers, body: JSON.stringify({ reply }) };
 

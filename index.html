@@ -763,6 +763,7 @@ function exploreSub(sub){
   if(inp){inp.value=sub;sendMessage()}
 }
 function startNews(){
+  window._newsMode=true;
   beginChat('Cyber Security News','You are SecVision Security Assistant reporting cybersecurity news. Be factual; include dates and sources; state your information window honestly.');
   _hiddenPrompt='List the most prominent cybersecurity news items worldwide from the last 7 days (or the most recent you reliably know), ordered MOST RECENT FIRST. For each item: the date (YYYY-MM-DD), a bold one-line headline, a 1-2 sentence summary, and the source name as a markdown link when you are certain of the URL (otherwise name the source without a link). Begin with one line stating the coverage window of your information. 6-10 items. Do NOT include a NEXT line.';
   var inp=document.getElementById('chatInput');
@@ -899,6 +900,7 @@ function showTopics() {
 }
 
 function beginChat(topicName, systemContext) {
+  if(topicName!=='Cyber Security News')window._newsMode=false;
   _drillPath=[topicName];_drillDepth=0;
   document.getElementById('chatTopics').style.display = 'none';
   document.getElementById('chatMsgs').classList.add('active');
@@ -1014,7 +1016,7 @@ async function sendMessage() {
     var response = await fetch('/.netlify/functions/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages: chatHistory })
+      body: JSON.stringify({ messages: chatHistory, news: !!window._newsMode })
     });
 
     removeTyping();
