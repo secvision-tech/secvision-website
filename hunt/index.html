@@ -867,7 +867,7 @@ function setMode(mode){
   var consPanel=document.getElementById('consultantsPanel');if(consPanel)consPanel.classList.toggle('show',mode==='consultants');
   // Show/hide results panel for search modes vs dashboard/contract/consultants/settings
   document.querySelector('.rp').style.display=(mode==='dash'||mode==='contract'||mode==='consultants')?'none':'flex';
-  if(mode==='consultants'){loadConsultants();return;}
+  if(mode==='consultants'){if(!(window.consultantsData&&consultantsData.length)){loadConsultants();}else{/* #495: already loaded; use the Refresh/Search buttons to reload */}return;}
   if(mode==='dash'){
     if(!dashLoaded){loadDashboard();dashLoaded=true}return;
   }

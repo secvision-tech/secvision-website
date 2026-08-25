@@ -732,7 +732,7 @@ document.querySelectorAll('.sc,.tc,.pc,.bc2,.ab-card,.serve-card').forEach(el=>{
       <button class="chat-topic-btn" onclick="startTopic('Identity & Zero Trust','Help me with identity security and Zero Trust — Entra ID, Conditional Access, PIM, PAM, SSO, MFA, identity governance.')"><span class="t-icon">🔐</span>Identity & Zero Trust</button>
       <button class="chat-topic-btn" onclick="startTopic('AppSec & OWASP','Help me with application security — OWASP Top 10, SAST/DAST, secure SDLC, API security, penetration testing, code review.')"><span class="t-icon">🛡️</span>AppSec & OWASP</button>
       <button class="chat-topic-btn" onclick="startTopic('Compliance','Help me with security compliance — SOC 2, ISO 27001, NIST CSF, CIS Controls, GDPR, HIPAA, PCI-DSS, risk assessment.')"><span class="t-icon">📋</span>Compliance</button>
-      <button class="chat-topic-btn" onclick="startTopic('SOC Operations','Help me with SOC operations — analyst workflows, alert triage, SLA management, SOC metrics, shift management, L1-L4 tier responsibilities.')"><span class="t-icon">🏢</span>SOC Operations</button>
+      <button class="chat-topic-btn" onclick="startTopic('SOC Operations','Help me with SOC operations — analyst workflows, alert triage, SLA management, SOC metrics, shift management, L1-L4 tier responsibilities.')"><span class="t-icon">🏢</span>SOC Operations</button><button class="chat-topic-btn" onclick="startNews()">📰 Cyber Security News</button>
     </div>
     <div class="chat-ask-anything" onclick="startTopic('General Cybersecurity','I need help with a cybersecurity question.')">
       <div class="aa-title">💬 Ask Anything About Cybersecurity</div>
@@ -761,6 +761,12 @@ function exploreSub(sub){
   _hiddenPrompt='Give me a concise practical brief (4-6 sentences) on: '+sub+'. Then, on the FINAL line only, suggest 8-10 narrower sub-areas of this exact topic a security professional might explore next, formatted exactly as: NEXT: item one | item two | item three. Where helpful, include 1-3 reference links as markdown links, but ONLY to official sources you are certain exist \u2014 prefer section landing pages (e.g. https://attack.mitre.org, https://learn.microsoft.com/security, https://csrc.nist.gov, https://owasp.org, https://www.cisecurity.org) over deep article URLs; if unsure of an exact URL, name the resource WITHOUT a link.';
   var inp=document.getElementById('chatInput');
   if(inp){inp.value=sub;sendMessage()}
+}
+function startNews(){
+  beginChat('Cyber Security News','You are SecVision Security Assistant reporting cybersecurity news. Be factual; include dates and sources; state your information window honestly.');
+  _hiddenPrompt='List the most prominent cybersecurity news items worldwide from the last 7 days (or the most recent you reliably know), ordered MOST RECENT FIRST. For each item: the date (YYYY-MM-DD), a bold one-line headline, a 1-2 sentence summary, and the source name as a markdown link when you are certain of the URL (otherwise name the source without a link). Begin with one line stating the coverage window of your information. 6-10 items. Do NOT include a NEXT line.';
+  var inp=document.getElementById('chatInput');
+  if(inp){inp.value='Latest cybersecurity news (last 7 days)';sendMessage()}
 }
 var _origTopicsHtml=null;
 function showSubtopics(topic,seed){
