@@ -732,7 +732,7 @@ document.querySelectorAll('.sc,.tc,.pc,.bc2,.ab-card,.serve-card').forEach(el=>{
       <button class="chat-topic-btn" onclick="startTopic('Identity & Zero Trust','Help me with identity security and Zero Trust — Entra ID, Conditional Access, PIM, PAM, SSO, MFA, identity governance.')"><span class="t-icon">🔐</span>Identity & Zero Trust</button>
       <button class="chat-topic-btn" onclick="startTopic('AppSec & OWASP','Help me with application security — OWASP Top 10, SAST/DAST, secure SDLC, API security, penetration testing, code review.')"><span class="t-icon">🛡️</span>AppSec & OWASP</button>
       <button class="chat-topic-btn" onclick="startTopic('Compliance','Help me with security compliance — SOC 2, ISO 27001, NIST CSF, CIS Controls, GDPR, HIPAA, PCI-DSS, risk assessment.')"><span class="t-icon">📋</span>Compliance</button>
-      <button class="chat-topic-btn" onclick="startTopic('SOC Operations','Help me with SOC operations — analyst workflows, alert triage, SLA management, SOC metrics, shift management, L1-L4 tier responsibilities.')"><span class="t-icon">🏢</span>SOC Operations</button><button class="chat-topic-btn" onclick="startNews()">📰 Cyber Security News</button>
+      <button class="chat-topic-btn" onclick="startTopic('SOC Operations','Help me with SOC operations — analyst workflows, alert triage, SLA management, SOC metrics, shift management, L1-L4 tier responsibilities.')"><span class="t-icon">🏢</span>SOC Operations</button><button class="chat-topic-btn" onclick="startNews()">📢 Cyber Security News</button>
     </div>
     <div class="chat-ask-anything" onclick="startTopic('General Cybersecurity','I need help with a cybersecurity question.')">
       <div class="aa-title">💬 Ask Anything About Cybersecurity</div>
@@ -765,7 +765,7 @@ function exploreSub(sub){
 function startNews(){
   window._newsMode=true;
   beginChat('Cyber Security News','You are SecVision Security Assistant reporting cybersecurity news. Be factual; include dates and sources; state your information window honestly.');
-  _hiddenPrompt='List the most prominent cybersecurity news items worldwide from the last 7 days (or the most recent you reliably know), ordered MOST RECENT FIRST. For each item: the date (YYYY-MM-DD), a bold one-line headline, a 1-2 sentence summary, and the source name as a markdown link when you are certain of the URL (otherwise name the source without a link). Begin with one line stating the coverage window of your information. 6-10 items. Do NOT include a NEXT line.';
+  _hiddenPrompt='Search the web for the most prominent cybersecurity news items worldwide from the last 7 days, ordered MOST RECENT FIRST. For each item: the date written as day month year (for example: 25 August 2026), a bold one-line headline, a 1-2 sentence summary, and the source ALWAYS as a markdown link [Source Name](url) using the exact URL from your search results. 6-10 items. Do NOT include a NEXT line.';
   var inp=document.getElementById('chatInput');
   if(inp){inp.value='Latest cybersecurity news (last 7 days)';sendMessage()}
 }
@@ -943,6 +943,7 @@ function formatMarkdown(text) {
   // Inline code
   text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
   // Bold
+  text = text.replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener" style="color:#0891B2">$1</a>');
   text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   // Italic
   text = text.replace(/\*(.+?)\*/g, '<em>$1</em>');
