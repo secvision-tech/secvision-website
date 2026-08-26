@@ -281,14 +281,19 @@ exports.handler = async function(event) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'get-profiles',
-            // #490: URL lookup is unreliable; search by slug-derived name and slug-match in results
-            keywords: profileUrls.map(function(u){
+            // #496: two modes — search by person name (+location), or by URL (slug-derived name)
+            ...(body.searchName ? {} : {}),
+            keywords: body.searchName ? [ (body.searchName + ' ' + (body.searchCity || '')).trim() ]
+                     : profileUrls.map(function(u){
               var slug = String(u).split('/in/')[1] || String(u);
               slug = slug.replace(/[\/?#].*$/,'');
               var parts = slug.split('-').filter(function(t){ return !/\d/.test(t) && t.length > 0; });
               return (parts.join(' ') || slug);
             }),
-            limit: 5,
+            // #496: country geo filter for name search (LinkedIn geoUrn ids)
+            ...(body.searchName && body.searchCountry && ({ 'india':'102713980','united states':'103644278','usa':'103644278','united kingdom':'101165590','uk':'101165590','canada':'101174742' })[String(body.searchCountry).trim().toLowerCase()]
+               ? { location: [ ({ 'india':'102713980','united states':'103644278','usa':'103644278','united kingdom':'101165590','uk':'101165590','canada':'101174742' })[String(body.searchCountry).trim().toLowerCase()] ] } : {}),
+            limit: body.searchName ? 8 : 5,
             profileFields: ['about','experience','organizations','skills','languages','honors','projects']
           })
         });
@@ -325,6 +330,9 @@ exports.handler = async function(event) {
         // Succeeded — fetch results
         var resultsResp = await fetch('https://api.apify.com/v2/datasets/' + datasetId + '/items?token=' + APIFY_TOKEN + '&format=json');
         var profiles = await resultsResp.json();
+        // #496b: the actor emits NOT_FOUND placeholder items on barren searches — drop them
+        // so an all-stub result counts as empty and the frontend auto-retry engages.
+        profiles = (profiles || []).filter(function (p) { return p && p.status !== 'NOT_FOUND'; });
         // #490: when the original url is provided, keep only the slug-matching profile
         if (body.url) {
           var wantSlug = (String(body.url).split('/in/')[1] || '').replace(/[\/?#].*$/,'').toLowerCase();
