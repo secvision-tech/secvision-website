@@ -283,17 +283,15 @@ exports.handler = async function(event) {
             action: 'get-profiles',
             // #496: two modes — search by person name (+location), or by URL (slug-derived name)
             ...(body.searchName ? {} : {}),
+            // #496c: URL mode passes the RAW URL as the keyword — the actor resolves URL
+            // targets via a direct path that avoids the flaky text-search handler (user-verified
+            // in the Apify console). Name mode remains a text search.
             keywords: body.searchName ? [ (body.searchName + ' ' + (body.searchCity || '')).trim() ]
-                     : profileUrls.map(function(u){
-              var slug = String(u).split('/in/')[1] || String(u);
-              slug = slug.replace(/[\/?#].*$/,'');
-              var parts = slug.split('-').filter(function(t){ return !/\d/.test(t) && t.length > 0; });
-              return (parts.join(' ') || slug);
-            }),
+                     : profileUrls,
             // #496: country geo filter for name search (LinkedIn geoUrn ids)
             ...(body.searchName && body.searchCountry && ({ 'india':'102713980','united states':'103644278','usa':'103644278','united kingdom':'101165590','uk':'101165590','canada':'101174742' })[String(body.searchCountry).trim().toLowerCase()]
                ? { location: [ ({ 'india':'102713980','united states':'103644278','usa':'103644278','united kingdom':'101165590','uk':'101165590','canada':'101174742' })[String(body.searchCountry).trim().toLowerCase()] ] } : {}),
-            limit: body.searchName ? 8 : 5,
+            limit: body.searchName ? 8 : 3,
             profileFields: ['about','experience','organizations','skills','languages','honors','projects']
           })
         });
