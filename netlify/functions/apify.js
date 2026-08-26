@@ -287,7 +287,7 @@ exports.handler = async function(event) {
             // targets via a direct path that avoids the flaky text-search handler (user-verified
             // in the Apify console). Name mode remains a text search.
             keywords: body.searchName ? [ (body.searchName + ' ' + (body.searchCity || '')).trim() ]
-                     : profileUrls,
+                     : profileUrls.map(function(u){ u=String(u).trim(); return u.endsWith('/')?u:u+'/'; }),   // #496d: actor URL fetch wants trailing slash
             // #496: country geo filter for name search (LinkedIn geoUrn ids)
             ...(body.searchName && body.searchCountry && ({ 'india':'102713980','united states':'103644278','usa':'103644278','united kingdom':'101165590','uk':'101165590','canada':'101174742' })[String(body.searchCountry).trim().toLowerCase()]
                ? { location: [ ({ 'india':'102713980','united states':'103644278','usa':'103644278','united kingdom':'101165590','uk':'101165590','canada':'101174742' })[String(body.searchCountry).trim().toLowerCase()] ] } : {}),
