@@ -4948,7 +4948,9 @@ function acApplyLinkedInProfile(p,url,st){
       var tEl=document.getElementById('acType');if(tEl)tEl.value='Unknown';
       var btn=document.getElementById('acLiBtn');
       var typed=window._liTyped||{};
-      if(!p.name&&typed.name)p.name=typed.name;
+      // #496j: vanity-slug fallback names (s41r4j), spaceless or digit-bearing strings are not
+      // real names — use the typed name instead. Country is always the typed value (authoritative).
+      if(typed.name&&(!p.name||p.name===p.vanityName||!/\s/.test(p.name)||/\d/.test(p.name)))p.name=typed.name;
       var setIf=function(id,v){var el=document.getElementById(id);if(el&&v&&!el.value)el.value=v};
       setIf('acName',p.name||((p.firstName||'')+' '+(p.lastName||'')).trim());
       (function(){var _fr=(p.experience||[]).filter(function(e){return e.duration})[0];
