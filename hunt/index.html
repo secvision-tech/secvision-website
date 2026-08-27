@@ -4941,12 +4941,18 @@ function acPickProfile(i){
   acApplyLinkedInProfile(p,p.linkedinUrl||p.url||'',document.getElementById('acLiStatus'));
 }
 function acApplyLinkedInProfile(p,url,st){
+      // #496g: a fetched profile REPLACES the form — clear all profile fields first so a
+      // previous consultant's leftovers can never mix into the new record.
+      ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears','acRate'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
+      var tEl=document.getElementById('acType');if(tEl)tEl.value='Unknown';
       var btn=document.getElementById('acLiBtn');
       var typed=window._liTyped||{};
       if(!p.name&&typed.name)p.name=typed.name;
       var setIf=function(id,v){var el=document.getElementById(id);if(el&&v&&!el.value)el.value=v};
       setIf('acName',p.name||((p.firstName||'')+' '+(p.lastName||'')).trim());
-      setIf('acRole',p.title||p.headline||p.currentRole||(p.experience&&p.experience[0]&&p.experience[0].title));
+      (function(){var _fr=(p.experience||[]).filter(function(e){return e.duration})[0];
+      var _hl=(p.headline||''),_hlOk=_hl&&(_hl.replace(/[^A-Za-z]/g,'').length>=_hl.replace(/[\s,.\-|\u00b7]/g,'').length*0.5);
+      setIf('acRole',p.title||(_fr&&_fr.title)||(_hlOk?_hl:'')||p.currentRole);})();   // #496h: real position first; headline only if Latin (RU-locale UI strings leak here)
       setIf('acCompany',p.company||p.currentCompany||(p.experience&&p.experience[0]&&(p.experience[0].companyName||p.experience[0].company)));
       var loc=p.location||p.geoLocationName||'';
       (function(){var _lat=(loc.replace(/[^A-Za-z]/g,'').length>=loc.replace(/[\s,.\-]/g,'').length*0.5);
