@@ -4846,7 +4846,7 @@ function addConsultantHtml(){
     +'<div style="background:#fff;border-radius:8px;width:96%;max-width:600px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)">+ Add Consultant Profile</h3><button onclick="closeAddConsultant()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div>'
     +'<div style="background:#EEF2FF;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#4338CA;font-weight:600">📄 Import from Resume (Word .docx or PDF) — AI extraction</label><input type="file" id="acResume" accept=".docx,.pdf" onchange="parseResume(event)" style="font-size:.58rem;margin-top:.3rem;width:100%"><div id="acResumeStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
-    +'<div style="background:#EFF8FB;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#0E7490;font-weight:600">🔎 Or import from LinkedIn by Name / URL</label><div style="display:flex;gap:.35rem;margin-top:.3rem"><input id="acLiName" placeholder="Full name" style="flex:2;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><input id="acLiCity" placeholder="City/State (optional)" style="flex:2;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><input id="acLiCountry" placeholder="Country" style="flex:1.4;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><button type="button" onclick="acFetchLinkedIn(true)" style="padding:.3rem .6rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Search</button></div><label style="font-size:.55rem;color:#0E7490;margin-top:.3rem;display:block">or profile URL</label><div style="display:flex;gap:.35rem;margin-top:.3rem"><input id="acLiUrl" placeholder="https://www.linkedin.com/in/username" style="flex:1;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><button type="button" onclick="acFetchLinkedIn()" id="acLiBtn" style="padding:.3rem .6rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Fetch</button></div><div id="acLiStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
+    +'<div style="background:#EFF8FB;border-radius:6px;padding:.5rem;margin-bottom:.6rem"><label style="font-size:.58rem;color:#0E7490;font-weight:600">🔎 Import from LinkedIn — Name + Country required; URL for exact profile, blank to search</label><div style="display:flex;gap:.35rem;margin-top:.3rem"><input id="acLiName" placeholder="Full name *" style="flex:2;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><input id="acLiCountry" placeholder="Country *" style="flex:1.3;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"></div><div style="display:flex;gap:.35rem;margin-top:.3rem"><input id="acLiUrl" placeholder="https://www.linkedin.com/in/username" style="flex:1;padding:.3rem .4rem;font-size:.6rem;border:1px solid var(--g100);border-radius:4px"><button type="button" onclick="acFetchLinkedIn()" id="acLiBtn" style="padding:.3rem .6rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Fetch</button></div><div id="acLiStatus" style="font-size:.55rem;color:var(--g5);margin-top:.2rem"></div></div>'
     +acGroup('👤 Identity',f('acName','Name *')+f('acRole','Role / Title')+f('acCompany','Current Company')
       +'<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="acType" class="set-input" style="width:100%;font-size:.62rem"><option>Contractor</option><option>Sub-Contractor</option><option>Permanent</option><option>Unknown</option></select></div>'
       +'<div><label style="font-size:.55rem;color:var(--g4)">Expected Rate (e.g. $40/hr or ₹6000/day)</label><input id="acRate" class="set-input" style="width:100%;font-size:.62rem" placeholder="rate + unit"></div>')
@@ -4869,26 +4869,28 @@ function acGroup(title,inner){
 // Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
 var _acResumeFile=null;   // #435: keep the imported file so we can attach it after Save
 var _liAttempt=0;
-async function acFetchLinkedIn(byName){
+async function acFetchLinkedIn(){
   var url=(document.getElementById('acLiUrl').value||'').trim();
   var st=document.getElementById('acLiStatus'),btn=document.getElementById('acLiBtn');
-  var searchBody=null;
-  if(byName===true){
-    var nm=((document.getElementById('acLiName')||{}).value||'').trim();
-    if(nm.length<3){st.textContent='⚠️ Enter the full name to search.';return}
-    searchBody={action:'startProfileScrape',searchName:nm,searchCity:((document.getElementById('acLiCity')||{}).value||'').trim(),searchCountry:((document.getElementById('acLiCountry')||{}).value||'').trim(),urls:[]};
-  } else if(!/linkedin\.com\/in\//i.test(url)){st.textContent='⚠️ Paste a profile URL like linkedin.com/in/username';return}
+  var nm=((document.getElementById('acLiName')||{}).value||'').trim();
+  var ctry=((document.getElementById('acLiCountry')||{}).value||'').trim();
+  if(nm.length<3){st.textContent='⚠️ Full name is required.';return}
+  if(!ctry){st.textContent='⚠️ Country is required.';return}
+  if(url&&!/linkedin\.com\/in\//i.test(url)){st.textContent='⚠️ URL must look like linkedin.com/in/username (or leave it blank to search).';return}
+  window._liTyped={name:nm,country:ctry};
+  var byName=!url;
+  var searchBody={action:'startProfileScrape',searchName:nm,searchCountry:ctry,urls:url?[url]:[]};
   btn.disabled=true;btn.style.opacity='.5';
   st.textContent='🔗 Starting LinkedIn fetch (typically 30-60s)...';
   try{
-    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify(searchBody||{action:'startProfileScrape',urls:[url]})});
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify(searchBody)});
     var d=await r.json();
     if(d.error){st.textContent='⚠️ '+d.error;btn.disabled=false;btn.style.opacity='1';return}
     var runId=d.runId,dsId=d.datasetId,tries=0;
     var poll=async function(){
       tries++;
       if(tries>30){st.textContent='⚠️ Timed out — try again in a minute.';btn.disabled=false;btn.style.opacity='1';return}
-      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkProfileScrape',runId:runId,datasetId:dsId,url:(byName===true?'':url)})});
+      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkProfileScrape',runId:runId,datasetId:dsId,url:url})});
       var pd=await pr.json();
       if(!pd.done){st.textContent='⏳ Fetching profile... ('+(tries*4)+'s)';setTimeout(poll,4000);return}
       if(pd.error||!pd.profiles||!pd.profiles.length){
@@ -4909,7 +4911,7 @@ async function acFetchLinkedIn(byName){
         acShowProfilePicker(pd.profiles);return;
       }
       var p=pd.profiles[0];
-      acApplyLinkedInProfile(p,byName===true?(p.linkedinUrl||p.url||''):url,st);
+      acApplyLinkedInProfile(p,url||(p.linkedinUrl||p.url||''),st);
       btn.disabled=false;btn.style.opacity='1';
     };
     setTimeout(poll,4000);
@@ -4940,6 +4942,8 @@ function acPickProfile(i){
 }
 function acApplyLinkedInProfile(p,url,st){
       var btn=document.getElementById('acLiBtn');
+      var typed=window._liTyped||{};
+      if(!p.name&&typed.name)p.name=typed.name;
       var setIf=function(id,v){var el=document.getElementById(id);if(el&&v&&!el.value)el.value=v};
       setIf('acName',p.name||((p.firstName||'')+' '+(p.lastName||'')).trim());
       setIf('acRole',p.title||p.headline||p.currentRole||(p.experience&&p.experience[0]&&p.experience[0].title));
@@ -4947,6 +4951,7 @@ function acApplyLinkedInProfile(p,url,st){
       var loc=p.location||p.geoLocationName||'';
       setIf('acLocation',loc.replace(/,\s*India$/i,''));
       if(/india/i.test(loc))setIf('acCountry','India');else if(loc.indexOf(',')>0)setIf('acCountry',loc.split(',').pop().trim());
+      if(typed.country){var cEl=document.getElementById('acCountry');if(cEl)cEl.value=typed.country;}   // typed country is authoritative
       setIf('acLinkedin',url);
       // #490b: summary — keep the real About, cut LinkedIn feed junk after the contact line
       var summ=(p.about||p.summary||'');
