@@ -4835,7 +4835,7 @@ function openAddConsultant(){
   var pop=document.getElementById('addConsultantPopup');
   if(!pop){document.body.insertAdjacentHTML('beforeend',addConsultantHtml());pop=document.getElementById('addConsultantPopup')}
   pop.style.display='flex';
-  ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears','acRate'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
+  ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acCompliance','acSummary','acYears','acRate'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
   document.getElementById('acType').value='Contractor';var rf=document.getElementById('acResume');if(rf)rf.value='';var lu=document.getElementById('acLiUrl');if(lu)lu.value='';var ls=document.getElementById('acLiStatus');if(ls)ls.textContent='';var rs=document.getElementById('acResumeStatus');if(rs)rs.textContent='';_acResumeFile=null;
   document.getElementById('acStatus').textContent='';
 }
@@ -4855,6 +4855,7 @@ function addConsultantHtml(){
     +acGroup('🛡️ Professional',f('acYears','Years Experience','number')
       +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Skills (comma-separated)</label><input id="acSkills" class="set-input" style="width:100%;font-size:.62rem"></div>'
       +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Certifications (comma-separated)</label><input id="acCerts" class="set-input" style="width:100%;font-size:.62rem"></div>'
+      +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Compliance / Standards (e.g. ISO 27001, NIST 800-53)</label><input id="acCompliance" class="set-input" style="width:100%;font-size:.62rem"></div>'
       +'<div style="grid-column:1/-1"><label style="font-size:.55rem;color:var(--g4)">Summary</label><textarea id="acSummary" class="set-input" style="width:100%;font-size:.62rem;min-height:50px"></textarea></div>')
     +'<div id="acStatus" style="font-size:.6rem;margin-top:.5rem"></div>'
     +'<div style="display:flex;gap:.4rem;margin-top:.6rem;justify-content:flex-end"><button onclick="closeAddConsultant()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer">Cancel</button><button onclick="saveNewConsultant()" style="padding:.35rem .9rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Profile</button></div>'
@@ -4943,7 +4944,7 @@ function acPickProfile(i){
 function acApplyLinkedInProfile(p,url,st){
       // #496g: a fetched profile REPLACES the form — clear all profile fields first so a
       // previous consultant's leftovers can never mix into the new record.
-      ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acSummary','acYears','acRate'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
+      ['acName','acRole','acCompany','acLocation','acCountry','acEmail','acPhone','acLinkedin','acSkills','acCerts','acCompliance','acSummary','acYears','acRate'].forEach(function(id){var el=document.getElementById(id);if(el)el.value=''});
       var tEl=document.getElementById('acType');if(tEl)tEl.value='Unknown';
       var btn=document.getElementById('acLiBtn');
       var typed=window._liTyped||{};
@@ -4955,8 +4956,10 @@ function acApplyLinkedInProfile(p,url,st){
       setIf('acRole',p.title||(_fr&&_fr.title)||(_hlOk?_hl:'')||p.currentRole);})();   // #496h: real position first; headline only if Latin (RU-locale UI strings leak here)
       setIf('acCompany',p.company||p.currentCompany||(p.experience&&p.experience[0]&&(p.experience[0].companyName||p.experience[0].company)));
       var loc=p.location||p.geoLocationName||'';
-      (function(){var _lat=(loc.replace(/[^A-Za-z]/g,'').length>=loc.replace(/[\s,.\-]/g,'').length*0.5);
-      if(_lat)setIf('acLocation',loc.replace(/,\s*India$/i,''));})();   // #496f: skip localized non-Latin locations (foreign-locale pool accounts)
+      (function(){var isLat=function(s){s=String(s||'');return s&&(s.replace(/[^A-Za-z]/g,'').length>=s.replace(/[\s,.\-]/g,'').length*0.5)};
+      var useLoc=isLat(loc)?loc:'';
+      if(!useLoc){var _fx=(p.experience||[]).filter(function(e){return e.duration&&isLat(e.location)})[0];if(_fx)useLoc=_fx.location}
+      if(useLoc)setIf('acLocation',useLoc.replace(/,\s*India$/i,''));})();   // #496i: non-Latin location converted via first Latin experience location
       if(/india/i.test(loc))setIf('acCountry','India');else if(loc.indexOf(',')>0)setIf('acCountry',loc.split(',').pop().trim());
       if(typed.country){var cEl=document.getElementById('acCountry');if(cEl)cEl.value=typed.country;}   // typed country is authoritative
       setIf('acLinkedin',url);
@@ -4980,7 +4983,21 @@ function acApplyLinkedInProfile(p,url,st){
       if(exEmail)setIf('acEmail',exEmail);
       if(exPhone)setIf('acPhone',exPhone.trim());
       // #490b: skills & certifications
-      if(p.skills&&p.skills.length)setIf('acSkills',p.skills.slice(0,30).join(', '));
+      if(p.skills&&p.skills.length){
+        var schools=(p.education||[]).map(function(e){return (e.schoolName||'').toLowerCase()}).filter(Boolean);
+        var compRe=/^(iso\s?\/?\s?iec)?\s*(iso\s*2\d{4}(?:[-:]\d+)?|nist(\s*(sp)?\s*800[- ]?\d+[a-z]?|\s*csf)?|soc\s*2|pci[- ]?dss|hipaa|gdpr|cis\s*(controls|benchmarks)?|fedramp|cmmc|mitre\s*att&?ck|zero\s*trust|tic\s*3\.0|dpdp|cert[- ]?in)$/i;
+        var comp=[],sk=[];
+        p.skills.forEach(function(s){
+          var lo=String(s).toLowerCase().trim();
+          if(schools.some(function(sc){return sc&&(lo===sc||lo.indexOf(sc)>=0||sc.indexOf(lo)>=0)}))return;
+          if(/\b(school|university|college|institute)\b/i.test(s))return;
+          if(compRe.test(String(s).trim()))comp.push(s);else sk.push(s);
+        });
+        var hlC=((p.headline||'')+' ').match(/ISO\s?27001|NIST(\s*(SP)?\s*800[- ]?\d+[a-z]?|\s*CSF)?|SOC\s*2|PCI[- ]?DSS|HIPAA|GDPR|FedRAMP|CMMC|Zero\s*Trust/gi)||[];
+        hlC.forEach(function(x){if(comp.indexOf(x)<0)comp.push(x)});
+        setIf('acSkills',sk.slice(0,30).join(', '));
+        if(comp.length)setIf('acCompliance',comp.join(', '));
+      }
       if(p.certifications&&p.certifications.length)setIf('acCerts',p.certifications.map(function(cc){return cc.name||cc}).filter(Boolean).join(', '));
       // #490b: type from latest real position's employment type — never blind-default
       var firstReal=(p.experience||[]).filter(function(e){return e.duration})[0];
@@ -5065,6 +5082,7 @@ async function saveNewConsultant(){
     yearsExperience:parseInt(document.getElementById('acYears').value)||0,
     skills:document.getElementById('acSkills').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
     certifications:document.getElementById('acCerts').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
+    compliance:document.getElementById('acCompliance').value.split(',').map(function(s){return s.trim()}).filter(Boolean),
     summary:document.getElementById('acSummary').value.trim(),
     rate:document.getElementById('acRate').value.trim()
   };
