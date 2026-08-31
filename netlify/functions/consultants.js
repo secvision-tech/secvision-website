@@ -65,7 +65,10 @@ var ACTION_ROLES = {
   'uploadResume': STATUS_ROLES,
   'getResume': VIEW_ROLES,
   'removeResume': STATUS_ROLES,
-  'promoteAllCached': ADMIN_UP           // one-time cached -> managed transfer
+  'promoteAllCached': ADMIN_UP,          // one-time cached -> managed transfer
+  'listPending': VIEW_ROLES,             // #497 review popup: all pending (managed:false) profiles, any source
+  'rejectPending': STATUS_ROLES,         // #497 delete from review -> permanent sourcing reject (anti-resurrection)
+  'promoteSelected': STATUS_ROLES        // #497 import selected pending ids -> managed
 };
 
 // ---- JWT ----
@@ -625,6 +628,49 @@ exports.handler = async function (event) {
     }
 
     // ---- PROMOTE ALL CACHED -> MANAGED (one-time, super/admin) ----
+    // ---- #497 REVIEW POPUP: list pending profiles (all sources) ----
+    if (action === 'listPending') {
+      var pend = await col.find({ $or: [{ managed: { $exists: false } }, { managed: false }] })
+        .project({ name: 1, currentRole: 1, currentCompany: 1, location: 1, country: 1, rateExpectation: 1, skills: 1,
+                   source: 1, sourceId: 1, upwork: 1, summary: 1, email: 1, linkedinUrl: 1, fetchedAt: 1, createdAt: 1 })
+        .sort({ fetchedAt: -1, createdAt: -1 }).limit(500).toArray();
+      pend.forEach(function (p) { if (p.summary) p.summary = String(p.summary).slice(0, 1200); });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ pending: pend, total: pend.length }) };
+    }
+    // ---- #497 reject: remove pending profile AND remember it so no future fetch re-caches it ----
+    if (action === 'rejectPending') {
+      var rid = body.id; if (!rid) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'id required' }) };
+      var rdoc = await col.findOne({ _id: new ObjectId(rid) });
+      if (!rdoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'not found' }) };
+      if (rdoc.managed) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'managed profiles cannot be rejected here' }) };
+      await db.collection('sourcing_rejects').updateOne(
+        { sourceId: rdoc.sourceId || String(rdoc._id) },
+        { $set: { sourceId: rdoc.sourceId || String(rdoc._id), source: rdoc.source || '', name: rdoc.name || '',
+                  rejectedAt: new Date(), rejectedBy: authUser.email } }, { upsert: true });
+      await col.deleteOne({ _id: rdoc._id });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, rejected: rdoc.sourceId || String(rdoc._id) }) };
+    }
+    // ---- #497 promote selected pending ids -> managed (email dedup guard when email present) ----
+    if (action === 'promoteSelected') {
+      var ids = (body.ids || []).map(function (i) { try { return new ObjectId(i); } catch (e) { return null; } }).filter(Boolean);
+      if (!ids.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'ids required' }) };
+      var docs = await col.find({ _id: { $in: ids }, $or: [{ managed: { $exists: false } }, { managed: false }] }).toArray();
+      var promoted = 0, dup = [];
+      for (var d = 0; d < docs.length; d++) {
+        var pd = docs[d];
+        if (pd.email) {
+          var clash = await col.findOne({ managed: true, email: pd.email, _id: { $ne: pd._id } }, { projection: { _id: 1 } });
+          if (clash) { dup.push(pd.name || pd.email); continue; }
+        }
+        await col.updateOne({ _id: pd._id }, { $set: {
+          managed: true, availability: pd.availability || 'available', pipelineStatus: 'none',
+          engagementType: pd.engagementType || (pd.source === 'upwork' ? 'Contractor' : 'Unknown'),
+          promotedAt: new Date(), promotedBy: authUser.email } });
+        promoted++;
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, promoted: promoted, duplicates: dup }) };
+    }
+
     if (action === 'promoteAllCached') {
       var res = await col.updateMany(
         { $or: [{ managed: { $exists: false } }, { managed: false }] },
