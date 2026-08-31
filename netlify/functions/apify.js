@@ -338,6 +338,7 @@ exports.handler = async function(event) {
           rateExpectation: it.hourly_rate_usd ? ('$' + it.hourly_rate_usd + '/hr') : '',
           skills: (it.skills || []).filter(function (s) { return !compRe.test(s); }), certifications: certs, compliance: comps,
           summary: desc.slice(0, 2500), linkedinUrl: '', email: '', engagementType: 'Contractor',
+          yearsExperience: (function(){ var m = (desc + ' ' + (it.title || '')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i); return m ? parseInt(m[1]) : 0; })(),
           contractorSignal: { likely: true, employmentTypes: ['Freelance'] },
           upwork: { profileUrl: it.profile_url || '', earnings: it.total_earnings_usd, earningsHidden: !!it.earnings_hidden, hours: it.total_hours,
                     jss: it.job_success_flag, topRated: it.top_rated_status || '', jobs: { hourly: it.total_hourly_jobs, fixed: it.total_fixed_jobs, completed: it.total_completed_jobs },
