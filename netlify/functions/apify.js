@@ -272,6 +272,92 @@ exports.handler = async function(event) {
     }
 
     // ACTION: startProfileScrape - kick off scrape, return runId immediately (no wait)
+    // ============ #497 UPWORK TALENT HARVEST (bovi~upwork-talent-scraper) ============
+    // startTalentScrape: {roles:[...], country:'india', count:10} -> one run, one search URL per role,
+    // each continued from its persisted page cursor so repeat fetches surface NEW profiles.
+    if (action === 'startTalentScrape') {
+      var roles = (body.roles || []).map(function (r) { return String(r).trim(); }).filter(Boolean);
+      var tCountry = String(body.country || 'india').trim().toLowerCase();
+      var tCount = Math.min(Math.max(parseInt(body.count) || 10, 1), 50);
+      if (!roles.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No roles selected' }) };
+      var { getDb: gdb1 } = require('./db');
+      var tdb = await gdb1();
+      var curCol = tdb.collection('sourcing_cursors');
+      var queries = [], urls = [];
+      for (var qi = 0; qi < roles.length; qi++) {
+        var key = roles[qi].toLowerCase() + '|' + tCountry;
+        var cur = await curCol.findOne({ key: key });
+        var page = (cur && cur.lastPage ? cur.lastPage : 0) + 1;
+        var u = 'https://www.upwork.com/nx/search/talent/?loc=' + encodeURIComponent(tCountry) + '&q=' + encodeURIComponent(roles[qi]) + (page > 1 ? '&page=' + page : '');
+        queries.push({ role: roles[qi], key: key, page: page }); urls.push(u);
+      }
+      try {
+        var tresp = await fetch('https://api.apify.com/v2/acts/bovi~upwork-talent-scraper/runs?token=' + APIFY_TOKEN, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ maxProfiles: tCount, searchUrls: urls })
+        });
+        if (!tresp.ok) { var tt = await tresp.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start talent scraper', apifyStatus: tresp.status, apifyResponse: tt.slice(0, 300) }) }; }
+        var trun = await tresp.json();
+        await tdb.collection('sourcing_runs').insertOne({ runId: trun.data.id, datasetId: trun.data.defaultDatasetId, queries: queries, country: tCountry, count: tCount, startedAt: new Date(), by: (typeof authResult !== 'undefined' && authResult && authResult.email) || '' });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ started: true, runId: trun.data.id, datasetId: trun.data.defaultDatasetId, queries: queries }) };
+      } catch (e) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Talent scraper error: ' + e.message }) }; }
+    }
+    // checkTalentScrape: poll; on SUCCEEDED insert into consultant_profiles (managed:false, source:'upwork')
+    // with upsert-by-upworkId, managed-skip, rejects filter; then advance page cursors.
+    if (action === 'checkTalentScrape') {
+      var { getDb: gdb2 } = require('./db');
+      var cdb = await gdb2();
+      var rr = await fetch('https://api.apify.com/v2/actor-runs/' + body.runId + '?token=' + APIFY_TOKEN);
+      var rj = await rr.json(); var rstatus = rj.data && rj.data.status;
+      if (rstatus !== 'SUCCEEDED' && rstatus !== 'FAILED' && rstatus !== 'ABORTED' && rstatus !== 'TIMED-OUT')
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: rstatus, done: false }) };
+      if (rstatus !== 'SUCCEEDED') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: rstatus, done: true, error: 'Scraper ' + rstatus }) };
+      var dsId = body.datasetId || (rj.data && rj.data.defaultDatasetId);
+      var ir = await fetch('https://api.apify.com/v2/datasets/' + dsId + '/items?token=' + APIFY_TOKEN + '&format=json');
+      var items = await ir.json(); if (!Array.isArray(items)) items = [];
+      var ccol = cdb.collection('consultant_profiles');
+      var rejSet = {}; (await cdb.collection('sourcing_rejects').find({ source: 'upwork' }).project({ sourceId: 1 }).toArray()).forEach(function (r) { rejSet[r.sourceId] = 1; });
+      var stats = { fetched: items.length, inserted: 0, updated: 0, skippedRejected: 0, skippedManaged: 0, skippedInvalid: 0 };
+      var certRe = /\b(OSCP|OSEP|OSWP|OSCE|CEH|CISSP|CISM|CISA|CCSP|CCSK|CRTP|CPENT|LPT|CRT|CPSA|Security\+|CySA\+|GCIH|GCIA|GPEN|GSEC|SC-100|SC-200|SC-300|AZ-500|AWS Certified Security(?: [-\u2013] Specialty)?|Certified Ethical Hacker|CompTIA [A-Za-z+]+)\b/g;
+      var compRe = /\b(ISO\s?27001|ISO\s?27701|SOC\s?2|PCI[ -]?DSS|HIPAA|GDPR|NIST(?:\s?CSF|\s?800-53|\s?AI RMF)?|CIS Benchmarks?|MITRE ATT&CK|FedRAMP|CMMC|Zero Trust)\b/gi;
+      for (var ii = 0; ii < items.length; ii++) {
+        var it = items[ii]; if (!it || !it.freelancer_id) { stats.skippedInvalid++; continue; }
+        var sid = 'upwork-' + it.freelancer_id;
+        if (rejSet[sid]) { stats.skippedRejected++; continue; }
+        var existing = await ccol.findOne({ sourceId: sid }, { projection: { _id: 1, managed: 1 } });
+        if (existing && existing.managed) { stats.skippedManaged++; continue; }
+        var desc = String(it.description || '');
+        var uniq = function (arr) { var s = {}, o = []; arr.forEach(function (x) { var k = String(x).trim(); if (k && !s[k.toLowerCase()]) { s[k.toLowerCase()] = 1; o.push(k); } }); return o; };
+        var certs = uniq((desc.match(certRe) || []).concat((it.title || '').match(certRe) || []));
+        var comps = uniq((desc.match(compRe) || []).concat((it.skills || []).filter(function (s) { return compRe.test(s); })));
+        var doc = {
+          sourceId: sid, source: 'upwork', managed: false,
+          name: it.short_name || ((it.first_name || '') + ' ' + (it.last_name || '')).trim(),
+          currentRole: String(it.title || '').split('|')[0].trim(), currentCompany: '',
+          location: [it.city, it.state].filter(Boolean).join(', '), country: it.country || '',
+          rateExpectation: it.hourly_rate_usd ? ('$' + it.hourly_rate_usd + '/hr') : '',
+          skills: (it.skills || []).filter(function (s) { return !compRe.test(s); }), certifications: certs, compliance: comps,
+          summary: desc.slice(0, 2500), linkedinUrl: '', email: '', engagementType: 'Contractor',
+          contractorSignal: { likely: true, employmentTypes: ['Freelance'] },
+          upwork: { profileUrl: it.profile_url || '', earnings: it.total_earnings_usd, earningsHidden: !!it.earnings_hidden, hours: it.total_hours,
+                    jss: it.job_success_flag, topRated: it.top_rated_status || '', jobs: { hourly: it.total_hourly_jobs, fixed: it.total_fixed_jobs, completed: it.total_completed_jobs },
+                    rank: it.search_rank, query: it.search_query || '' },
+          fetchedAt: new Date()
+        };
+        if (existing) { await ccol.updateOne({ _id: existing._id }, { $set: doc }); stats.updated++; }
+        else { doc.createdAt = new Date(); await ccol.insertOne(doc); stats.inserted++; }
+      }
+      // advance cursors for this run's queries (only if the run actually returned results)
+      var runDoc = await cdb.collection('sourcing_runs').findOne({ runId: body.runId });
+      if (runDoc && items.length) {
+        for (var qq = 0; qq < (runDoc.queries || []).length; qq++) {
+          var q = runDoc.queries[qq];
+          await cdb.collection('sourcing_cursors').updateOne({ key: q.key }, { $set: { key: q.key, role: q.role, country: runDoc.country, lastPage: q.page, updatedAt: new Date() } }, { upsert: true });
+        }
+        await cdb.collection('sourcing_runs').updateOne({ runId: body.runId }, { $set: { finishedAt: new Date(), stats: stats } });
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: 'SUCCEEDED', done: true, stats: stats }) };
+    }
     if (action === 'startProfileScrape') {
       var profileUrls = body.urls || [];
       if (!profileUrls.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No profile URLs provided' }) };
