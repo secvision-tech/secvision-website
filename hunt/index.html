@@ -413,7 +413,7 @@ body.role-viewer .edit-btn{display:none!important}
         <h2 style="font-size:.9rem;color:var(--pri);margin:0">🧑‍💻 Consultant Database</h2>
         <div style="display:flex;gap:.4rem">
           <button onclick="refreshConsultants()" style="padding:.3rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔄 Refresh</button>
-          <button id="promoteCachedBtn" onclick="promoteCached()" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;display:none">⬆️ Import Cached Profiles</button>
+          <button onclick="openUpworkFetch()" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🧲 Upwork Fetch</button><button id="promoteCachedBtn" onclick="openReviewPending()" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;display:none">⬆️ Import Cached Profiles</button>
           <button id="addConsultantBtn" onclick="openAddConsultant()" style="padding:.3rem .7rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">+ Add Profile</button>
         </div>
       </div>
@@ -4070,7 +4070,7 @@ async function loadConsultants(){
         try{
           var cr=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'countCached'})});
           var cd=await cr.json();
-          if((cd.pending||0)>0){pcBtn.style.display='inline-block';pcBtn.textContent='⬆️ Import '+cd.pending+' Cached Profile'+(cd.pending>1?'s':'')}
+          if((cd.pending||0)>0){pcBtn.style.display='inline-block';pcBtn.textContent='📋 Review '+cd.pending+' Pending Profile'+(cd.pending>1?'s':'')}
         }catch(e){}
       }
     }
@@ -4869,6 +4869,84 @@ function acGroup(title,inner){
 }
 // Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
 var _acResumeFile=null;   // #435: keep the imported file so we can attach it after Save
+// ===== #497 Upwork harvest modal + review popup =====
+var UW_ROLES=['SOC Analyst','Security Analyst','SIEM Engineer','Microsoft Sentinel','Security Engineer','Penetration Tester','Cloud Security Engineer','Incident Response','Threat Hunter','Vulnerability Management'];
+function openUpworkFetch(){
+  var ov=document.createElement('div');ov.id='uwOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1500;display:flex;align-items:center;justify-content:center';
+  var roles=UW_ROLES.map(function(r,i){return '<label style="display:inline-block;width:48%;font-size:.62rem;margin:.15rem 0"><input type="checkbox" class="uwRole" value="'+r+'"'+(i===0?' checked':'')+'> '+r+'</label>'}).join('');
+  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:560px;max-width:94%;padding:1rem">'
+   +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.78rem;color:var(--pri)">🧲 Upwork Talent Fetch</b><button onclick="document.getElementById(\'uwOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
+   +'<div style="font-size:.6rem;color:var(--g5);margin:.3rem 0 .5rem">Each role continues from its last page — repeat fetches surface new profiles. ~2¢ per profile.</div>'
+   +'<div>'+roles+'</div>'
+   +'<div style="display:flex;gap:.4rem;margin-top:.5rem"><input id="uwExtra" placeholder="Extra keyword (optional)" style="flex:2;padding:.3rem .4rem;font-size:.62rem;border:1px solid var(--g100);border-radius:4px">'
+   +'<select id="uwCountry" style="flex:1;font-size:.62rem"><option value="india">India</option><option value="united states">United States</option><option value="united kingdom">United Kingdom</option><option value="canada">Canada</option><option value="philippines">Philippines</option></select>'
+   +'<select id="uwCount" style="flex:.6;font-size:.62rem"><option>10</option><option>20</option><option>30</option></select></div>'
+   +'<div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem"><button id="uwGo" onclick="runTalentScrape()" style="padding:.35rem .8rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.64rem;cursor:pointer;font-weight:600">Fetch</button><span id="uwStatus" style="font-size:.6rem;color:var(--g5)"></span></div></div>';
+  document.body.appendChild(ov);
+}
+async function runTalentScrape(){
+  var roles=Array.prototype.map.call(document.querySelectorAll('.uwRole:checked'),function(x){return x.value});
+  var extra=(document.getElementById('uwExtra').value||'').trim();if(extra)roles.push(extra);
+  var st=document.getElementById('uwStatus'),go=document.getElementById('uwGo');
+  if(!roles.length){st.textContent='Select at least one role.';return}
+  go.disabled=true;st.textContent='🚀 Starting harvest ('+roles.length+' role'+(roles.length>1?'s':'')+')...';
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startTalentScrape',roles:roles,country:document.getElementById('uwCountry').value,count:parseInt(document.getElementById('uwCount').value)||10})});
+    var d=await r.json();if(d.error){st.textContent='⚠️ '+d.error;go.disabled=false;return}
+    var t0=Date.now();
+    var poll=async function(){
+      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkTalentScrape',runId:d.runId,datasetId:d.datasetId})});
+      var pd=await pr.json();
+      if(!pd.done){st.textContent='⏳ Harvesting... ('+Math.round((Date.now()-t0)/1000)+'s)';if(Date.now()-t0<240000)setTimeout(poll,5000);else{st.textContent='⚠️ Timed out — check Apify console.';go.disabled=false}return}
+      if(pd.error){st.textContent='⚠️ '+pd.error;go.disabled=false;return}
+      var s=pd.stats||{};
+      st.textContent='✅ '+s.inserted+' new cached, '+s.updated+' refreshed, '+s.skippedManaged+' already yours, '+s.skippedRejected+' previously rejected ('+s.fetched+' fetched).';
+      go.disabled=false;
+      try{loadConsultants(true)}catch(e){}
+    };
+    setTimeout(poll,6000);
+  }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
+}
+var _rvList=[],_rvSort='rate';
+async function openReviewPending(){
+  var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'listPending'})});
+  var d=await r.json();_rvList=d.pending||[];
+  var ov=document.getElementById('rvOverlay');if(ov)ov.remove();
+  ov=document.createElement('div');ov.id='rvOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1500;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:1080px;max-width:96%;max-height:86vh;overflow:auto;padding:1rem"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><b style="font-size:.78rem;color:var(--pri)">📋 Review pending profiles ('+_rvList.length+')</b><div><button onclick="rvPromoteSelected()" style="padding:.3rem .7rem;background:#16A34A;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">⬆️ Import Selected</button> <button onclick="document.getElementById(\'rvOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div></div><div id="rvTable"></div><div id="rvStatus" style="font-size:.6rem;color:var(--g5);margin-top:.4rem"></div></div>';
+  document.body.appendChild(ov);rvRender();
+}
+function rvSortBy(k){_rvSort=k;rvRender()}
+function rvRender(){
+  var num=function(v){var m=String(v||'').match(/[\d.]+/);return m?parseFloat(m[0]):0};
+  var list=_rvList.slice().sort(function(a,b){
+    if(_rvSort==='rate')return num(b.rateExpectation)-num(a.rateExpectation);
+    if(_rvSort==='earn')return ((b.upwork&&b.upwork.earnings)||0)-((a.upwork&&a.upwork.earnings)||0);
+    if(_rvSort==='jss')return ((b.upwork&&b.upwork.jss)||0)-((a.upwork&&a.upwork.jss)||0);
+    return String(a.name||'').localeCompare(String(b.name||''))});
+  var th=function(l,k){return '<th style="padding:.3rem .4rem;cursor:pointer;color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'" onclick="rvSortBy(\''+k+'\')">'+l+(_rvSort===k?' ▼':'')+'</th>'};
+  var rows=list.map(function(p){var u=p.upwork||{};var tier=u.topRated==='top_rated_plus'?'⭐⭐':(u.topRated==='top_rated'?'⭐':'');
+    return '<tr style="border-bottom:1px solid var(--g100)"><td style="padding:.3rem .4rem"><input type="checkbox" class="rvSel" value="'+p._id+'"></td>'
+    +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(p.name||'—')+'</td><td style="padding:.3rem .4rem" title="'+esc(p.currentRole||'')+'">'+esc((p.currentRole||'').slice(0,34)||'—')+'</td>'
+    +'<td style="padding:.3rem .4rem;font-weight:700">'+esc(p.rateExpectation||'—')+'</td><td style="padding:.3rem .4rem">'+(u.jss?'100%':'—')+' '+tier+'</td>'
+    +'<td style="padding:.3rem .4rem">'+(u.earnings!=null?('$'+Math.round(u.earnings).toLocaleString()):(u.earningsHidden?'hidden':'—'))+'</td>'
+    +'<td style="padding:.3rem .4rem;color:var(--g5)">'+esc(p.location||'')+'</td><td style="padding:.3rem .4rem;color:var(--g5)">'+esc(p.source||'')+'</td>'
+    +'<td style="padding:.3rem .4rem;white-space:nowrap"><button onclick="rvView(\''+p._id+'\')" style="font-size:.58rem;padding:.15rem .4rem;cursor:pointer">View</button> '
+    +'<a href="https://www.google.com/search?q='+encodeURIComponent('"'+(p.name||'').replace(/\s\w\.$/,'')+'" '+(p.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(p.country||'')+' site:linkedin.com/in')+'" target="_blank" style="font-size:.58rem">🔍 LinkedIn</a> '
+    +'<button onclick="rvReject(\''+p._id+'\')" style="font-size:.58rem;padding:.15rem .4rem;cursor:pointer;color:#B91C1C">Delete</button></td></tr>'}).join('');
+  document.getElementById('rvTable').innerHTML='<table style="width:100%;border-collapse:collapse;font-size:.62rem"><thead><tr style="text-align:left"><th></th>'+th('Name','name')+'<th style="padding:.3rem .4rem;color:var(--g5)">Title</th>'+th('Rate','rate')+th('JSS','jss')+th('Earnings','earn')+'<th style="padding:.3rem .4rem;color:var(--g5)">Location</th><th style="padding:.3rem .4rem;color:var(--g5)">Source</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="9" style="padding:1rem;text-align:center;color:var(--g3)">Nothing pending.</td></tr>')+'</tbody></table>';
+}
+function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!p)return;var u=p.upwork||{};
+  alert(p.name+'\n'+(p.currentRole||'')+'\n'+(p.location||'')+', '+(p.country||'')+'\nRate: '+(p.rateExpectation||'—')+'\nSkills: '+(p.skills||[]).join(', ')+'\nCerts: '+(p.certifications||[]).join(', ')+'\nCompliance: '+(p.compliance||[]).join(', ')+'\nUpwork: '+(u.profileUrl||'')+'\n\n'+(p.summary||''))}
+async function rvReject(id){if(!confirm('Delete this profile? It will never be re-fetched.'))return;
+  var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'rejectPending',id:id})});var d=await r.json();
+  if(d.error){alert(d.error);return}_rvList=_rvList.filter(function(x){return x._id!==id});rvRender();document.getElementById('rvStatus').textContent='Rejected — will not be fetched again.'}
+async function rvPromoteSelected(){var ids=Array.prototype.map.call(document.querySelectorAll('.rvSel:checked'),function(x){return x.value});
+  if(!ids.length){document.getElementById('rvStatus').textContent='Select profiles first.';return}
+  var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'promoteSelected',ids:ids})});var d=await r.json();
+  if(d.error){alert(d.error);return}
+  document.getElementById('rvStatus').textContent='✅ Imported '+d.promoted+(d.duplicates&&d.duplicates.length?' · skipped duplicates: '+d.duplicates.join(', '):'');
+  _rvList=_rvList.filter(function(x){return ids.indexOf(x._id)<0});rvRender();try{loadConsultants(true)}catch(e){}}
 var _liAttempt=0;
 async function acFetchLinkedIn(){
   var url=(document.getElementById('acLiUrl').value||'').trim();
