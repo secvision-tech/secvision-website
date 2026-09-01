@@ -443,10 +443,11 @@ body.role-viewer .edit-btn{display:none!important}
             <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:14ch"><span onclick="sortConsultants('pipelineStatus')" style="cursor:pointer">Pipeline ⇅</span></th>
             <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:18ch"><span onclick="sortConsultants('email')" style="cursor:pointer">Email / Phone ⇅</span></th>
             <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:16ch">Skills</th>
+            <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:9ch">Source</th>
             <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:11ch"><span onclick="sortConsultants('updatedAt')" style="cursor:pointer">Updated ⇅</span></th>
             <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4);width:12ch">Action</th>
           </tr></thead>
-          <tbody id="consBody"><tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
+          <tbody id="consBody"><tr><td colspan="13" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
         </table>
       </div>
       <!-- Pagination -->
@@ -4043,7 +4044,7 @@ var PIPELINE_LABELS={none:'Not started',not_eligible:'Not Eligible',contacted:'C
 
 async function loadConsultants(){
   var tb=document.getElementById('consBody');if(!tb)return;
-  tb.innerHTML='<tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
+  tb.innerHTML='<tr><td colspan="13" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr>';
   var params={action:'listConsultants',
     query:document.getElementById('consQuery').value.trim(),
     engagementType:document.getElementById('consEngagement').value,
@@ -4166,7 +4167,7 @@ function renderConsultants(){
   var tb=document.getElementById('consBody');
   var certOnly=document.getElementById('consCertified')&&document.getElementById('consCertified').checked;
   var data=certOnly?consultantsData.filter(function(c){return matchedPriorityCerts(c.certifications).length>0}):consultantsData;
-  if(!data.length){tb.innerHTML='<tr><td colspan="12" style="padding:1rem;text-align:center;color:var(--g3)">'+(certOnly?'No consultants with priority certifications found.':'No consultants found. Use "+ Add Profile", or (admin) "Import Cached Profiles" to test.')+'</td></tr>';document.getElementById('consPag').style.display='none';return}
+  if(!data.length){tb.innerHTML='<tr><td colspan="13" style="padding:1rem;text-align:center;color:var(--g3)">'+(certOnly?'No consultants with priority certifications found.':'No consultants found. Use "+ Add Profile", or (admin) "Import Cached Profiles" to test.')+'</td></tr>';document.getElementById('consPag').style.display='none';return}
   var tot=data.length,tp=Math.ceil(tot/consPerPage);
   if(consCurPage>tp)consCurPage=tp;if(consCurPage<1)consCurPage=1;
   var start=(consCurPage-1)*consPerPage,end=Math.min(start+consPerPage,tot);
@@ -4190,7 +4191,7 @@ function renderConsultants(){
       +'<td style="padding:.4rem .5rem">'+typeBadgeCons(c.engagementType)+'</td>'
       +'<td style="padding:.4rem .5rem">'+availBadge(avail)+availDate+'</td>'
       +'<td style="padding:.4rem .5rem">'+pipelineBadge(c.pipelineStatus)+'</td>'
-      +'<td style="padding:.4rem .5rem;font-size:.55rem;overflow:hidden;text-overflow:ellipsis">'+contact+'</td>'
+      +'<td style="padding:.4rem .5rem;font-size:.55rem;overflow:hidden;text-overflow:ellipsis">'+contact+'</td>'+'<td style="padding:.4rem .5rem;font-size:.55rem;color:var(--g5)" title="'+esc(c.source||'')+'">'+esc(({'upwork':'Upwork','apify-linkedin':'LinkedIn','linkedin':'LinkedIn','manual':'Manual','self-registered':'Registered','resume':'Resume'})[String(c.source||'').toLowerCase()]||(c.source||'—'))+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc((c.skills||[]).join(', '))+'">'+esc(skills||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g4);font-size:.55rem">'+(c.updatedAt?fmtDate(c.updatedAt):'—')+'</td>'
       +'<td style="padding:.4rem .5rem;text-align:center"><button class="vb" onclick="openManageProfile(\''+c._id+'\')">'+(CAP.canStatus?'Manage':'View')+'</button></td>'
@@ -4214,6 +4215,12 @@ function mpNav(d){   // #462: browse consultants in list order from inside the p
   var n=i+d;
   if(i<0||n<0||n>=consultantsData.length)return;
   openManageProfile(String(consultantsData[n]._id));
+}
+async function setConsLinkedin(id){
+  var v=prompt('LinkedIn profile URL (linkedin.com/in/...):','');if(v===null)return;v=v.trim();
+  if(!/linkedin\.com\/in\//i.test(v)){alert('Enter a URL like https://www.linkedin.com/in/username');return}
+  try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{linkedinUrl:v}})});
+    var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
 }
 async function editConsCompany(id,cur){
   var v=prompt('Company name:',cur||'');if(v===null)return;
@@ -4540,7 +4547,8 @@ function renderManageProfile(){
   }
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .6rem;margin-bottom:.6rem;font-size:.58rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.7rem;padding:.6rem;background:var(--g1);border-radius:6px">';
-  h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.55rem">LinkedIn ↗</a>':''));
+  h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.55rem">LinkedIn ↗</a>'
+    :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'').replace(/\s\w\.$/,'')+'" '+String(c.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.55rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a> <a href="#" onclick="setConsLinkedin(\''+c._id+'\');return false" title="Paste the LinkedIn URL" style="font-size:.55rem;text-decoration:none">✏️ set URL</a>'));
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline));
   h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.6rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
