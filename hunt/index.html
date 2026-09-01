@@ -4215,6 +4215,45 @@ function mpNav(d){   // #462: browse consultants in list order from inside the p
   if(i<0||n<0||n>=consultantsData.length)return;
   openManageProfile(String(consultantsData[n]._id));
 }
+async function editConsCompany(id,cur){
+  var v=prompt('Company name:',cur||'');if(v===null)return;
+  try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{currentCompany:v.trim()}})});
+    var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
+}
+// #505: enrich an existing consultant from their LinkedIn URL — fills only EMPTY fields, unions lists
+async function enrichConsFromLinkedIn(id){
+  var c=manageProfileData;if(!c||c._id!==id){alert('Open the profile first');return}
+  if(!c.linkedinUrl){alert('No LinkedIn URL on this profile');return}
+  var st=document.getElementById('mpEnrichStatus');if(!st){st=document.createElement('div');st.id='mpEnrichStatus';st.style.cssText='font-size:.6rem;color:#0E7490;margin:.3rem 0';var host=document.getElementById('manageProfileBody')||document.body;host.insertBefore(st,host.firstChild)}
+  st.textContent='🔗 Fetching LinkedIn profile (30-60s)...';
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startProfileScrape',searchName:c.name||'',searchCountry:c.country||'',urls:[c.linkedinUrl]})});
+    var d=await r.json();if(d.error){st.textContent='⚠️ '+d.error;return}
+    var t0=Date.now();
+    var poll=async function(){
+      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkProfileScrape',runId:d.runId,datasetId:d.datasetId,url:c.linkedinUrl})});
+      var pd=await pr.json();
+      if(!pd.done){if(Date.now()-t0<150000){st.textContent='⏳ Fetching... ('+Math.round((Date.now()-t0)/1000)+'s)';setTimeout(poll,4000)}else st.textContent='⚠️ Timed out';return}
+      if(pd.error||!pd.profiles||!pd.profiles.length){st.textContent='⚠️ '+(pd.error||'No profile returned — try again in a minute (scraper flakiness).');return}
+      var p=pd.profiles[0],up={},changed=[];
+      var isLat=function(s){s=String(s||'');return s&&(s.replace(/[^A-Za-z]/g,'').length>=s.replace(/[\s,.\-]/g,'').length*0.5)};
+      var real=(p.experience||[]).filter(function(e){return e.duration});
+      if(!c.currentCompany&&(p.company||(real[0]&&real[0].companyName))){up.currentCompany=p.company||real[0].companyName;changed.push('company')}
+      if(!c.currentRole&&(p.title||(real[0]&&real[0].title))){up.currentRole=p.title||real[0].title;changed.push('role')}
+      if(!c.location){var L=isLat(p.location)?p.location:((real.filter(function(e){return isLat(e.location)})[0]||{}).location||'');if(L){up.location=L.replace(/,\s*India$/i,'');changed.push('location')}}
+      if(!c.yearsExperience&&!c.yearsManual){var months=0;real.forEach(function(e){var m=String(e.duration||'').match(/(\d+)\s*yr/),mm=String(e.duration||'').match(/(\d+)\s*mo/);months+=(m?parseInt(m[1])*12:0)+(mm?parseInt(mm[1]):0)});var yrs=months?Math.round(months/1.2)/10:0;var stated=((p.summary||'')+' '+(p.headline||'')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i);if(stated&&parseInt(stated[1])>yrs)yrs=parseInt(stated[1]);if(yrs){up.yearsExperience=yrs;changed.push('years')}}
+      var union=function(a,b){var s={},o=[];(a||[]).concat(b||[]).forEach(function(x){var k=String(x||'').trim();if(k&&!s[k.toLowerCase()]){s[k.toLowerCase()]=1;o.push(k)}});return o};
+      if(p.skills&&p.skills.length){var sk=union(c.skills,p.skills.filter(function(s){return !/\b(school|university|college|institute)\b/i.test(s)}));if(sk.length>(c.skills||[]).length){up.skills=sk;changed.push('skills +'+(sk.length-(c.skills||[]).length))}}
+      if(p.certifications&&p.certifications.length){var ce=union(c.certifications,p.certifications.map(function(x){return x.name||x}));if(ce.length>(c.certifications||[]).length){up.certifications=ce;changed.push('certs +'+(ce.length-(c.certifications||[]).length))}}
+      if(!c.summary&&(p.summary||p.about)){up.summary=(p.summary||p.about).slice(0,2500);changed.push('summary')}
+      if(!changed.length){st.textContent='ℹ️ Nothing new to add — profile already complete.';return}
+      var ur=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:up})});
+      var ud=await ur.json();if(ud.error){st.textContent='⚠️ '+ud.error;return}
+      st.textContent='✅ Enriched: '+changed.join(', ');setTimeout(function(){openManageProfile(id)},800);
+    };
+    setTimeout(poll,5000);
+  }catch(e){st.textContent='⚠️ '+e.message}
+}
 async function editConsYears(id,cur){
   var v=prompt('Years of experience (e.g. 6.8). Manually set values are never overwritten by Recalc:',cur);
   if(v===null)return;
@@ -4504,7 +4543,7 @@ function renderManageProfile(){
   h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.55rem">LinkedIn ↗</a>':''));
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline));
-  h+=fld('Company',esc(c.currentCompany));
+  h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.6rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
   h+=fld('Location',esc(c.location)+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
   h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.5rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual')));
