@@ -4536,7 +4536,7 @@ function renderManageProfile(){
   // #371: frozen banner when placed
   if(isPlaced){
     var pi0=c.placementInfo||{};
-    h+='<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:6px;padding:.5rem .7rem;margin-bottom:.6rem;font-size:.6rem;color:#3730A3">'
+    h+='<div style="background:#EEF2FF;border:1px solid #C7D2FE;border-radius:6px;padding:.62rem .84rem;margin-bottom:.72rem;font-size:.72rem;color:#3730A3">'
       +'<strong>🔒 Currently Placed'+(frozen?' — profile frozen':'')+'</strong>'
       +(pi0.client?'<br>Client: <strong>'+esc(pi0.client)+'</strong>':'')
       +(pi0.role?' &middot; Role: '+esc(pi0.role):'')
@@ -4545,29 +4545,29 @@ function renderManageProfile(){
       +(frozen?'<br><span style="color:#6366F1">Only an admin can modify this profile while placed.</span>':'')
       +'</div>';
   }
-  if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .6rem;margin-bottom:.6rem;font-size:.58rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
-  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.7rem;padding:.6rem;background:var(--g1);border-radius:6px">';
-  h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.55rem">LinkedIn ↗</a>'
-    :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'').replace(/\s\w\.$/,'')+'" '+String(c.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.55rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a> <a href="#" onclick="setConsLinkedin(\''+c._id+'\');return false" title="Paste the LinkedIn URL" style="font-size:.55rem;text-decoration:none">✏️ set URL</a>'));
+  if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .72rem;margin-bottom:.72rem;font-size:.84rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
+  h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.84rem;padding:.72rem;background:var(--g1);border-radius:6px">';
+  h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>'
+    :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'').replace(/\s\w\.$/,'')+'" '+String(c.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.68rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a> <a href="#" onclick="setConsLinkedin(\''+c._id+'\');return false" title="Paste the LinkedIn URL" style="font-size:.68rem;text-decoration:none">✏️ set URL</a>'));
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline));
-  h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.6rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
+  h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.72rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
   h+=fld('Location',esc(c.location)+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
-  h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.5rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
-  h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual')));
+  h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.62rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
+  h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual'))+(c.upwork&&c.upwork.profileUrl?' <a href="'+esc(c.upwork.profileUrl)+'" target="_blank" style="color:#14A800;font-size:.68rem">Upwork ↗</a>':'')+(c.linkedinUrl?' <a href="'+esc(c.linkedinUrl)+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>':''));
   h+='</div>';
   // Stage 3: reverse matching — which open roles does this consultant fit?
-  h+='<div style="border:1px solid #DDD6FE;background:#FAF5FF;border-radius:6px;padding:.5rem .6rem;margin-bottom:.7rem">'
+  h+='<div style="border:1px solid #DDD6FE;background:#FAF5FF;border-radius:6px;padding:.62rem .72rem;margin-bottom:.84rem">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem">'
-    +'<span style="font-size:.64rem;font-weight:700;color:#6C3FBF">🎯 Match Jobs — open contract roles this consultant fits</span>'
+    +'<span style="font-size:.78rem;font-weight:700;color:#6C3FBF">🎯 Match Jobs — open contract roles this consultant fits</span>'
     +'<span style="display:flex;gap:.3rem;align-items:center">'
-    +'<select id="mjPeriod" style="font-size:.58rem;padding:.15rem .3rem;border:1px solid #C4B5FD;border-radius:4px">'
+    +'<select id="mjPeriod" style="font-size:.84rem;padding:.15rem .3rem;border:1px solid #C4B5FD;border-radius:4px">'
     +'<option value="1d">Last 1 day</option><option value="3d">Last 3 days</option>'
     +'<option value="1w" selected>Last 1 week</option><option value="2w">Last 2 weeks</option>'
     +'<option value="1m">Last 1 month</option></select>'
-    +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.2rem .6rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
+    +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.2rem .72rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
     +'</span></div>'
-    +'<div id="mjStatus" style="font-size:.58rem;color:var(--g5);margin-top:.35rem"></div>'
+    +'<div id="mjStatus" style="font-size:.84rem;color:var(--g5);margin-top:.35rem"></div>'
     +'<div id="mjResults" style="margin-top:.4rem"></div>'
     +'</div>';
   // #398: when opened from a job's candidate table, highlight skills/certs that match that job
@@ -4575,53 +4575,53 @@ function renderManageProfile(){
   if(reqToks){
     var matchedCount=(c.skills||[]).filter(function(s){return matchesJobReq(s,reqToks)}).length
       + (c.certifications||[]).filter(function(s){return matchesJobReq(s,reqToks)}).length;
-    h+='<div style="background:#FEFCE8;border:1px solid #FDE68A;border-radius:5px;padding:.35rem .55rem;margin-bottom:.5rem;font-size:.56rem;color:#713F12">'
+    h+='<div style="background:#FEFCE8;border:1px solid #FDE68A;border-radius:5px;padding:.35rem .68rem;margin-bottom:.62rem;font-size:.56rem;color:#713F12">'
       +'<span style="background:#FEF08A;padding:0 .2rem;border-radius:2px;font-weight:700">Highlighted</span> skills &amp; certs match the requirements for '
       +'<strong>'+esc(_matchJobContext.title||'this job')+'</strong>'+(matchedCount?' — '+matchedCount+' match'+(matchedCount>1?'es':''):'')+'.</div>';
   }
-  if((c.skills||[]).length)h+='<div style="margin-bottom:.5rem"><span style="font-size:.55rem;color:var(--g4)">Skills:</span> '+(c.skills||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#EEF2FF','#4338CA')}).join(' ')+'</div>';
-  if((c.certifications||[]).length)h+='<div style="margin-bottom:.6rem"><span style="font-size:.55rem;color:var(--g4)">Certs:</span> '+(c.certifications||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#ECFDF5','#047857')}).join(' ')+'</div>';
+  if((c.skills||[]).length)h+='<div style="margin-bottom:.62rem"><span style="font-size:.68rem;color:var(--g4)">Skills:</span> '+(c.skills||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#EEF2FF','#4338CA')}).join(' ')+'</div>';
+  if((c.certifications||[]).length)h+='<div style="margin-bottom:.72rem"><span style="font-size:.68rem;color:var(--g4)">Certs:</span> '+(c.certifications||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#ECFDF5','#047857')}).join(' ')+'</div>';
 
   if(canStatus){
     h+='<div class="mp-section"><div class="mp-section-title">Status & Pipeline</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Type</label><select id="mpType" class="set-input" style="width:100%;font-size:.62rem">'
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.62rem">';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Type</label><select id="mpType" class="set-input" style="width:100%;font-size:.76rem">'
       +['Contractor','Sub-Contractor','Permanent','Unknown'].map(function(t){return '<option value="'+t+'"'+(c.engagementType===t?' selected':'')+'>'+(t==='Sub-Contractor'?'Sub-Contractor (via their firm)':t)+'</option>'}).join('')+'</select></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Availability</label><select id="mpAvail" class="set-input" style="width:100%;font-size:.62rem" onchange="mpAvailChange()">'
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Availability</label><select id="mpAvail" class="set-input" style="width:100%;font-size:.76rem" onchange="mpAvailChange()">'
       +[['available','Available'],['busy','Busy'],['do_not_contact','Do Not Contact']].concat(c.availability==='placed'?[['placed','Placed (via placement)']]:[]).map(function(a){return '<option value="'+a[0]+'"'+(c.availability===a[0]?' selected':'')+(a[0]==='placed'?' disabled':'')+'>'+a[1]+'</option>'}).join('')+'</select></div>';
     h+='</div>';
-    h+='<div id="mpAvailFromWrap" style="margin-top:.4rem;'+((c.availability==='busy')?'':'display:none')+'"><label style="font-size:.55rem;color:var(--g4)">Available from</label><input type="date" id="mpAvailFrom" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.availableFrom?new Date(c.availableFrom).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div id="mpAvailFromWrap" style="margin-top:.4rem;'+((c.availability==='busy')?'':'display:none')+'"><label style="font-size:.68rem;color:var(--g4)">Available from</label><input type="date" id="mpAvailFrom" class="set-input" style="width:100%;font-size:.76rem" value="'+(c.availableFrom?new Date(c.availableFrom).toISOString().slice(0,10):'')+'"></div>';
     // #361: citizenship, hourly rate, security clearance
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;margin-top:.4rem">';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Work Auth / Citizenship</label><input id="mpWorkAuth" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')+'" placeholder="US Citizen, GC, H1B..."></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Security Clearance</label><input id="mpClearance" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.securityClearance&&c.securityClearance!=='unknown'?c.securityClearance:'')+'" placeholder="None, Secret, TS..."></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Expected Rate</label><input id="mpRate" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.rateExpectation||'')+'" placeholder="$85/hr, £450/day"></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.62rem;margin-top:.4rem">';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Work Auth / Citizenship</label><input id="mpWorkAuth" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')+'" placeholder="US Citizen, GC, H1B..."></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Security Clearance</label><input id="mpClearance" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.securityClearance&&c.securityClearance!=='unknown'?c.securityClearance:'')+'" placeholder="None, Secret, TS..."></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Expected Rate</label><input id="mpRate" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.rateExpectation||'')+'" placeholder="$85/hr, £450/day"></div>';
     h+='</div>';
-    h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.62rem">'
+    h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.76rem">'
       +Object.keys(PIPELINE_LABELS).filter(function(k){return k!=='placed'||c.pipelineStatus==='placed'}).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+(k==='placed'?' disabled':'')+'>'+PIPELINE_LABELS[k]+(k==='placed'?' (via placement)':'')+'</option>'}).join('')+'</select>'
-      +'<div style="font-size:.5rem;color:var(--g4);margin-top:.15rem">To place a consultant, fill the Placement section below and press "Mark as Placed".</div></div>';
+      +'<div style="font-size:.62rem;color:var(--g4);margin-top:.15rem">To place a consultant, fill the Placement section below and press "Mark as Placed".</div></div>';
     // #369/#396: Experience, Location + Country editable (analyst+)
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-top:.4rem">';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Years Experience</label><input type="number" id="mpYears" class="set-input" style="width:100%;font-size:.62rem" value="'+(c.yearsExperience||0)+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Country</label><input id="mpCountry" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.country||'')+'"></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.62rem;margin-top:.4rem">';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Years Experience</label><input type="number" id="mpYears" class="set-input" style="width:100%;font-size:.76rem" value="'+(c.yearsExperience||0)+'"></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Country</label><input id="mpCountry" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.country||'')+'"></div>';
     h+='</div>';
-    h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">Location <span style="font-weight:400;color:var(--g4)">(scraped values may be localized — correct if needed)</span></label><input id="mpLocation" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.location||'')+'" placeholder="New York, United States"></div>';
+    h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">Location <span style="font-weight:400;color:var(--g4)">(scraped values may be localized — correct if needed)</span></label><input id="mpLocation" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.location||'')+'" placeholder="New York, United States"></div>';
     // #373: LinkedIn URL editable (sometimes incorrect from scraping; enrichment needs it accurate)
-    h+='<div style="margin-top:.4rem"><label style="font-size:.55rem;color:var(--g4)">LinkedIn URL</label><input id="mpLinkedin" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.linkedinUrl||'')+'" placeholder="https://www.linkedin.com/in/..."></div>';
-    h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileStatus()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Status</button>';
-    if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.35rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Claim</button>';
-    else h+='<button onclick="releaseProfile()" style="padding:.35rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Release Claim</button>';
+    h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">LinkedIn URL</label><input id="mpLinkedin" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.linkedinUrl||'')+'" placeholder="https://www.linkedin.com/in/..."></div>';
+    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem"><button onclick="saveProfileStatus()" style="padding:.35rem .95rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Save Status</button>';
+    if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.35rem .95rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Claim</button>';
+    else h+='<button onclick="releaseProfile()" style="padding:.35rem .95rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Release Claim</button>';
     h+='</div></div>';
   }
 
   h+='<div class="mp-section"><div class="mp-section-title">Contact Details</div>';
   if(canContact){
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Email</label><input id="mpEmail" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.email||'')+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Phone</label><input id="mpPhone" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(c.phone||'')+'"></div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.62rem">';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Email</label><input id="mpEmail" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.email||'')+'"></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Phone</label><input id="mpPhone" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.phone||'')+'"></div>';
     h+='</div>';
-    h+='<div style="display:flex;gap:.4rem;margin-top:.5rem"><button onclick="saveProfileContact()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">Save Contact</button>';
-    h+='<button onclick="enrichProfile()" id="mpEnrichBtn" style="padding:.35rem .8rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Enrich (Apollo)</button></div>';
+    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem"><button onclick="saveProfileContact()" style="padding:.35rem .95rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Save Contact</button>';
+    h+='<button onclick="enrichProfile()" id="mpEnrichBtn" style="padding:.35rem .95rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">🔍 Enrich (Apollo)</button></div>';
   }else{
     h+=fld('Email',esc(c.email))+fld('Phone',esc(c.phone));
   }
@@ -4630,13 +4630,13 @@ function renderManageProfile(){
   // ---- Resume (#363) ----
   h+='<div class="mp-section"><div class="mp-section-title">Resume / CV</div>';
   if(c.hasResume){
-    h+='<div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap"><span style="font-size:.6rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
-      +'<button onclick="viewResume()" style="padding:.25rem .6rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">View</button>';
-    if(canContact)h+='<button onclick="removeResume()" style="padding:.25rem .6rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer">Remove</button>';
+    h+='<div style="display:flex;align-items:center;gap:.62rem;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
+      +'<button onclick="viewResume()" style="padding:.25rem .72rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">View</button>';
+    if(canContact)h+='<button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
     h+='</div>';
   }else{
-    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.58rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .6rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.58rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.52rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
-    else h+='<span style="font-size:.6rem;color:var(--g3)">No resume on file.</span>';
+    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    else h+='<span style="font-size:.72rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';
 
@@ -4644,14 +4644,14 @@ function renderManageProfile(){
   if(canEdit){
     var pi=c.placementInfo||{};
     h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem">';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Client *</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.client||'')+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Role *</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.role||'')+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">Start Date *</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
-    h+='<div><label style="font-size:.55rem;color:var(--g4)">End Date (optional)</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.62rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
-    h+='<div style="grid-column:1/3"><label style="font-size:.55rem;color:var(--g4)">Rate Agreed *</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.62rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
-    h+='</div><button onclick="savePlacement()" style="padding:.35rem .8rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;margin-top:.5rem">'+(isPlaced?'Update Placement':'Mark as Placed')+'</button>'
-      +(isPlaced?'<div style="font-size:.5rem;color:var(--g4);margin-top:.2rem">Editing the fields above updates the current placement. To start a NEW placement, change the Client/Role/Start Date.</div>':'');
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.62rem">';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Client *</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.client||'')+'"></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Role *</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.role||'')+'"></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Start Date *</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">End Date (optional)</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div style="grid-column:1/3"><label style="font-size:.68rem;color:var(--g4)">Rate Agreed *</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
+    h+='</div><button onclick="savePlacement()" style="padding:.35rem .95rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600;margin-top:.62rem">'+(isPlaced?'Update Placement':'Mark as Placed')+'</button>'
+      +(isPlaced?'<div style="font-size:.62rem;color:var(--g4);margin-top:.2rem">Editing the fields above updates the current placement. To start a NEW placement, change the Client/Role/Start Date.</div>':'');
     h+=placementHistoryHtml(c);
     h+='</div>';
   }else if(isPlaced){
@@ -4669,13 +4669,13 @@ function renderManageProfile(){
   }else if(canStatus&&(c.placementHistory||[]).length){
     // #386: analyst+ can see past placement history even when the consultant is currently available
     h+='<div class="mp-section"><div class="mp-section-title">Placement History</div>';
-    h+='<div style="font-size:.55rem;color:var(--g5);margin-bottom:.3rem">Currently available. Past placements:</div>';
+    h+='<div style="font-size:.68rem;color:var(--g5);margin-bottom:.3rem">Currently available. Past placements:</div>';
     h+=placementHistoryHtml(c,true);
     h+='</div>';
   }
 
   if(curUserRole==='admin'||curUserRole==='super_admin'){
-    h+='<div style="border-top:1px solid var(--g2);padding-top:.6rem;margin-top:.7rem;text-align:right"><button onclick="deleteProfile()" style="padding:.3rem .7rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Delete Profile</button></div>';
+    h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;text-align:right"><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
   }
   document.getElementById('mpBody').innerHTML=h;
   // #419: show any previously-saved matched jobs immediately (no scoring, free).
