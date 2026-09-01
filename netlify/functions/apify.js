@@ -317,7 +317,24 @@ exports.handler = async function(event) {
       var items = await ir.json(); if (!Array.isArray(items)) items = [];
       var ccol = cdb.collection('consultant_profiles');
       var rejSet = {}; (await cdb.collection('sourcing_rejects').find({ source: 'upwork' }).project({ sourceId: 1 }).toArray()).forEach(function (r) { rejSet[r.sourceId] = 1; });
-      var stats = { fetched: items.length, inserted: 0, updated: 0, skippedRejected: 0, skippedManaged: 0, skippedInvalid: 0 };
+      var stats = { fetched: items.length, inserted: 0, updated: 0, skippedRejected: 0, skippedManaged: 0, skippedInvalid: 0, aiEnriched: 0 };
+      // #508/#511: one LLM call for the batch — extract tools/tech/certs/standards and score security relevance
+      var aiMap = {};
+      try {
+        var AKEY = process.env.ANTHROPIC_API_KEY;
+        var valid = items.filter(function (x) { return x && x.freelancer_id; });
+        if (AKEY && valid.length) {
+          var compact = valid.map(function (x, k) { return { i: k, id: String(x.freelancer_id), title: x.title || '', skills: (x.skills || []).slice(0, 25), desc: String(x.description || '').slice(0, 2200) }; });
+          var prompt = 'You are classifying freelancer profiles for a CYBERSECURITY services company. For EACH profile return a JSON object with: id (string, copy exactly), security_relevance (0-100: 100 = clearly a hands-on cybersecurity professional such as SOC analyst, SIEM/Sentinel engineer, pentester, cloud security engineer, IR, GRC; 0 = unrelated e.g. WordPress developer, generic IT support, marketing), tools (array: security tools/technologies/platforms explicitly mentioned, e.g. Splunk, Microsoft Sentinel, Burp Suite, Nessus, CrowdStrike, AWS, Azure, Wazuh), certifications (array: certification names explicitly mentioned, e.g. OSCP, OSEP, OSWP, CREST CPSA, CISSP, CEH, AZ-500, SC-200), standards (array: compliance frameworks/standards explicitly mentioned, e.g. ISO 27001, SOC 2, PCI DSS, HIPAA, GDPR, NIST CSF, MITRE ATT&CK), years (integer years of experience if stated, else 0), role (short normalized role, e.g. "Penetration Tester", "SOC Analyst"). Only include items explicitly present in the text. Output ONLY a JSON array, no prose.\n\nPROFILES:\n' + JSON.stringify(compact);
+          var ar = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': AKEY, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 4000, messages: [{ role: 'user', content: prompt }] }) });
+          if (ar.ok) {
+            var aj = await ar.json(); var txt = (aj.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
+            var m = txt.match(/\[[\s\S]*\]/); var arr = m ? JSON.parse(m[0]) : [];
+            arr.forEach(function (o) { if (o && o.id) aiMap[String(o.id)] = o; });
+          }
+        }
+      } catch (e) { /* AI enrichment is best-effort */ }
       var certRe = /\b(OSCP|OSEP|OSWP|OSCE|CEH|CISSP|CISM|CISA|CCSP|CCSK|CRTP|CPENT|LPT|CRT|CPSA|Security\+|CySA\+|GCIH|GCIA|GPEN|GSEC|SC-100|SC-200|SC-300|AZ-500|AWS Certified Security(?: [-\u2013] Specialty)?|Certified Ethical Hacker|CompTIA [A-Za-z+]+)\b/g;
       var compRe = /\b(ISO\s?27001|ISO\s?27701|SOC\s?2|PCI[ -]?DSS|HIPAA|GDPR|NIST(?:\s?CSF|\s?800-53|\s?AI RMF)?|CIS Benchmarks?|MITRE ATT&CK|FedRAMP|CMMC|Zero Trust)\b/gi;
       for (var ii = 0; ii < items.length; ii++) {
@@ -328,17 +345,19 @@ exports.handler = async function(event) {
         if (existing && existing.managed) { stats.skippedManaged++; continue; }
         var desc = String(it.description || '');
         var uniq = function (arr) { var s = {}, o = []; arr.forEach(function (x) { var k = String(x).trim(); if (k && !s[k.toLowerCase()]) { s[k.toLowerCase()] = 1; o.push(k); } }); return o; };
-        var certs = uniq((desc.match(certRe) || []).concat((it.title || '').match(certRe) || []));
-        var comps = uniq((desc.match(compRe) || []).concat((it.skills || []).filter(function (s) { return compRe.test(s); })));
+        var ai = aiMap[String(it.freelancer_id)] || null; if (ai) stats.aiEnriched++;
+        var certs = uniq((desc.match(certRe) || []).concat((it.title || '').match(certRe) || []).concat((ai && ai.certifications) || []));
+        var comps = uniq((desc.match(compRe) || []).concat((it.skills || []).filter(function (s) { return compRe.test(s); })).concat((ai && ai.standards) || []));
         var doc = {
           sourceId: sid, source: 'upwork', managed: false,
           name: it.short_name || ((it.first_name || '') + ' ' + (it.last_name || '')).trim(),
           currentRole: String(it.title || '').split('|')[0].trim(), currentCompany: '',
           location: [it.city, it.state].filter(Boolean).join(', '), country: it.country || '',
           rateExpectation: it.hourly_rate_usd ? ('$' + it.hourly_rate_usd + '/hr') : '',
-          skills: (it.skills || []).filter(function (s) { return !compRe.test(s); }), certifications: certs, compliance: comps,
-          summary: desc.slice(0, 2500), linkedinUrl: '', email: '', engagementType: 'Contractor',
-          yearsExperience: (function(){ var m = (desc + ' ' + (it.title || '')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i); return m ? parseInt(m[1]) : 0; })(),
+          skills: uniq((it.skills || []).filter(function (s) { return !compRe.test(s); }).concat((ai && ai.tools) || [])), certifications: certs, compliance: comps,
+          securityFit: ai ? (parseInt(ai.security_relevance) || 0) : null, aiRole: (ai && ai.role) || '',
+          summary: desc.slice(0, 6000), linkedinUrl: '', email: '', engagementType: 'Contractor',
+          yearsExperience: (function(){ var m = (desc + ' ' + (it.title || '')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i); var r = m ? parseInt(m[1]) : 0; if (ai && parseInt(ai.years) > r) r = parseInt(ai.years); return r; })(),
           contractorSignal: { likely: true, employmentTypes: ['Freelance'] },
           upwork: { profileUrl: it.profile_url || '', earnings: it.total_earnings_usd, earningsHidden: !!it.earnings_hidden, hours: it.total_hours,
                     jss: it.job_success_flag, topRated: it.top_rated_status || '', jobs: { hourly: it.total_hourly_jobs, fixed: it.total_fixed_jobs, completed: it.total_completed_jobs },

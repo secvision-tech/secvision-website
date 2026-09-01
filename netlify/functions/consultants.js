@@ -632,9 +632,9 @@ exports.handler = async function (event) {
     if (action === 'listPending') {
       var pend = await col.find({ $or: [{ managed: { $exists: false } }, { managed: false }] })
         .project({ name: 1, currentRole: 1, currentCompany: 1, location: 1, country: 1, rateExpectation: 1, skills: 1,
-                   source: 1, sourceId: 1, upwork: 1, summary: 1, email: 1, linkedinUrl: 1, fetchedAt: 1, createdAt: 1 })
+                   source: 1, sourceId: 1, upwork: 1, summary: 1, email: 1, linkedinUrl: 1, fetchedAt: 1, createdAt: 1, certifications: 1, compliance: 1, yearsExperience: 1, securityFit: 1, aiRole: 1 })
         .sort({ fetchedAt: -1, createdAt: -1 }).limit(500).toArray();
-      pend.forEach(function (p) { if (p.summary) p.summary = String(p.summary).slice(0, 1200); });
+      pend.forEach(function (p) { if (p.summary) p.summary = String(p.summary).slice(0, 6000); });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ pending: pend, total: pend.length }) };
     }
     // ---- #497 reject: remove pending profile AND remember it so no future fetch re-caches it ----
