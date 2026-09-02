@@ -413,7 +413,7 @@ body.role-viewer .edit-btn{display:none!important}
         <h2 style="font-size:.9rem;color:var(--pri);margin:0">🧑‍💻 Consultant Database</h2>
         <div style="display:flex;gap:.4rem">
           <button onclick="refreshConsultants()" style="padding:.3rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔄 Refresh</button>
-          <button onclick="openUpworkFetch()" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🧲 Upwork Fetch</button><button id="promoteCachedBtn" onclick="openReviewPending()" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;display:none">⬆️ Import Cached Profiles</button>
+          <button onclick="openUpworkFetch()" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🧲 Upwork Fetch</button><button onclick="openLinkedInHarvest()" style="padding:.3rem .7rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔗 LinkedIn Fetch</button><button id="promoteCachedBtn" onclick="openReviewPending()" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;display:none">⬆️ Import Cached Profiles</button>
           <button id="addConsultantBtn" onclick="openAddConsultant()" style="padding:.3rem .7rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">+ Add Profile</button>
         </div>
       </div>
@@ -4951,6 +4951,40 @@ async function runTalentScrape(){
       go.disabled=false;
       try{loadConsultants(true)}catch(e){}
       _rvSort='new';setTimeout(function(){var o=document.getElementById('uwOverlay');if(o)o.remove();openReviewPending()},900);
+    };
+    setTimeout(poll,6000);
+  }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
+}
+function openLinkedInHarvest(){
+  var ov=document.createElement('div');ov.id='lhOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1500;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:560px;max-width:94%;padding:1rem">'
+   +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">🔗 LinkedIn Talent Fetch</b><button onclick="document.getElementById(\'lhOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
+   +'<div style="font-size:.7rem;color:var(--g5);margin:.3rem 0 .5rem">Searches public LinkedIn via the scraping actor (never your account). Tip: include an engagement word — consultant / freelance / contract. Ghost and off-country profiles are dropped; AI scores security fit.</div>'
+   +'<input id="lhKw" value="SOC Analyst consultant" style="width:100%;padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px" placeholder="Keywords, e.g. SOC Analyst consultant">'
+   +'<div style="display:flex;gap:.4rem;margin-top:.5rem"><select id="lhCountry" style="flex:1;font-size:.72rem"><option value="india">India</option><option value="united states">United States</option><option value="united kingdom">United Kingdom</option><option value="canada">Canada</option><option value="philippines">Philippines</option></select>'
+   +'<select id="lhCount" style="flex:.5;font-size:.72rem"><option>10</option><option>15</option><option>25</option></select>'
+   +'<button id="lhGo" onclick="runLinkedInHarvest()" style="padding:.35rem .8rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">Fetch</button></div>'
+   +'<div id="lhStatus" style="font-size:.7rem;color:var(--g5);margin-top:.5rem"></div></div>';
+  document.body.appendChild(ov);
+}
+async function runLinkedInHarvest(){
+  var kw=(document.getElementById('lhKw').value||'').trim();
+  var st=document.getElementById('lhStatus'),go=document.getElementById('lhGo');
+  if(kw.length<3){st.textContent='Enter search keywords.';return}
+  go.disabled=true;st.textContent='🚀 Starting LinkedIn search...';
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startLinkedInHarvest',keywords:[kw],country:document.getElementById('lhCountry').value,count:parseInt(document.getElementById('lhCount').value)||10})});
+    var d=await r.json();if(d.error){st.textContent='⚠️ '+d.error;go.disabled=false;return}
+    var t0=Date.now();
+    var poll=async function(){
+      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkLinkedInHarvest',runId:d.runId,datasetId:d.datasetId,country:document.getElementById('lhCountry')?document.getElementById('lhCountry').value:'india'})});
+      var pd=await pr.json();
+      if(!pd.done){st.textContent='⏳ Searching LinkedIn... ('+Math.round((Date.now()-t0)/1000)+'s)';if(Date.now()-t0<240000)setTimeout(poll,5000);else{st.textContent='⚠️ Timed out — check Apify console.';go.disabled=false}return}
+      if(pd.error){st.textContent='⚠️ '+pd.error+' — the search handler is flaky; try again in a few minutes.';go.disabled=false;return}
+      var s=pd.stats||{};
+      st.textContent='✅ '+s.inserted+' new cached, '+s.updated+' refreshed · dropped: '+s.skippedGhost+' ghost, '+s.skippedCountry+' off-country, '+s.skippedRejected+' rejected, '+s.skippedManaged+' already yours ('+s.fetched+' fetched).';
+      go.disabled=false;try{loadConsultants(true)}catch(e){}
+      _rvSort='fit';setTimeout(function(){var o=document.getElementById('lhOverlay');if(o)o.remove();openReviewPending()},1100);
     };
     setTimeout(poll,6000);
   }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}

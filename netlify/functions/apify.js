@@ -272,6 +272,100 @@ exports.handler = async function(event) {
     }
 
     // ACTION: startProfileScrape - kick off scrape, return runId immediately (no wait)
+    // ============ #517 LINKEDIN TALENT HARVEST (bebity search mode -> pending cache) ============
+    if (action === 'startLinkedInHarvest') {
+      var lkw = (body.keywords || []).map(function (k) { return String(k).trim(); }).filter(Boolean);
+      var lCountry = String(body.country || 'india').trim().toLowerCase();
+      var lCount = Math.min(Math.max(parseInt(body.count) || 10, 1), 25);
+      if (!lkw.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'No keywords' }) };
+      var LGEO = { 'india': '102713980', 'united states': '103644278', 'usa': '103644278', 'united kingdom': '101165590', 'uk': '101165590', 'canada': '101174742', 'philippines': '103121230' };
+      var linput = { action: 'get-profiles', keywords: lkw, limit: lCount, profileFields: ['about','experience','organizations','skills','languages','honors','projects'] };
+      if (LGEO[lCountry]) linput.location = [LGEO[lCountry]];
+      try {
+        var lresp = await fetch('https://api.apify.com/v2/acts/' + PROFILE_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(linput) });
+        if (!lresp.ok) { var lt = await lresp.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start LinkedIn harvest', apifyResponse: lt.slice(0, 300) }) }; }
+        var lrun = await lresp.json();
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ started: true, runId: lrun.data.id, datasetId: lrun.data.defaultDatasetId }) };
+      } catch (e) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'LinkedIn harvest error: ' + e.message }) }; }
+    }
+    if (action === 'checkLinkedInHarvest') {
+      var { getDb: gdb3 } = require('./db');
+      var ldb = await gdb3();
+      var lr = await fetch('https://api.apify.com/v2/actor-runs/' + body.runId + '?token=' + APIFY_TOKEN);
+      var lj = await lr.json(); var lst = lj.data && lj.data.status;
+      if (lst !== 'SUCCEEDED' && lst !== 'FAILED' && lst !== 'ABORTED' && lst !== 'TIMED-OUT')
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: lst, done: false }) };
+      if (lst !== 'SUCCEEDED') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: lst, done: true, error: 'Scraper ' + lst }) };
+      var ldsId = body.datasetId || (lj.data && lj.data.defaultDatasetId);
+      var lir = await fetch('https://api.apify.com/v2/datasets/' + ldsId + '/items?token=' + APIFY_TOKEN + '&format=json');
+      var litems = await lir.json(); if (!Array.isArray(litems)) litems = [];
+      var lcol = ldb.collection('consultant_profiles');
+      var lrej = {}; (await ldb.collection('sourcing_rejects').find({ source: 'linkedin' }).project({ sourceId: 1 }).toArray()).forEach(function (r) { lrej[r.sourceId] = 1; });
+      var lstats = { fetched: litems.length, inserted: 0, updated: 0, skippedRejected: 0, skippedManaged: 0, skippedGhost: 0, skippedCountry: 0, aiEnriched: 0 };
+      var wantC = String(body.country || 'india').toLowerCase();
+      var isLat = function (sx) { sx = String(sx || ''); return sx && (sx.replace(/[^A-Za-z]/g, '').length >= sx.replace(/[\s,.\-]/g, '').length * 0.5); };
+      // ghost + geo enforcement before AI (don't pay to classify junk)
+      var lgood = litems.filter(function (p) {
+        if (!p || p.status === 'NOT_FOUND') { lstats.skippedGhost++; return false; }
+        var rich = ((p.experience || []).length) + ((p.skills || []).length) + String(p.summary || p.about || '').length;
+        if (!rich) { lstats.skippedGhost++; return false; }
+        var locAll = (String(p.location || '') + ' ' + (p.experience || []).map(function (e) { return e.location || ''; }).join(' ')).toLowerCase();
+        if (wantC && locAll && locAll.indexOf(wantC.split(' ')[0]) < 0) { lstats.skippedCountry++; return false; }
+        return true;
+      });
+      var lai = {};
+      try {
+        var LKEY = process.env.ANTHROPIC_API_KEY;
+        if (LKEY && lgood.length) {
+          var lcompact = lgood.map(function (x, k) { return { i: k, id: x.vanityName || String(k), title: (x.headline || ''), skills: (x.skills || []).slice(0, 25), desc: String(x.summary || x.about || '').slice(0, 1800) + ' ' + (x.experience || []).slice(0, 3).map(function (e) { return (e.title || '') + ' at ' + (e.companyName || ''); }).join('; ') }; });
+          var lprompt = 'You are classifying LinkedIn profiles for a CYBERSECURITY consulting/staffing company. For EACH profile return JSON: id (copy exactly), security_relevance (0-100; 100 = hands-on cybersecurity professional), tools (security tools/tech mentioned), certifications (explicitly mentioned), standards (compliance frameworks mentioned), years (integer if stated else 0), role (short normalized role), contractor (true if the text signals freelance/consultant/contract availability). Only items explicitly present. Output ONLY a JSON array.\n\nPROFILES:\n' + JSON.stringify(lcompact);
+          var lar = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': LKEY, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 4000, messages: [{ role: 'user', content: lprompt }] }) });
+          if (lar.ok) { var laj = await lar.json(); var ltxt = (laj.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join(''); var lm = ltxt.match(/\[[\s\S]*\]/); (lm ? JSON.parse(lm[0]) : []).forEach(function (o) { if (o && o.id) lai[String(o.id)] = o; }); }
+        }
+      } catch (e) {}
+      var luniq = function (arr) { var sx = {}, o = []; arr.forEach(function (x) { var k = String(x || '').trim(); if (k && !sx[k.toLowerCase()]) { sx[k.toLowerCase()] = 1; o.push(k); } }); return o; };
+      for (var li2 = 0; li2 < lgood.length; li2++) {
+        var p = lgood[li2];
+        var slug = p.vanityName || String(p.linkedinUrl || p.url || '').split('/in/')[1] || '';
+        slug = String(slug).replace(/[\/?#].*$/, '');
+        if (!slug) { lstats.skippedGhost++; continue; }
+        var sid = 'linkedin-' + slug.toLowerCase();
+        if (lrej[sid]) { lstats.skippedRejected++; continue; }
+        var lex = await lcol.findOne({ sourceId: sid }, { projection: { _id: 1, managed: 1 } });
+        if (lex && lex.managed) { lstats.skippedManaged++; continue; }
+        var ai = lai[String(p.vanityName || li2)] || null; if (ai) lstats.aiEnriched++;
+        var real = (p.experience || []).filter(function (e) { return e.duration; });
+        var name = ((p.firstName || '') + ' ' + (p.lastName || '')).trim();
+        if (!name || /\d/.test(name)) name = (p.headline || '').split('|')[0].trim().slice(0, 40) || slug;
+        var hl = String(p.headline || ''); var hlOk = isLat(hl);
+        var loc = isLat(p.location) ? p.location : ((real.filter(function (e) { return isLat(e.location); })[0] || {}).location || '');
+        var months = 0; real.forEach(function (e) { var m1 = String(e.duration).match(/(\d+)\s*yr/), m2 = String(e.duration).match(/(\d+)\s*mo/); months += (m1 ? parseInt(m1[1]) * 12 : 0) + (m2 ? parseInt(m2[1]) : 0); });
+        var yrs = months ? Math.round(months / 1.2) / 10 : 0;
+        var stx = (String(p.summary || p.about || '') + ' ' + hl).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i); if (stx && parseInt(stx[1]) > yrs) yrs = parseInt(stx[1]);
+        if (ai && parseInt(ai.years) > yrs) yrs = parseInt(ai.years);
+        var et0 = ((real[0] || {}).employmentType || '').toLowerCase();
+        var ldoc = {
+          sourceId: sid, source: 'linkedin', managed: false,
+          name: name, currentRole: (ai && ai.role) || (real[0] && real[0].title) || (hlOk ? hl.split('|')[0].trim() : ''),
+          currentCompany: (real[0] && real[0].companyName) || '',
+          location: String(loc).replace(/,\s*India$/i, ''), country: wantC.replace(/\b\w/g, function (c) { return c.toUpperCase(); }),
+          rateExpectation: '', linkedinUrl: p.linkedinUrl || p.url || ('https://www.linkedin.com/in/' + slug), email: '',
+          skills: luniq((p.skills || []).filter(function (sx) { return !/\b(school|university|college|institute)\b/i.test(sx); }).concat((ai && ai.tools) || [])).slice(0, 40),
+          certifications: luniq(((p.certifications || []).map(function (cc) { return cc.name || cc; })).concat((ai && ai.certifications) || [])),
+          compliance: luniq((ai && ai.standards) || []),
+          yearsExperience: yrs, summary: String(p.summary || p.about || '').slice(0, 6000),
+          securityFit: ai ? (parseInt(ai.security_relevance) || 0) : null, aiRole: (ai && ai.role) || '',
+          engagementType: /freelance|self-employed|contract/.test(et0) ? 'Contractor' : ((ai && ai.contractor) ? 'Contractor' : 'Unknown'),
+          contractorSignal: { likely: !!((ai && ai.contractor) || /freelance|self-employed|contract/.test(et0)) },
+          fetchedAt: new Date()
+        };
+        if (lex) { await lcol.updateOne({ _id: lex._id }, { $set: ldoc }); lstats.updated++; }
+        else { ldoc.createdAt = new Date(); await lcol.insertOne(ldoc); lstats.inserted++; }
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: 'SUCCEEDED', done: true, stats: lstats }) };
+    }
     // ============ #497 UPWORK TALENT HARVEST (bovi~upwork-talent-scraper) ============
     // startTalentScrape: {roles:[...], country:'india', count:10} -> one run, one search URL per role,
     // each continued from its persisted page cursor so repeat fetches surface NEW profiles.
