@@ -252,7 +252,7 @@ body.role-viewer .edit-btn{display:none!important}
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
         <div class="sg"><label>Region</label><select id="sRegion" onchange="updateCountries()"><option value="Any">Any (All Regions)</option><option value="NA" selected>North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select></div>
         <div class="sg"><label>Country</label><select id="sCountry"><option value="us" selected>United States</option><option value="ca">Canada</option></select></div>
-        <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button>
+        <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button><button onclick="openAddDemand()" style="align-self:end;padding:.35rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600" title="Manually add a client requirement / JD">➕ Add Requirement</button>
         <div id="apifyStatus" style="display:none;font-size:.65rem;color:#6C3FBF;background:#f3f0ff;padding:.3rem .6rem;border-radius:4px;align-self:center">🔄 LinkedIn enrichment running...</div>
         <div id="enrichStatus" style="display:none;font-size:.65rem;color:#047857;background:#ecfdf5;padding:.3rem .6rem;border-radius:4px;align-self:center">🏢 Auto-enriching companies...</div>
       </div>
@@ -4987,6 +4987,111 @@ async function runLinkedInHarvest(){
       _rvSort='fit';setTimeout(function(){var o=document.getElementById('lhOverlay');if(o)o.remove();openReviewPending()},1100);
     };
     setTimeout(poll,6000);
+  }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
+}
+// ===== #520 manual demand (JD) entry -> processAndSave pipeline (same extraction as scraped jobs) =====
+function openAddDemand(){
+  var ov=document.createElement('div');ov.id='adOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1500;display:flex;align-items:center;justify-content:center';
+  var inp=function(id,ph,fl){return '<input id="'+id+'" placeholder="'+ph+'" style="flex:'+(fl||1)+';padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px">'};
+  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:680px;max-width:95%;max-height:88vh;overflow:auto;padding:1rem">'
+   +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">➕ Add Client Requirement</b><button onclick="document.getElementById(\'adOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
+   +'<div style="font-size:.66rem;color:var(--g5);margin:.3rem 0 .5rem">Fill manually, or let AI parse the JD (paste text or upload the PDF) to prefill the fields — review, then Save. Saved requirements appear in the jobs table (source: Manual) and match against consultants.</div>'
+   +'<div style="border:1px dashed #7C3AED;border-radius:6px;padding:.5rem;margin-bottom:.6rem;background:#FAF5FF">'
+   +'<div style="font-size:.7rem;font-weight:600;color:#7C3AED;margin-bottom:.3rem">📄 Parse JD with AI (optional)</div>'
+   +'<textarea id="adJdRaw" placeholder="Paste the JD / requirement email text here (or upload PDF / Word below)..." style="width:100%;height:70px;font-size:.68rem;border:1px solid var(--g100);border-radius:4px;padding:.4rem"></textarea>'
+   +'<div style="display:flex;gap:.4rem;align-items:center;margin-top:.3rem"><input id="adJobUrl" placeholder="...or LinkedIn job URL: linkedin.com/jobs/view/123..." style="flex:1.6;padding:.3rem .4rem;font-size:.66rem;border:1px solid var(--g100);border-radius:4px"><button type="button" onclick="importJobUrl()" id="adUrlBtn" style="padding:.3rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.66rem;cursor:pointer;font-weight:600">Fetch Job</button></div>'
+   +'<div style="display:flex;gap:.5rem;align-items:center;margin-top:.3rem"><input type="file" id="adJdPdf" accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="font-size:.64rem;flex:1">'
+   +'<button type="button" onclick="parseJdAI()" id="adParseBtn" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.68rem;cursor:pointer;font-weight:600">Parse with AI</button></div>'
+   +'<div id="adParseStatus" style="font-size:.64rem;color:var(--g5);margin-top:.25rem"></div></div>'
+   +'<div style="display:flex;gap:.4rem;margin-bottom:.4rem">'+inp('adTitle','Job title * (e.g. SOC Analyst - Senior)',2)+inp('adCompany','Client / via-partner * (e.g. iQues Consulting)',2)+'</div>'
+   +'<div style="display:flex;gap:.4rem;margin-bottom:.4rem">'+inp('adLocation','Location (e.g. Remote - India)',1.6)+'<select id="adWork" style="flex:1;font-size:.72rem"><option>Remote</option><option>Hybrid</option><option>On-site</option></select><select id="adCountry" style="flex:1;font-size:.72rem"><option>USA</option><option>UK</option><option>India</option><option>Canada</option><option>EU</option></select></div>'
+   +'<div style="display:flex;gap:.4rem;margin-bottom:.4rem">'+inp('adRate','Rate / budget (e.g. $30-40/hr C2C)',1.4)+inp('adDuration','Duration (e.g. 12 months, renewable)',1.4)+inp('adCount','Openings (e.g. 8)',0.7)+'</div>'
+   +'<div style="display:flex;gap:.4rem;margin-bottom:.4rem">'+inp('adShift','Shift / hours (e.g. overlap to 2 PM EDT)',2)+'</div>'
+   +'<textarea id="adDesc" placeholder="Paste the full JD / requirement description *" style="width:100%;height:200px;font-size:.7rem;border:1px solid var(--g100);border-radius:4px;padding:.45rem"></textarea>'
+   +'<div style="display:flex;gap:.5rem;align-items:center;margin-top:.5rem"><button id="adGo" onclick="saveDemand()" style="padding:.4rem .9rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Save Requirement</button><span id="adStatus" style="font-size:.68rem;color:var(--g5)"></span></div></div>';
+  document.body.appendChild(ov);
+}
+async function importJobUrl(){
+  var st=document.getElementById('adParseStatus'),btn=document.getElementById('adUrlBtn');
+  var u=(document.getElementById('adJobUrl').value||'').trim();
+  if(!/linkedin\.com\/jobs\/view\/\d+/i.test(u)){st.textContent='⚠️ Paste a URL like https://www.linkedin.com/jobs/view/4445203221/';return}
+  btn.disabled=true;st.textContent='🔗 Fetching job posting (30-60s)...';
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startJobUrlImport',url:u})});
+    var d=await r.json();if(d.error){st.textContent='⚠️ '+d.error;btn.disabled=false;return}
+    var t0=Date.now();
+    var poll=async function(){
+      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkJobUrlImport',runId:d.runId,datasetId:d.datasetId,url:u})});
+      var pd=await pr.json();
+      if(!pd.done){if(Date.now()-t0<150000){st.textContent='⏳ Fetching... ('+Math.round((Date.now()-t0)/1000)+'s)';setTimeout(poll,4000)}else{st.textContent='⚠️ Timed out — paste the JD text instead.';btn.disabled=false}return}
+      if(pd.error){st.textContent='⚠️ '+pd.error;btn.disabled=false;return}
+      var j=pd.job||{};
+      var set=function(id,v){if(v)document.getElementById(id).value=String(v).trim()};
+      set('adTitle',j.title);set('adCompany',j.company);set('adLocation',j.location);set('adRate',j.salary);
+      if(/remote/i.test(j.workType||j.location||''))document.getElementById('adWork').selectedIndex=0;
+      set('adDesc',j.description);
+      st.textContent='✅ Job fetched — review the fields (tip: you can now also run Parse with AI on the description to pull rate/shift/openings), then Save.';
+      btn.disabled=false;
+    };
+    setTimeout(poll,5000);
+  }catch(e){st.textContent='⚠️ '+e.message;btn.disabled=false}
+}
+async function parseJdAI(){
+  var st=document.getElementById('adParseStatus'),btn=document.getElementById('adParseBtn');
+  var txt=(document.getElementById('adJdRaw').value||'').trim();
+  var f=document.getElementById('adJdPdf').files[0];
+  if(!txt&&!f){st.textContent='Paste JD text or choose a PDF first.';return}
+  var payload={action:'parseJD'};
+  if(f){
+    if(f.size>4*1024*1024){st.textContent='⚠️ File too large (max 4 MB).';return}
+    var isPdf=/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name);
+    var isDocx=/\.docx$/i.test(f.name)||/wordprocessingml/i.test(f.type);
+    if(!isPdf&&!isDocx){st.textContent='⚠️ Use a PDF or Word (.docx) file — or paste the text above.';return}
+    st.textContent=isPdf?'Reading PDF...':'Reading Word document...';
+    var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(',')[1])};r.onerror=rej;r.readAsDataURL(f)});
+    if(isPdf)payload.pdfBase64=b64;else payload.docxBase64=b64;
+  } else payload.text=txt;
+  btn.disabled=true;st.textContent='🤖 Parsing with AI...';
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify(payload)});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;btn.disabled=false;return}
+    var p=d.parsed||{};
+    var set=function(id,v){if(v!=null&&String(v).trim()!=='')document.getElementById(id).value=String(v).trim()};
+    set('adTitle',p.title);set('adCompany',p.client);set('adLocation',p.location);
+    set('adRate',p.rate);set('adDuration',p.duration);set('adShift',p.shift);
+    if(p.openings)set('adCount',p.openings);
+    if(p.work_mode){var w=document.getElementById('adWork');for(var i=0;i<w.options.length;i++)if(w.options[i].text.toLowerCase()===String(p.work_mode).toLowerCase())w.selectedIndex=i}
+    if(p.country){var cn=document.getElementById('adCountry');for(var j=0;j<cn.options.length;j++)if(cn.options[j].text.toLowerCase()===String(p.country).toLowerCase())cn.selectedIndex=j}
+    var descParts=[p.description||''];
+    if(p.skills_required&&p.skills_required.length)descParts.unshift('Required skills: '+p.skills_required.join(', '));
+    document.getElementById('adDesc').value=descParts.join('\n\n').trim();
+    st.textContent='✅ Fields prefilled — review and correct (AI never invents missing values; blanks mean the JD did not state them), then Save.';
+    btn.disabled=false;
+  }catch(e){st.textContent='⚠️ '+e.message;btn.disabled=false}
+}
+async function saveDemand(){
+  var v=function(id){return (document.getElementById(id).value||'').trim()};
+  var st=document.getElementById('adStatus'),go=document.getElementById('adGo');
+  if(!v('adTitle')||!v('adCompany')||v('adDesc').length<30){st.textContent='⚠️ Title, client and a real description are required.';return}
+  go.disabled=true;st.textContent='Saving...';
+  var meta=[];
+  if(v('adRate'))meta.push('Rate: '+v('adRate'));
+  if(v('adDuration'))meta.push('Duration: '+v('adDuration'));
+  if(v('adCount'))meta.push('Openings: '+v('adCount'));
+  if(v('adShift'))meta.push('Shift: '+v('adShift'));
+  var job={jobId:'man_'+Date.now(),title:v('adTitle'),company:v('adCompany'),companyUrl:'',companyLinkedin:'',companyLogo:'',
+    location:v('adLocation')||v('adCountry'),description:(meta.length?meta.join(' | ')+'\n\n':'')+v('adDesc'),descriptionHtml:'',
+    salary:v('adRate'),datePosted:new Date().toISOString(),contractType:'Contract (C2C)',experienceLevel:'',sector:'',
+    workType:document.getElementById('adWork').value,benefits:'',applicationsCount:'',applyLink:'',jobUrl:'',
+    posterFullName:'',posterProfileUrl:'',source:'Manual',sourceApi:'manual-entry',country:document.getElementById('adCountry').value,openings:parseInt(v('adCount'))||1};
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'processAndSave',jobs:[job]})});
+    var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;go.disabled=false;return}
+    if(d.filtered){st.textContent='⚠️ The pipeline judged this not cybersecurity-relevant — add security terms to the description.';go.disabled=false;return}
+    st.textContent='✅ Requirement saved ('+(d.saved!=null?d.saved:1)+'). It now appears in the jobs table and matches against consultants.';
+    setTimeout(function(){document.getElementById('adOverlay').remove();try{searchDbJobs&&searchDbJobs()}catch(e){}},1400);
   }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
 }
 var _rvList=[],_rvSort='new';

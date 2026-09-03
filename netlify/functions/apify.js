@@ -272,6 +272,69 @@ exports.handler = async function(event) {
     }
 
     // ACTION: startProfileScrape - kick off scrape, return runId immediately (no wait)
+    // ============ #522 IMPORT A SINGLE LINKEDIN JOB BY URL ============
+    if (action === 'startJobUrlImport') {
+      var jurl = String(body.url || '').trim();
+      var jm = jurl.match(/linkedin\.com\/jobs\/view\/(\d+)/i);
+      if (!jm) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'URL must look like linkedin.com/jobs/view/<id>' }) };
+      try {
+        var juresp = await fetch('https://api.apify.com/v2/acts/' + ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ urls: [ 'https://www.linkedin.com/jobs/view/' + jm[1] + '/' ], proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] } }) });
+        if (!juresp.ok) { var jt = await juresp.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Could not start job import', detail: jt.slice(0, 200) }) }; }
+        var jurun = await juresp.json();
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ started: true, runId: jurun.data.id, datasetId: jurun.data.defaultDatasetId }) };
+      } catch (e) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Job import error: ' + e.message }) }; }
+    }
+    if (action === 'checkJobUrlImport') {
+      var jr2 = await fetch('https://api.apify.com/v2/actor-runs/' + body.runId + '?token=' + APIFY_TOKEN);
+      var jj2 = await jr2.json(); var jst = jj2.data && jj2.data.status;
+      if (jst !== 'SUCCEEDED' && jst !== 'FAILED' && jst !== 'ABORTED' && jst !== 'TIMED-OUT')
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: jst, done: false }) };
+      if (jst !== 'SUCCEEDED') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: jst, done: true, error: 'Scraper ' + jst }) };
+      var jds = body.datasetId || (jj2.data && jj2.data.defaultDatasetId);
+      var jir = await fetch('https://api.apify.com/v2/datasets/' + jds + '/items?token=' + APIFY_TOKEN + '&format=json');
+      var jitems = await jir.json(); if (!Array.isArray(jitems)) jitems = [];
+      jitems = jitems.filter(function (x) { return x && (x.title || x.description); });
+      if (!jitems.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: 'SUCCEEDED', done: true, error: 'No job data returned — the actor may not support direct URLs, or the posting is closed. Paste the JD text instead.' }) };
+      var j0 = jitems[0];
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: 'SUCCEEDED', done: true, job: {
+        title: j0.title || '', company: j0.companyName || j0.company || '', location: j0.location || '',
+        description: String(j0.description || '').slice(0, 12000), salary: j0.salary || '',
+        contractType: j0.contractType || '', workType: j0.workType || '', jobUrl: j0.jobUrl || body.url || ''
+      } }) };
+    }
+    // ============ #521 PARSE JD (text or PDF) -> structured requirement fields ============
+    if (action === 'parseJD') {
+      var PKEY = process.env.ANTHROPIC_API_KEY;
+      if (!PKEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI key not configured' }) };
+      var jdText = String(body.text || '').slice(0, 24000);
+      var jdPdf = body.pdfBase64 || null;
+      // #521b: .docx accepted too — extract its text server-side (mammoth), then treat as text
+      if (!jdText && body.docxBase64) {
+        try {
+          var mammoth = require('mammoth');
+          var dres = await mammoth.extractRawText({ buffer: Buffer.from(body.docxBase64, 'base64') });
+          jdText = String(dres.value || '').slice(0, 24000);
+        } catch (me) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Could not read the Word document: ' + me.message }) }; }
+      }
+      if (!jdText && !jdPdf) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Provide JD text, a PDF, or a Word (.docx) file' }) };
+      var instr = 'Extract the following from this job description / requirement into STRICT JSON (no prose, no markdown): {"title":string, "client":string (hiring company or via-partner/MSP if named), "location":string, "country":string (one of USA, UK, India, Canada, EU, or the stated country), "work_mode":"Remote"|"Hybrid"|"On-site", "rate":string (as stated, e.g. "$40-50/hr C2C"; empty if not stated), "duration":string (contract length as stated; empty if not stated), "openings":number (0 if not stated), "shift":string (working hours / timezone overlap as stated; empty if not stated), "skills_required":array of strings (hard skills/tools explicitly required), "description":string (the requirement body, cleaned of email headers/footers, max 4000 chars)}. NEVER invent values '+String.fromCharCode(8212)+' leave fields empty/0 when the document does not state them.';
+      var content = jdPdf
+        ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: jdPdf } }, { type: 'text', text: instr }]
+        : [{ type: 'text', text: instr + '\n\nDOCUMENT:\n' + jdText }];
+      try {
+        var pr2 = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-key': PKEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 3000, messages: [{ role: 'user', content: content }] }) });
+        if (!pr2.ok) { var pt2 = await pr2.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI parse failed (' + pr2.status + ')', detail: pt2.slice(0, 200) }) }; }
+        var pj2 = await pr2.json();
+        var ptxt = (pj2.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
+        var pm = ptxt.match(/\{[\s\S]*\}/);
+        if (!pm) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI returned no JSON' }) };
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ parsed: JSON.parse(pm[0]) }) };
+      } catch (e) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Parse error: ' + e.message }) }; }
+    }
     // ============ #517 LINKEDIN TALENT HARVEST (bebity search mode -> pending cache) ============
     if (action === 'startLinkedInHarvest') {
       var lkw = (body.keywords || []).map(function (k) { return String(k).trim(); }).filter(Boolean);
