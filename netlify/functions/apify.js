@@ -301,7 +301,10 @@ exports.handler = async function(event) {
       try {
         var juresp = await fetch('https://api.apify.com/v2/acts/' + ACTOR_ID + '/runs?token=' + APIFY_TOKEN, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ urls: [ 'https://www.linkedin.com/jobs/view/' + jm[1] + '/' ], proxy: { useApifyProxy: true, apifyProxyGroups: ['RESIDENTIAL'] } }) });
+          body: JSON.stringify({ // #526b: actor schema verified in console — startUrls objects, not urls
+            startUrls: [ { url: 'https://www.linkedin.com/jobs/view/' + jm[1] + '/' } ],
+            rows: 1, maxRowsPerUrl: 2, easyApply: false, enrichCompany: false, enrichCompanyWebsite: false, under10Applicants: false, publishedAt: 'r2592000'
+          }) });
         if (!juresp.ok) { var jt = await juresp.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Could not start job import', detail: jt.slice(0, 200) }) }; }
         var jurun = await juresp.json();
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ started: true, runId: jurun.data.id, datasetId: jurun.data.defaultDatasetId }) };
