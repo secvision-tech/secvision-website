@@ -484,16 +484,24 @@ exports.handler = async function(event) {
         var u = 'https://www.upwork.com/nx/search/talent/?loc=' + encodeURIComponent(tCountry) + '&q=' + encodeURIComponent(roles[qi]) + (page > 1 ? '&page=' + page : '');
         queries.push({ role: roles[qi], key: key, page: page }); urls.push(u);
       }
+      // #524b: ONE RUN PER ROLE — the actor's maxProfiles is a global sequential budget,
+      // so a shared run starves every URL after the first. Per-role runs guarantee each
+      // keyword is sampled, and cursors advance per role only when that role yields items.
+      var per = Math.max(3, Math.ceil(tCount / queries.length));
+      var runs = [];
       try {
-        var tresp = await fetch('https://api.apify.com/v2/acts/bovi~upwork-talent-scraper/runs?token=' + APIFY_TOKEN, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ maxProfiles: tCount, searchUrls: urls })
-        });
-        if (!tresp.ok) { var tt = await tresp.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start talent scraper', apifyStatus: tresp.status, apifyResponse: tt.slice(0, 300) }) }; }
-        var trun = await tresp.json();
-        await tdb.collection('sourcing_runs').insertOne({ runId: trun.data.id, datasetId: trun.data.defaultDatasetId, queries: queries, country: tCountry, count: tCount, startedAt: new Date(), by: (typeof authResult !== 'undefined' && authResult && authResult.email) || '' });
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ started: true, runId: trun.data.id, datasetId: trun.data.defaultDatasetId, queries: queries }) };
-      } catch (e) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Talent scraper error: ' + e.message }) }; }
+        for (var ri = 0; ri < queries.length; ri++) {
+          var tresp = await fetch('https://api.apify.com/v2/acts/bovi~upwork-talent-scraper/runs?token=' + APIFY_TOKEN, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ maxProfiles: per, searchUrls: [urls[ri]] })
+          });
+          if (!tresp.ok) { var tt = await tresp.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Failed to start talent scraper (' + queries[ri].role + ')', apifyResponse: tt.slice(0, 200), runs: runs }) }; }
+          var trun = await tresp.json();
+          await tdb.collection('sourcing_runs').insertOne({ runId: trun.data.id, datasetId: trun.data.defaultDatasetId, queries: [queries[ri]], country: tCountry, count: per, startedAt: new Date(), by: (typeof authResult !== 'undefined' && authResult && authResult.email) || '' });
+          runs.push({ runId: trun.data.id, datasetId: trun.data.defaultDatasetId, role: queries[ri].role });
+        }
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ started: true, runs: runs }) };
+      } catch (e) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Talent scraper error: ' + e.message, runs: runs }) }; }
     }
     // checkTalentScrape: poll; on SUCCEEDED insert into consultant_profiles (managed:false, source:'upwork')
     // with upsert-by-upworkId, managed-skip, rejects filter; then advance page cursors.

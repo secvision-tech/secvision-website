@@ -4942,26 +4942,35 @@ function openUpworkFetch(){
 }
 async function runTalentScrape(){
   var roles=Array.prototype.map.call(document.querySelectorAll('.uwRole:checked'),function(x){return x.value});
-  var extra=(document.getElementById('uwExtra').value||'').trim();if(extra)roles.push(extra);
+  var extra=(document.getElementById('uwExtra').value||'').trim();
+  // #524c: keyword REFINES each selected role ("SOC Analyst Splunk"); standalone only when no role checked
+  if(extra){roles=roles.length?roles.map(function(r){return r+' '+extra}):[extra]}
   var st=document.getElementById('uwStatus'),go=document.getElementById('uwGo');
   if(!roles.length){st.textContent='Select at least one role.';return}
   go.disabled=true;st.textContent='🚀 Starting harvest ('+roles.length+' role'+(roles.length>1?'s':'')+')...';
   try{
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startTalentScrape',roles:roles,country:document.getElementById('uwCountry').value,count:parseInt(document.getElementById('uwCount').value)||10})});
     var d=await r.json();if(d.error){st.textContent='⚠️ '+d.error;go.disabled=false;return}
-    var t0=Date.now();
-    var poll=async function(){
-      var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkTalentScrape',runId:d.runId,datasetId:d.datasetId})});
-      var pd=await pr.json();
-      if(!pd.done){st.textContent='⏳ Harvesting... ('+Math.round((Date.now()-t0)/1000)+'s)';if(Date.now()-t0<240000)setTimeout(poll,5000);else{st.textContent='⚠️ Timed out — check Apify console.';go.disabled=false}return}
-      if(pd.error){st.textContent='⚠️ '+pd.error;go.disabled=false;return}
-      var s=pd.stats||{};
-      st.textContent='✅ '+s.inserted+' new cached, '+s.updated+' refreshed, '+s.skippedManaged+' already yours, '+s.skippedRejected+' previously rejected ('+s.fetched+' fetched).';
-      go.disabled=false;
-      try{loadConsultants(true)}catch(e){}
-      _rvSort='new';setTimeout(function(){var o=document.getElementById('uwOverlay');if(o)o.remove();openReviewPending()},900);
+    // #524b: one run per role — poll each to completion, aggregate the stats
+    var runs=d.runs||[],agg={fetched:0,inserted:0,updated:0,skippedManaged:0,skippedRejected:0},t0=Date.now();
+    var pollRun=function(idx){
+      if(idx>=runs.length){
+        st.textContent='✅ '+agg.inserted+' new cached, '+agg.updated+' refreshed, '+agg.skippedManaged+' already yours, '+agg.skippedRejected+' previously rejected ('+agg.fetched+' fetched across '+runs.length+' role'+(runs.length>1?'s':'')+').';
+        go.disabled=false;try{loadConsultants(true)}catch(e){}
+        _rvSort='new';setTimeout(function(){var o=document.getElementById('uwOverlay');if(o)o.remove();openReviewPending()},900);
+        return;
+      }
+      var run=runs[idx];
+      var poll=async function(){
+        var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkTalentScrape',runId:run.runId,datasetId:run.datasetId})});
+        var pd=await pr.json();
+        if(!pd.done){st.textContent='⏳ Harvesting "'+run.role+'" ('+(idx+1)+'/'+runs.length+', '+Math.round((Date.now()-t0)/1000)+'s)...';if(Date.now()-t0<300000)setTimeout(poll,5000);else{st.textContent='⚠️ Timed out on "'+run.role+'" — partial results kept.';go.disabled=false}return}
+        if(!pd.error&&pd.stats){var s=pd.stats;['fetched','inserted','updated','skippedManaged','skippedRejected'].forEach(function(k){agg[k]+=(s[k]||0)})}
+        pollRun(idx+1);
+      };
+      setTimeout(poll,idx===0?6000:1500);
     };
-    setTimeout(poll,6000);
+    pollRun(0);
   }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
 }
 function openLinkedInHarvest(){
