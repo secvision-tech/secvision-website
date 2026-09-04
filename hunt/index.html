@@ -12,6 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <style>
+html{font-size:19.2px} /* #522: +20% global scale (app sizes in rem) */
 :root{--g2:#D8DFE9;--pri:#0F2341;--pm:#1B3A5C;--ac:#0891B2;--al:#22D3EE;--w:#FFF;--off:#F7F9FC;--g100:#DDE4ED;--g3:#8FA0B8;--g5:#5A6F87;--g7:#344054;--tx:#1D2939;--tl:#475467;--bd:rgba(8,145,178,.1);--sh:0 4px 20px rgba(15,35,65,.06)}
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'DM Sans',sans-serif;background:var(--off);color:var(--tx);min-height:100vh;display:flex;flex-direction:column}
@@ -259,7 +260,9 @@ body.role-viewer .edit-btn{display:none!important}
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:.6rem;margin-top:.5rem;align-items:end">
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="15days">Last 15 Days</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
         <div class="sg"><label>Depth</label><select id="sPages"><option value="3">Quick (3pg/role)</option><option value="5" selected>Standard (5pg)</option><option value="10">Deep (10pg)</option></select></div>
-        <button onclick="openAddDemand()" style="align-self:end;padding:.35rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600" title="Manually add a client requirement / JD">➕ Add Requirement</button>
+      </div>
+      <div style="margin-top:.5rem">
+        <button onclick="openAddDemand()" style="padding:.35rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600" title="Manually add a client requirement / JD">➕ Add Requirement</button>
       </div>
       <div class="sf2" id="customDates"><div class="sg"><label>From</label><input type="date" id="dateFrom"></div><div class="sg"><label>To</label><input type="date" id="dateTo"></div></div>
       <div class="api-info" id="apiInfo"><span id="apiText"></span><div class="export-btns" id="exportBtns" style="display:none"><button class="export-btn" onclick="exportCSV()">CSV</button><button class="export-btn" onclick="exportXLSX()">Excel</button><button class="export-btn" onclick="exportPDF()">PDF</button></div></div>
@@ -5020,7 +5023,27 @@ function openAddDemand(){
 async function importJobUrl(){
   var st=document.getElementById('adParseStatus'),btn=document.getElementById('adUrlBtn');
   var u=(document.getElementById('adJobUrl').value||'').trim();
-  if(!/linkedin\.com\/jobs\/view\/\d+/i.test(u)){st.textContent='⚠️ Paste a URL like https://www.linkedin.com/jobs/view/4445203221/';return}
+  if(!/^https?:\/\//i.test(u)){st.textContent='⚠️ Paste a full job URL (LinkedIn job link, or any public job page).';return}
+  if(!/linkedin\.com\/jobs\/view\/\d+/i.test(u)){
+    // #526: generic page (Notion, Greenhouse, Lever, company site...) -> server fetch + AI parse
+    btn.disabled=true;st.textContent='🌐 Fetching page and parsing with AI...';
+    try{
+      var gr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'parseJDFromUrl',url:u})});
+      var gd=await gr.json();
+      if(gd.error){st.textContent='⚠️ '+gd.error;btn.disabled=false;return}
+      var p=gd.parsed||{};
+      var setg=function(id,v){if(v!=null&&String(v).trim()!=='')document.getElementById(id).value=String(v).trim()};
+      setg('adTitle',p.title);setg('adCompany',p.client);setg('adLocation',p.location);
+      setg('adRate',p.rate);setg('adDuration',p.duration);setg('adShift',p.shift);
+      if(p.openings)setg('adCount',p.openings);
+      if(p.work_mode){var w2=document.getElementById('adWork');for(var i2=0;i2<w2.options.length;i2++)if(w2.options[i2].text.toLowerCase()===String(p.work_mode).toLowerCase())w2.selectedIndex=i2}
+      if(p.country){var cn2=document.getElementById('adCountry');for(var j2=0;j2<cn2.options.length;j2++)if(cn2.options[j2].text.toLowerCase()===String(p.country).toLowerCase())cn2.selectedIndex=j2}
+      var dp2=[p.description||''];if(p.skills_required&&p.skills_required.length)dp2.unshift('Required skills: '+p.skills_required.join(', '));
+      document.getElementById('adDesc').value=dp2.join('\n\n').trim();
+      st.textContent='✅ Page parsed — review the fields, then Save.';btn.disabled=false;
+    }catch(ge){st.textContent='⚠️ '+ge.message;btn.disabled=false}
+    return;
+  }
   btn.disabled=true;st.textContent='🔗 Fetching job posting (30-60s)...';
   try{
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startJobUrlImport',url:u})});
@@ -5152,6 +5175,21 @@ function rvRender(){
   document.getElementById('rvTable').innerHTML='<div style="font-size:.84rem;color:var(--g5);margin:.2rem 0 .4rem">Sort: '+['new','rate','jss','earn','fit'].map(function(k){var l={new:'Newest',rate:'Rate',jss:'JSS',earn:'Earnings',fit:'Security fit'}[k];return '<a href="#" onclick="rvSortBy(\''+k+'\');return false" style="margin-right:.72rem;text-decoration:none;font-weight:'+(_rvSort===k?'700':'400')+';color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'">'+l+'</a>'}).join('')+'</div><table style="width:100%;border-collapse:collapse;font-size:.76rem"><thead><tr style="text-align:left"><th></th>'+th('Name','name')+'<th style="padding:.3rem .4rem;color:var(--g5)">Title</th>'+th('Fit','fit')+th('Rate','rate')+th('JSS','jss')+th('Earnings','earn')+'<th style="padding:.3rem .4rem;color:var(--g5)">Location</th><th style="padding:.3rem .4rem;color:var(--g5)">Source</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Nothing pending.</td></tr>')+'</tbody></table>';
   rvAttachResizers();
 }
+async function aiFmtSummary(elId,link){
+  var el=document.getElementById(elId);if(!el)return;
+  var raw=el.getAttribute('data-raw')||el.innerText||'';
+  if(raw.length<40){return}
+  link.textContent='⏳ formatting...';
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'aiFormatText',text:raw})});
+    var d=await r.json();
+    if(d.error){link.textContent='⚠️ '+d.error;return}
+    var h=esc(d.formatted||'');
+    h=h.replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>');
+    h=h.split(/\n{2,}/).map(function(par){return '<p style="margin:.35rem 0">'+par.split('\n').map(function(L){var sx=L.trim();return /^[-*\u2022]/.test(sx)?'<span style="display:block;padding-left:.8rem;text-indent:-.6rem">'+sx+'</span>':sx}).filter(Boolean).join('<br>')+'</p>'}).join('');
+    el.innerHTML=h;link.textContent='✨ formatted';
+  }catch(e){link.textContent='⚠️ '+e.message}
+}
 function rvFmtSummary(t){
   t=esc(String(t||'').trim());if(!t)return '<span style="color:var(--g3)">'+String.fromCharCode(8212)+'</span>';
   return t.split(/\n{2,}/).map(function(par){
@@ -5176,7 +5214,7 @@ function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Skills</div><div>'+chips(p.skills,'#E0F2FE')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Certifications</div><div>'+chips(p.certifications,'#DCFCE7')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Compliance / Standards</div><div>'+chips(p.compliance,'#FEF3C7')+'</div>'
-   +'<div style="font-size:.76rem;font-weight:600;margin-top:.5rem">Profile summary</div><div style="font-size:.76rem;line-height:1.55;color:#1F2937;max-height:34vh;overflow:auto;border:1px solid var(--g100);border-radius:6px;padding:.55rem .65rem">'+rvFmtSummary(p.summary||'')+'</div>'
+   +'<div style="font-size:.76rem;font-weight:600;margin-top:.5rem">Profile summary <a href="#" onclick="aiFmtSummary(\'rvSum\',this);return false" style="font-size:.66rem;font-weight:400;color:#7C3AED;text-decoration:none">✨ Format with AI</a></div><div style="font-size:.76rem;line-height:1.55;color:#1F2937;max-height:34vh;overflow:auto;border:1px solid var(--g100);border-radius:6px;padding:.55rem .65rem" id="rvSum" data-raw="'+esc(p.summary||'').replace(/"/g,'&quot;')+'">'+rvFmtSummary(p.summary||'')+'</div>'
    +(u.profileUrl?'<div style="margin-top:.5rem"><a href="'+esc(u.profileUrl)+'" target="_blank" style="font-size:.76rem">Open Upwork profile ↗</a></div>':'')+'</div>';
   document.body.appendChild(ov)}
 async function rvReject(id){if(!confirm('Delete this profile? It will never be re-fetched.'))return;

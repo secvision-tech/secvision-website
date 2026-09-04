@@ -148,7 +148,14 @@ exports.handler = async function(event) {
         var isLinkedIn = rawCompanyUrl.indexOf('linkedin.com/company') > -1;
 
         return {
-          jobId: 'li_' + (j.id || ''),
+          jobId: (function(){ // #525: never emit a bare 'li_' key — derive a stable id
+            if (j.id) return 'li_' + j.id;
+            var mu = String(j.jobUrl || j.url || '').match(/jobs\/view\/(\d+)/);
+            if (mu) return 'li_' + mu[1];
+            var basis = (j.title || '') + '|' + (j.companyName || '') + '|' + (j.location || '');
+            var h = 0; for (var hz = 0; hz < basis.length; hz++) { h = ((h << 5) - h + basis.charCodeAt(hz)) | 0; }
+            return 'gen_' + Math.abs(h).toString(36);
+          })(),
           linkedinJobId: j.id || '',
           title: j.title || '',
           company: j.companyName || '',
@@ -272,6 +279,20 @@ exports.handler = async function(event) {
     }
 
     // ACTION: startProfileScrape - kick off scrape, return runId immediately (no wait)
+    // ============ #523 AI-FORMAT A PROFILE SUMMARY ============
+    if (action === 'aiFormatText') {
+      var FKEY = process.env.ANTHROPIC_API_KEY;
+      var ftxt = String(body.text || '').slice(0, 8000);
+      if (!FKEY || ftxt.length < 40) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: FKEY ? 'Nothing to format' : 'AI key not configured' }) };
+      try {
+        var fr = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': FKEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2200, messages: [{ role: 'user', content: 'Reformat this professional profile summary for readability: short paragraphs, bold section headings where natural (**Heading**), bullet lists (- item) for enumerations. PRESERVE all facts and wording as far as possible; remove nothing substantive; add nothing. Output plain text with ** and - markers only.\n\n' + ftxt }] }) });
+        if (!fr.ok) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI format failed (' + fr.status + ')' }) };
+        var fj = await fr.json();
+        var fo = (fj.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ formatted: fo }) };
+      } catch (fe) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: fe.message }) }; }
+    }
     // ============ #522 IMPORT A SINGLE LINKEDIN JOB BY URL ============
     if (action === 'startJobUrlImport') {
       var jurl = String(body.url || '').trim();
@@ -303,6 +324,21 @@ exports.handler = async function(event) {
         description: String(j0.description || '').slice(0, 12000), salary: j0.salary || '',
         contractType: j0.contractType || '', workType: j0.workType || '', jobUrl: j0.jobUrl || body.url || ''
       } }) };
+    }
+    // ============ #526 FETCH ANY PUBLIC JOB-PAGE URL -> text -> same AI parse ============
+    if (action === 'parseJDFromUrl') {
+      var gu = String(body.url || '').trim();
+      if (!/^https?:\/\//i.test(gu)) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Enter a full http(s) URL' }) };
+      try {
+        var gr = await fetch(gu, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36', 'Accept': 'text/html,application/xhtml+xml' }, redirect: 'follow' });
+        if (!gr.ok) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Page returned ' + gr.status + ' — paste the JD text instead.' }) };
+        var gh = await gr.text();
+        gh = gh.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/\s{2,}/g, ' ').trim();
+        if (gh.length < 200) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'The page rendered too little readable text (likely a JavaScript-only page). Copy the JD text from the page and paste it instead.' }) };
+        body.text = gh.slice(0, 24000); body.pdfBase64 = null; body.docxBase64 = null;
+        // fall through to parseJD below by rewriting the action
+      } catch (ge) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Could not fetch the page (' + ge.message + ') — paste the JD text instead.' }) }; }
+      action = 'parseJD';
     }
     // ============ #521 PARSE JD (text or PDF) -> structured requirement fields ============
     if (action === 'parseJD') {
