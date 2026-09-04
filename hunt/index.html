@@ -252,13 +252,14 @@ body.role-viewer .edit-btn{display:none!important}
         <div class="sg"><label>Job Type</label><select id="sType" multiple><option value="FULLTIME" selected>Full-time</option><option value="CONTRACTOR">Contract</option><option value="PARTTIME">Part-time</option><option value="INTERN">Internship</option></select></div>
         <div class="sg"><label>Region</label><select id="sRegion" onchange="updateCountries()"><option value="Any">Any (All Regions)</option><option value="NA" selected>North America</option><option value="EU">Europe</option><option value="AP">Asia Pacific</option><option value="ME">Middle East</option><option value="AF">Africa</option><option value="SA">South America</option></select></div>
         <div class="sg"><label>Country</label><select id="sCountry"><option value="us" selected>United States</option><option value="ca">Canada</option></select></div>
-        <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button><button onclick="openAddDemand()" style="align-self:end;padding:.35rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600" title="Manually add a client requirement / JD">➕ Add Requirement</button>
+        <button class="sbtn" id="searchBtn" onclick="searchJobs()" style="align-self:end">Search</button>
         <div id="apifyStatus" style="display:none;font-size:.65rem;color:#6C3FBF;background:#f3f0ff;padding:.3rem .6rem;border-radius:4px;align-self:center">🔄 LinkedIn enrichment running...</div>
         <div id="enrichStatus" style="display:none;font-size:.65rem;color:#047857;background:#ecfdf5;padding:.3rem .6rem;border-radius:4px;align-self:center">🏢 Auto-enriching companies...</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr auto;gap:.6rem;margin-top:.5rem;align-items:end">
         <div class="sg"><label>Time Period</label><select id="sPeriod" onchange="document.getElementById('customDates').classList.toggle('show',this.value==='custom')"><option value="today">Last 1 Day</option><option value="3days">Last 3 Days</option><option value="week">Last 1 Week</option><option value="15days">Last 15 Days</option><option value="month" selected>Last 1 Month</option><option value="all">All Time</option><option value="custom">Custom Range</option></select></div>
         <div class="sg"><label>Depth</label><select id="sPages"><option value="3">Quick (3pg/role)</option><option value="5" selected>Standard (5pg)</option><option value="10">Deep (10pg)</option></select></div>
+        <button onclick="openAddDemand()" style="align-self:end;padding:.35rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600" title="Manually add a client requirement / JD">➕ Add Requirement</button>
       </div>
       <div class="sf2" id="customDates"><div class="sg"><label>From</label><input type="date" id="dateFrom"></div><div class="sg"><label>To</label><input type="date" id="dateTo"></div></div>
       <div class="api-info" id="apiInfo"><span id="apiText"></span><div class="export-btns" id="exportBtns" style="display:none"><button class="export-btn" onclick="exportCSV()">CSV</button><button class="export-btn" onclick="exportXLSX()">Excel</button><button class="export-btn" onclick="exportPDF()">PDF</button></div></div>
@@ -1515,6 +1516,11 @@ function buildJobHighlightTerms(j){
     var k=t.toLowerCase();
     if(seen[k])return; seen[k]=1;
     terms.push(t);
+  });
+  // #519: frameworks named in the description highlight even when the extracted field is empty
+  var desc=String((j.descriptionHtml||j.description||'')).replace(/<[^>]*>/g,' ');
+  ['ISO 27001','ISO 27017','ISO 27701','SOC 2','PCI DSS','PCI-DSS','HIPAA','GDPR','NIST CSF','NIST 800-53','NIST SP 800-53','NIST','CIS Benchmarks','CIS Controls','MITRE ATT&CK','FedRAMP','CMMC','Zero Trust','TIC 3.0','GLBA','SOX','FFIEC','HITRUST','DPDP','CERT-In'].forEach(function(t){
+    if(desc.toLowerCase().indexOf(t.toLowerCase())>=0&&!seen[t.toLowerCase()]){seen[t.toLowerCase()]=1;terms.push(t)}
   });
   // longest first so "NIST 800-53" wins over "NIST"
   terms.sort(function(a,b){return b.length-a.length});
@@ -4959,7 +4965,7 @@ function openLinkedInHarvest(){
   var ov=document.createElement('div');ov.id='lhOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1500;display:flex;align-items:center;justify-content:center';
   ov.innerHTML='<div style="background:#fff;border-radius:10px;width:560px;max-width:94%;padding:1rem">'
    +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">🔗 LinkedIn Talent Fetch</b><button onclick="document.getElementById(\'lhOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
-   +'<div style="font-size:.7rem;color:var(--g5);margin:.3rem 0 .5rem">Searches public LinkedIn via the scraping actor (never your account). Tip: include an engagement word — consultant / freelance / contract. Ghost and off-country profiles are dropped; AI scores security fit.</div>'
+   +'<div style="font-size:.7rem;color:var(--g5);margin:.3rem 0 .5rem">Find security professionals on LinkedIn by keywords and country. Tip: adding a word like consultant, freelance or contract brings better-fitting profiles.</div>'
    +'<input id="lhKw" value="SOC Analyst consultant" style="width:100%;padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px" placeholder="Keywords, e.g. SOC Analyst consultant">'
    +'<div style="display:flex;gap:.4rem;margin-top:.5rem"><select id="lhCountry" style="flex:1;font-size:.72rem"><option value="india">India</option><option value="united states">United States</option><option value="united kingdom">United Kingdom</option><option value="canada">Canada</option><option value="philippines">Philippines</option></select>'
    +'<select id="lhCount" style="flex:.5;font-size:.72rem"><option>10</option><option>15</option><option>25</option></select>'
@@ -4999,9 +5005,9 @@ function openAddDemand(){
    +'<div style="border:1px dashed #7C3AED;border-radius:6px;padding:.5rem;margin-bottom:.6rem;background:#FAF5FF">'
    +'<div style="font-size:.7rem;font-weight:600;color:#7C3AED;margin-bottom:.3rem">📄 Parse JD with AI (optional)</div>'
    +'<textarea id="adJdRaw" placeholder="Paste the JD / requirement email text here (or upload PDF / Word below)..." style="width:100%;height:70px;font-size:.68rem;border:1px solid var(--g100);border-radius:4px;padding:.4rem"></textarea>'
+   +'<div style="display:flex;justify-content:flex-end;margin-top:.3rem"><button type="button" onclick="parseJdAI()" id="adParseBtn" style="padding:.3rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.68rem;cursor:pointer;font-weight:600">Parse with AI</button></div>'
    +'<div style="display:flex;gap:.4rem;align-items:center;margin-top:.3rem"><input id="adJobUrl" placeholder="...or LinkedIn job URL: linkedin.com/jobs/view/123..." style="flex:1.6;padding:.3rem .4rem;font-size:.66rem;border:1px solid var(--g100);border-radius:4px"><button type="button" onclick="importJobUrl()" id="adUrlBtn" style="padding:.3rem .6rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.66rem;cursor:pointer;font-weight:600">Fetch Job</button></div>'
-   +'<div style="display:flex;gap:.5rem;align-items:center;margin-top:.3rem"><input type="file" id="adJdPdf" accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" style="font-size:.64rem;flex:1">'
-   +'<button type="button" onclick="parseJdAI()" id="adParseBtn" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.68rem;cursor:pointer;font-weight:600">Parse with AI</button></div>'
+   +'<div style="display:flex;gap:.5rem;align-items:center;margin-top:.3rem"><input type="file" id="adJdPdf" accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onchange="parseJdAI()" style="font-size:.64rem;flex:1"><span style="font-size:.6rem;color:var(--g5)">auto-parses on select</span></div>'
    +'<div id="adParseStatus" style="font-size:.64rem;color:var(--g5);margin-top:.25rem"></div></div>'
    +'<div style="display:flex;gap:.4rem;margin-bottom:.4rem">'+inp('adTitle','Job title * (e.g. SOC Analyst - Senior)',2)+inp('adCompany','Client / via-partner * (e.g. iQues Consulting)',2)+'</div>'
    +'<div style="display:flex;gap:.4rem;margin-bottom:.4rem">'+inp('adLocation','Location (e.g. Remote - India)',1.6)+'<select id="adWork" style="flex:1;font-size:.72rem"><option>Remote</option><option>Hybrid</option><option>On-site</option></select><select id="adCountry" style="flex:1;font-size:.72rem"><option>USA</option><option>UK</option><option>India</option><option>Canada</option><option>EU</option></select></div>'
@@ -5104,6 +5110,26 @@ async function openReviewPending(){
   document.body.appendChild(ov);rvRender();
 }
 function rvSortBy(k){_rvSort=k;rvRender()}
+var _rvColW={},_rvResizing=false;
+function rvAttachResizers(){
+  var tbl=document.querySelector('#rvTable table');if(!tbl)return;
+  tbl.querySelectorAll('thead th').forEach(function(th,i){
+    if(_rvColW[i])th.style.width=_rvColW[i]+'px';
+    th.style.position='relative';
+    var g=document.createElement('span');
+    g.style.cssText='position:absolute;top:0;right:-3px;width:7px;height:100%;cursor:col-resize;user-select:none;z-index:5';
+    g.addEventListener('mousedown',function(e){
+      e.preventDefault();e.stopPropagation();
+      var startX=e.pageX,startW=th.offsetWidth;
+      var mv=function(ev){var w=Math.max(46,startW+(ev.pageX-startX));th.style.width=w+'px';_rvColW[i]=w};
+      var up=function(){document.removeEventListener('mousemove',mv);document.removeEventListener('mouseup',up);setTimeout(function(){_rvResizing=false},60)};
+      _rvResizing=true;
+      document.addEventListener('mousemove',mv);document.addEventListener('mouseup',up);
+    });
+    g.addEventListener('click',function(e){e.stopPropagation()});
+    th.appendChild(g);
+  });
+}
 function rvRender(){
   var num=function(v){var m=String(v||'').match(/[\d.]+/);return m?parseFloat(m[0]):0};
   var list=_rvList.slice().sort(function(a,b){
@@ -5113,7 +5139,7 @@ function rvRender(){
     if(_rvSort==='new')return String(b.fetchedAt||b.createdAt||'').localeCompare(String(a.fetchedAt||a.createdAt||''));
     if(_rvSort==='fit')return ((b.securityFit==null?-1:b.securityFit))-((a.securityFit==null?-1:a.securityFit));
     return String(a.name||'').localeCompare(String(b.name||''))});
-  var th=function(l,k){return '<th style="padding:.3rem .4rem;cursor:pointer;color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'" onclick="rvSortBy(\''+k+'\')">'+l+(_rvSort===k?' ▼':'')+'</th>'};
+  var th=function(l,k){return '<th style="padding:.3rem .4rem;cursor:pointer;color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'" onclick="if(!_rvResizing)rvSortBy(\''+k+'\')">'+l+(_rvSort===k?' ▼':'')+'</th>'};
   var rows=list.map(function(p){var u=p.upwork||{};var tier=u.topRated==='top_rated_plus'?'⭐⭐':(u.topRated==='top_rated'?'⭐':'');
     return '<tr style="border-bottom:1px solid var(--g100)"><td style="padding:.3rem .4rem"><input type="checkbox" class="rvSel" value="'+p._id+'"></td>'
     +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(p.name||'—')+'</td><td style="padding:.3rem .4rem" title="'+esc(p.currentRole||'')+'">'+esc((p.currentRole||'').slice(0,34)||'—')+'</td>'
@@ -5124,6 +5150,20 @@ function rvRender(){
     +'<a href="https://www.google.com/search?q='+encodeURIComponent('"'+(p.name||'').replace(/\s\w\.$/,'')+'" '+(p.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(p.country||'')+' site:linkedin.com/in')+'" target="_blank" style="font-size:.84rem">🔍 LinkedIn</a> '
     +'<button onclick="rvReject(\''+p._id+'\')" style="font-size:.84rem;padding:.15rem .4rem;cursor:pointer;color:#B91C1C">Delete</button></td></tr>'}).join('');
   document.getElementById('rvTable').innerHTML='<div style="font-size:.84rem;color:var(--g5);margin:.2rem 0 .4rem">Sort: '+['new','rate','jss','earn','fit'].map(function(k){var l={new:'Newest',rate:'Rate',jss:'JSS',earn:'Earnings',fit:'Security fit'}[k];return '<a href="#" onclick="rvSortBy(\''+k+'\');return false" style="margin-right:.72rem;text-decoration:none;font-weight:'+(_rvSort===k?'700':'400')+';color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'">'+l+'</a>'}).join('')+'</div><table style="width:100%;border-collapse:collapse;font-size:.76rem"><thead><tr style="text-align:left"><th></th>'+th('Name','name')+'<th style="padding:.3rem .4rem;color:var(--g5)">Title</th>'+th('Fit','fit')+th('Rate','rate')+th('JSS','jss')+th('Earnings','earn')+'<th style="padding:.3rem .4rem;color:var(--g5)">Location</th><th style="padding:.3rem .4rem;color:var(--g5)">Source</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Nothing pending.</td></tr>')+'</tbody></table>';
+  rvAttachResizers();
+}
+function rvFmtSummary(t){
+  t=esc(String(t||'').trim());if(!t)return '<span style="color:var(--g3)">'+String.fromCharCode(8212)+'</span>';
+  return t.split(/\n{2,}/).map(function(par){
+    var lines=par.split('\n').map(function(L){
+      var s=L.trim();if(!s)return '';
+      if(/^[A-Z0-9][A-Z0-9\s&\/\-,.()]{7,}:?$/.test(s)&&s===s.toUpperCase())return '<b>'+s+'</b>';
+      if(/:$/.test(s)&&s.length<70)return '<b>'+s+'</b>';
+      if(/^[-*\u2022\u2192\u2713\u2714\u25cf\u25aa]/.test(s))return '<span style="display:block;padding-left:.8rem;text-indent:-.6rem">'+s+'</span>';
+      return s;
+    }).filter(Boolean).join('<br>');
+    return '<p style="margin:.35rem 0">'+lines+'</p>';
+  }).join('');
 }
 function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!p)return;var u=p.upwork||{};
   var chips=function(arr,bg){return (arr||[]).length?arr.map(function(s){return '<span style="display:inline-block;background:'+bg+';border-radius:10px;padding:.1rem .45rem;margin:.1rem;font-size:.84rem">'+esc(s)+'</span>'}).join(''):'<span style="color:var(--g3);font-size:.84rem">—</span>'};
@@ -5136,7 +5176,7 @@ function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Skills</div><div>'+chips(p.skills,'#E0F2FE')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Certifications</div><div>'+chips(p.certifications,'#DCFCE7')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Compliance / Standards</div><div>'+chips(p.compliance,'#FEF3C7')+'</div>'
-   +'<div style="font-size:.76rem;font-weight:600;margin-top:.5rem">Profile summary</div><div style="font-size:.76rem;line-height:1.5;white-space:pre-wrap;color:#1F2937;max-height:34vh;overflow:auto;border:1px solid var(--g100);border-radius:6px;padding:.5rem">'+esc(p.summary||'')+'</div>'
+   +'<div style="font-size:.76rem;font-weight:600;margin-top:.5rem">Profile summary</div><div style="font-size:.76rem;line-height:1.55;color:#1F2937;max-height:34vh;overflow:auto;border:1px solid var(--g100);border-radius:6px;padding:.55rem .65rem">'+rvFmtSummary(p.summary||'')+'</div>'
    +(u.profileUrl?'<div style="margin-top:.5rem"><a href="'+esc(u.profileUrl)+'" target="_blank" style="font-size:.76rem">Open Upwork profile ↗</a></div>':'')+'</div>';
   document.body.appendChild(ov)}
 async function rvReject(id){if(!confirm('Delete this profile? It will never be re-fetched.'))return;
