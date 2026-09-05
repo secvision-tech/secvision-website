@@ -973,10 +973,26 @@ exports.handler = async function (event) {
       // (managed) before scraped prospects.
       try {
         var mcJobCountry = canonCountry(mcCountryForPool || '');   // #535: preferred country sorts first
+        // #538: within the preferred country, JOB-RELEVANT profiles score first —
+        // key terms from the job's title + skills (e.g. "splunk", "siem", "soc") are
+        // checked against the profile's role/skills/certs, then newest-fetched first.
+        var mcTerms = [];
+        (String(req.title || '').toLowerCase().split(/[^a-z0-9+#]+/)).forEach(function (t) { if (t.length > 2 && ['the','and','for','with','analyst','engineer','senior','junior'].indexOf(t) < 0) mcTerms.push(t); });
+        ((req.skills || []).slice(0, 12)).forEach(function (t) { t = String(t).toLowerCase(); if (t.length > 2) mcTerms.push(t); });
+        var mcHit = function (p) {
+          if (!mcTerms.length) return 0;
+          var hay = ((p.currentRole || '') + ' ' + (p.headline || '') + ' ' + (p.skills || []).join(' ') + ' ' + (p.certifications || []).join(' ')).toLowerCase();
+          for (var q = 0; q < mcTerms.length; q++) { if (hay.indexOf(mcTerms[q]) >= 0) return 0; }
+          return 1;
+        };
         cached.sort(function (a, b) {
           var ac = (mcJobCountry && profileCountry(a) === mcJobCountry) ? 0 : 1;
           var bc = (mcJobCountry && profileCountry(b) === mcJobCountry) ? 0 : 1;
           if (ac !== bc) return ac - bc;
+          var ah = mcHit(a), bh = mcHit(b);
+          if (ah !== bh) return ah - bh;
+          var at = String(a.fetchedAt || a.createdAt || ''), bt = String(b.fetchedAt || b.createdAt || '');
+          if (at !== bt) return bt.localeCompare(at);   // newest first
           return (a.managed ? 0 : 1) - (b.managed ? 0 : 1);
         });
       mcDbg.pool = cached.length;
