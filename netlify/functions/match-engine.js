@@ -21,7 +21,7 @@ const PROFILE_ACTOR_ID = 'bebity~linkedin-premium-actor';
 const SCORING_MODEL = 'claude-sonnet-4-6';
 // Bump when the scoring formula changes so cached scores are recomputed rather than
 // silently kept. v2 = added the remote-aware location penalty.
-const SCORING_VERSION = 2;
+const SCORING_VERSION = 3;
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
@@ -487,7 +487,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Compliance experience: ' + (req.compliance.join(', ') || 'none') + '\n' +
     'Experience required: ' + (req.experienceRequired || 'not specified') + '\n' +
     (scoreEducation ? 'Education required: ' + req.educationRequired + '\n' : '') +
-    'Location/Country: ' + (req.country || req.location || 'any') + '\n' +
+    'NOTE: geography/location/time zone is scored by a separate deterministic system — do NOT consider candidate location in ANY dimension.\n' +
     'Engagement type: ' + (req.isContractRole ? 'CONTRACT — prefer candidates who are contractors/consultants/freelancers open to contract work (see contractorLikely flag). Penalize role score for candidates who appear to be settled full-time employees not open to contract.' : 'Full-time or either') + '\n\n' +
     'CANDIDATES (JSON array):\n' + JSON.stringify(compact) + '\n\n' +
     'For EACH candidate return an object with these 0-100 scores:\n' +
@@ -1400,7 +1400,7 @@ exports.handler = async function (event) {
           _id: p._id ? p._id.toString() : '', sourceId: c.sourceId, overall: c.overall, addedAt: c.addedAt,
           name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',
           yearsExperience: (p.yearsExperience === undefined || p.yearsExperience === null) ? null : p.yearsExperience,
-          currentCompany: p.currentCompany || '', location: p.location || '', country: p.country || '',
+          currentCompany: p.currentCompany || '',   // #539: location/country withheld — geography must not influence LLM dimensions
           engagementType: p.engagementType || (p.contractorSignal && p.contractorSignal.likely ? 'Contractor' : 'Unknown'),
           availability: p.availability || 'available', pipelineStatus: p.pipelineStatus || 'none',
           certifications: p.certifications || [], linkedinUrl: p.linkedinUrl || ''
