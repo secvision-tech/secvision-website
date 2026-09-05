@@ -298,7 +298,7 @@ body.role-viewer .edit-btn{display:none!important}
 
           <!-- Section 1: Partnership Targets -->
           <div class="dash-section">
-            <div class="dash-sec-title">🤝 Partnership Targets — MSSP/MDR Companies to Approach</div>
+            <div class="dash-sec-title">🏢 Partnership Targets — MSSP/MDR Companies to Approach</div>
             <div class="dash-sec-sub">Companies with multiple SOC openings = high staffing demand = ideal partnership candidates</div>
             <div class="dash-charts">
               <div class="dash-chart-box"><div class="dash-chart-title">Company Type Breakdown</div><div id="chartType" class="css-chart"></div></div>
@@ -4191,6 +4191,13 @@ function renderConsultants(){
   var tb=document.getElementById('consBody');
   var certOnly=document.getElementById('consCertified')&&document.getElementById('consCertified').checked;
   var data=certOnly?consultantsData.filter(function(c){return matchedPriorityCerts(c.certifications).length>0}):consultantsData;
+  // #532: per-column filters apply to the WHOLE dataset before pagination
+  var _flt=(window._consColFilters||{});
+  var _fkeys=Object.keys(_flt).filter(function(k){return _flt[k]});
+  if(_fkeys.length){
+    var FMAP={1:function(c){return c.name||''},2:function(c){return (c.currentRole||c.headline||'')},3:function(c){return c.currentCompany||''},4:function(c){return c.location||''},5:function(c){return c.country||''},6:function(c){return c.engagementType||''},7:function(c){return c.availability||''},8:function(c){return c.pipelineStatus||''},9:function(c){return (c.email||'')+' '+(c.phone||'')},10:function(c){return c.source||''},11:function(c){return (c.skills||[]).join(' ')}};
+    data=data.filter(function(cc){return _fkeys.every(function(k){var fn=FMAP[k];return fn&&fn(cc).toLowerCase().indexOf(_flt[k])>=0})});
+  }
   if(!data.length){tb.innerHTML='<tr><td colspan="13" style="padding:1rem;text-align:center;color:var(--g3)">'+(certOnly?'No consultants with priority certifications found.':'No consultants found. Use "+ Add Profile", or (admin) "Import Cached Profiles" to test.')+'</td></tr>';document.getElementById('consPag').style.display='none';return}
   var tot=data.length,tp=Math.ceil(tot/consPerPage);
   if(consCurPage>tp)consCurPage=tp;if(consCurPage<1)consCurPage=1;
@@ -5162,13 +5169,12 @@ async function openReviewPending(){
 }
 function rvSortBy(k){_rvSort=k;rvRender()}
 function applyConsFilters(){
-  var fs=Array.prototype.filter.call(document.querySelectorAll('.consFlt'),function(i){return i.value.trim()});
-  var rows=document.querySelectorAll('#consBody tr');
-  rows.forEach(function(tr){
-    if(tr.children.length<10)return; // placeholder rows
-    var show=fs.every(function(f){var ci=parseInt(f.getAttribute('data-c'));var cell=tr.children[ci];return cell&&cell.innerText.toLowerCase().indexOf(f.value.trim().toLowerCase())>=0});
-    tr.style.display=show?'':'none';
-  });
+  // #532: collect filters, reset to page 1, re-render over the full dataset
+  var m={};
+  document.querySelectorAll('.consFlt').forEach(function(i){var v=i.value.trim().toLowerCase();if(v)m[i.getAttribute('data-c')]=v});
+  window._consColFilters=m;
+  consCurPage=1;
+  renderConsultants();
 }
 document.addEventListener('input',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('consFlt'))applyConsFilters()});
 var _rvColW={},_rvResizing=false;
