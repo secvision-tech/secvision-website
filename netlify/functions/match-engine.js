@@ -399,7 +399,7 @@ function extractJobRequirements(job) {
     country: job.detectedCountry || job.searchCountry || '',
     location: job.location || '',
     isContractRole: (job.jobType === 'Contract') || /\bcontract\b|c2c|corp-to-corp|contractor|freelance/i.test(job.jobType || ''),
-    remote: job.remote || '',
+    remote: (job.remote || '') + ' ' + (job.workType || ''),   // #534: manual/scraped jobs carry the mode in workType
     jobType: job.jobType || '',
     salary: job.salary || '',
     // hard-gate requirements (parsed from description where possible)
@@ -627,7 +627,7 @@ async function scoreJobsForConsultant(consultant, jobs, weights) {
         dims.compliance * w.compliance + dims.role * w.role +
         dims.experience * w.experience + dims.rate * w.rate) / 100
     );
-    var req = { country: j.detectedCountry || '', location: j.location || '', jobType: j.jobType || '', title: j.title || '', remote: j.remote || '' };
+    var req = { country: j.detectedCountry || '', location: j.location || '', jobType: j.jobType || '', title: j.title || '', remote: (j.remote || '') + ' ' + (j.workType || '') };
     var lf = locationFit(req, consultant);
     var overall = Math.round(base * lf.factor);
     return {

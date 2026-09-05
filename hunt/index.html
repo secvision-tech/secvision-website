@@ -1537,7 +1537,7 @@ function buildJobHighlightTerms(j){
   });
   // #519: frameworks named in the description highlight even when the extracted field is empty
   var desc=String((j.descriptionHtml||j.description||'')).replace(/<[^>]*>/g,' ');
-  ['ISO 27001','ISO 27017','ISO 27701','SOC 2','PCI DSS','PCI-DSS','HIPAA','GDPR','NIST CSF','NIST 800-53','NIST SP 800-53','NIST','CIS Benchmarks','CIS Controls','MITRE ATT&CK','FedRAMP','CMMC','Zero Trust','TIC 3.0','GLBA','SOX','FFIEC','HITRUST','DPDP','CERT-In'].forEach(function(t){
+  ['ISO 27001','ISO 27017','ISO 27701','SOC 2','PCI DSS','PCI-DSS','HIPAA','GDPR','NIST CSF','NIST 800-53','NIST SP 800-53','NIST','CIS Benchmarks','CIS Controls','MITRE ATT&CK','FedRAMP','CMMC','Zero Trust','TIC 3.0','GLBA','SOX','FFIEC','HITRUST','DPDP','CERT-In','SOC','NOC','Firewall','Firewalls','SIEM','EDR','XDR','IDS','IPS','SOAR','Incident Response','Threat Hunting','Vulnerability Management'].forEach(function(t){
     if(desc.toLowerCase().indexOf(t.toLowerCase())>=0&&!seen[t.toLowerCase()]){seen[t.toLowerCase()]=1;terms.push(t)}
   });
   // longest first so "NIST 800-53" wins over "NIST"
