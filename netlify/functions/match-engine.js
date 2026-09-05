@@ -960,6 +960,7 @@ exports.handler = async function (event) {
       } catch (e) {}
       mcFetches.push(cacheCol.find({}).limit(600).toArray());
       var mcParts = await Promise.all(mcFetches);
+      var mcDbg = { pool: 0, prefer: mcPrefer || '', preferBatch: (mcParts[1] || []).length, newScored: 0, skippedCached: 0, firstTen: [] };
       var mcSeen = {}, cached = [];
       mcParts.forEach(function (part) {
         part.forEach(function (p) {
@@ -978,6 +979,9 @@ exports.handler = async function (event) {
           if (ac !== bc) return ac - bc;
           return (a.managed ? 0 : 1) - (b.managed ? 0 : 1);
         });
+      mcDbg.pool = cached.length;
+      mcDbg.firstTen = cached.slice(0, 10).map(function (p) { return (p.name || '?') + '|' + (p.country || (p.location || '').split(',').pop().trim() || '?'); });
+
       } catch (e) { /* ordering is an optimization; never fail the match */ }
       if (!cached.length) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ matches: [], page: page, hasMore: false, cachedCount: 0, needsTopUp: true }) };
@@ -1103,7 +1107,7 @@ exports.handler = async function (event) {
           // tells the user to source locally rather than silently showing foreign consultants.
           inCountryMatches: all.filter(function (m) { return m.locationFit && m.locationFit.sameCountry === true; }).length,
           jobCountry: req.country || '',
-          evaluated: preScored.length + newlyScored.length,
+          evaluated: preScored.length + newlyScored.length, poolDebug: (typeof mcDbg!=="undefined"?(mcDbg.newScored=newlyScored.length,mcDbg.skippedCached=preScored.length,mcDbg):null),
           unscoredLeft: unscoredLeft > 0 ? unscoredLeft : 0,
           moreToScore: keepScoring,          // frontend auto-continues ONLY on this
           canScoreMore: canScoreMore,        // offer a manual "score more" instead

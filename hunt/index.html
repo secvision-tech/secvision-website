@@ -5554,7 +5554,7 @@ async function openMatchProfiles(idx){
   document.getElementById('matchPager').style.display='none';
   var ci=document.getElementById('cacheInfo');if(ci)ci.textContent='';
   resetFetchMoreBtn();
-  runMatch(0);
+  runMatch(0,true);   // #536: open shows saved matches only; scoring happens on explicit Score-more
 }
 function closeMatchPopup(){
   document.getElementById('matchPopup').style.display='none';
@@ -5584,6 +5584,7 @@ async function runMatch(page,navOnly){
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50,noScore:!!navOnly,preferCountry:(document.getElementById('fetchCountry')||{}).value||''})});
     var d=await safeMatchJson(r);
+    if(d&&d.poolDebug){window._lastPoolDebug=d.poolDebug;console.log('poolDebug',d.poolDebug);}
     // Sync the cap with the server's evaluated count — otherwise reopening the popup resets
     // the local counter and Score-more clicks send caps below what's already evaluated,
     // scoring nothing (dead clicks).
