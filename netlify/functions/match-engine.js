@@ -991,6 +991,8 @@ exports.handler = async function (event) {
           if (ac !== bc) return ac - bc;
           var ah = mcHit(a), bh = mcHit(b);
           if (ah !== bh) return ah - bh;
+          var au = (a.source === 'upwork') ? 0 : 1, bu = (b.source === 'upwork') ? 0 : 1;   // #540: proven contractors first on contract jobs
+          if (au !== bu) return au - bu;
           var at = String(a.fetchedAt || a.createdAt || ''), bt = String(b.fetchedAt || b.createdAt || '');
           if (at !== bt) return bt.localeCompare(at);   // newest first
           return (a.managed ? 0 : 1) - (b.managed ? 0 : 1);
@@ -1036,7 +1038,7 @@ exports.handler = async function (event) {
       var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 600);  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
       var NEED_MATCHES = (page + 1) * PAGE_SIZE;
 
-      var SCORE_CAP = 8;
+      var SCORE_CAP = 16;   // #540: fewer clicks to verdicts
       var newlyScored = [];
       var moreToScore = false;
       var scoreError = null;
@@ -1441,7 +1443,7 @@ exports.handler = async function (event) {
       var PAGE = 10;
       var EVAL_CAP = body.noScore ? 0 : Math.min(parseInt(body.evalCap) || 50, 600);   // #491c: noScore returns cached matches only  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
       var NEED = (page + 1) * PAGE;
-      var SCORE_CAP = 8;
+      var SCORE_CAP = 16;   // #540: fewer clicks to verdicts
 
       var jobsCol = db.collection('jobs');
       // Candidate jobs: in the window, with something to score against. Newest first.
