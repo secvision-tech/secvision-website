@@ -5582,7 +5582,7 @@ async function runMatch(page,navOnly){
   // #438: don't blank the results here — clearing on every polling tick made the popup
   // flash. The table is replaced only when new data actually renders (see renderMatches).
   try{
-    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50,noScore:!!navOnly})});
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50,noScore:!!navOnly,preferCountry:(document.getElementById('fetchCountry')||{}).value||''})});
     var d=await safeMatchJson(r);
     // Sync the cap with the server's evaluated count — otherwise reopening the popup resets
     // the local counter and Score-more clicks send caps below what's already evaluated,

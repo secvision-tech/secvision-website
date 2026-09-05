@@ -949,9 +949,12 @@ exports.handler = async function (event) {
       //   (2) same-country profiles ALWAYS load — the only ones an onsite job can use;
       //   (3) the general window fills the rest.
       var mcFetches = [ cacheCol.find({ managed: true }).limit(200).toArray() ];
+      // #535: the popup's From selector overrides which country gets priority scoring
+      var mcPrefer = String(body.preferCountry || '').trim();
+      var mcCountryForPool = mcPrefer || req.country;
       try {
-        if (req.country) {
-          var cRe = new RegExp(req.country.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+        if (mcCountryForPool) {
+          var cRe = new RegExp(mcCountryForPool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
           mcFetches.push(cacheCol.find({ $or: [ { country: cRe }, { location: cRe } ] }).limit(200).toArray());
         }
       } catch (e) {}
@@ -968,7 +971,7 @@ exports.handler = async function (event) {
       // Scoring order: same-country first, and within each country group the bench
       // (managed) before scraped prospects.
       try {
-        var mcJobCountry = canonCountry(req.country || '');
+        var mcJobCountry = canonCountry(mcCountryForPool || '');   // #535: preferred country sorts first
         cached.sort(function (a, b) {
           var ac = (mcJobCountry && profileCountry(a) === mcJobCountry) ? 0 : 1;
           var bc = (mcJobCountry && profileCountry(b) === mcJobCountry) ? 0 : 1;
