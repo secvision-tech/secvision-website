@@ -21,7 +21,7 @@ const PROFILE_ACTOR_ID = 'bebity~linkedin-premium-actor';
 const SCORING_MODEL = 'claude-sonnet-4-6';
 // Bump when the scoring formula changes so cached scores are recomputed rather than
 // silently kept. v2 = added the remote-aware location penalty.
-const SCORING_VERSION = 3;
+const SCORING_VERSION = 2;
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
@@ -1400,7 +1400,7 @@ exports.handler = async function (event) {
           _id: p._id ? p._id.toString() : '', sourceId: c.sourceId, overall: c.overall, addedAt: c.addedAt,
           name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',
           yearsExperience: (p.yearsExperience === undefined || p.yearsExperience === null) ? null : p.yearsExperience,
-          currentCompany: p.currentCompany || '',   // #539: location/country withheld — geography must not influence LLM dimensions
+          currentCompany: p.currentCompany || '', location: p.location || '', country: p.country || '',
           engagementType: p.engagementType || (p.contractorSignal && p.contractorSignal.likely ? 'Contractor' : 'Unknown'),
           availability: p.availability || 'available', pipelineStatus: p.pipelineStatus || 'none',
           certifications: p.certifications || [], linkedinUrl: p.linkedinUrl || ''
