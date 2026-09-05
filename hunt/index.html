@@ -5572,7 +5572,7 @@ async function safeMatchJson(r){
   }
 }
 
-async function runMatch(page,navOnly){
+async function runMatch(page,navOnly,force){
   matchState.page=page;
   if(page===0&&!navOnly)_matchRenderSig='';   // #464: fresh open must render even if results are identical
   matchState._navOnly=!!navOnly;   // #456: pure navigation — never score
@@ -5582,7 +5582,7 @@ async function runMatch(page,navOnly){
   // #438: don't blank the results here — clearing on every polling tick made the popup
   // flash. The table is replaced only when new data actually renders (see renderMatches).
   try{
-    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50,noScore:!!navOnly,preferCountry:(document.getElementById('fetchCountry')||{}).value||''})});
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'matchCached',jobId:matchState.jobId,page:page,evalCap:matchState.evalCap||50,noScore:!!navOnly,forceScore:!!force,preferCountry:(document.getElementById('fetchCountry')||{}).value||''})});
     var d=await safeMatchJson(r);
     if(d&&d.poolDebug){window._lastPoolDebug=d.poolDebug;console.log('poolDebug',d.poolDebug);}
     // Sync the cap with the server's evaluated count — otherwise reopening the popup resets
@@ -5921,7 +5921,7 @@ function matchPrevPage(){if(matchState.page>0)runMatch(matchState.page-1,true)}
 // "Score more" — user explicitly asks to evaluate further cached profiles for this page.
 function scoreMoreCached(){
   matchState.evalCap=(matchState.evalCap||50)+50;
-  runMatch(matchState.page||0);
+  runMatch(matchState.page||0,false,true);   // #537: explicit click forces scoring past a full page
 }
 // ============ END MATCH PROFILES ============
 

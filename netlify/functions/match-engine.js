@@ -1028,7 +1028,9 @@ exports.handler = async function (event) {
 
       // Already have a full page from cache alone? Don't score anything new.
       var haveNow = preScored.filter(function (m) { return m.overall >= MATCH_THRESHOLD; }).length;
-      if (haveNow >= NEED_MATCHES) {
+      // #537: an explicit Score-more click (forceScore) overrides the page-full stop —
+      // the user is deliberately spending to look deeper (e.g. From:India after 10 US matches).
+      if (haveNow >= NEED_MATCHES && !body.forceScore) {
         toScore = [];
         moreToScore = false;
       } else if (evaluated >= EVAL_CAP) {
