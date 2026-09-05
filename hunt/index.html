@@ -414,7 +414,7 @@ body.role-viewer .edit-btn{display:none!important}
 
     <div id="consultantsPanel" class="dash-panel">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;flex-wrap:wrap;gap:.4rem">
-        <h2 style="font-size:.9rem;color:var(--pri);margin:0">🧑‍💻 Consultant Database</h2>
+        <h2 style="font-size:.9rem;color:var(--pri);margin:0">🛡️ Consultant Database</h2>
         <div style="display:flex;gap:.4rem">
           <button onclick="refreshConsultants()" style="padding:.3rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔄 Refresh</button>
           <button onclick="openUpworkFetch()" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🧲 Upwork Fetch</button><button onclick="openLinkedInHarvest()" style="padding:.3rem .7rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔗 LinkedIn Fetch</button><button id="promoteCachedBtn" onclick="openReviewPending()" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;display:none">⬆️ Import Cached Profiles</button>
@@ -451,7 +451,22 @@ body.role-viewer .edit-btn{display:none!important}
             <th style="padding:.4rem .5rem;text-align:left;font-weight:600;color:var(--g4);overflow:hidden;width:11ch"><span onclick="sortConsultants('updatedAt')" style="cursor:pointer">Updated ⇅</span></th>
             <th style="padding:.4rem .5rem;text-align:center;font-weight:600;color:var(--g4);width:12ch">Action</th>
           </tr></thead>
-          <tbody id="consBody"><tr><td colspan="13" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
+          <tr id="consFilterRow">
+            <th></th>
+            <th><input class="consFlt" data-c="1" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="2" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="3" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="4" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="5" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="6" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="7" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="8" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="9" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="10" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th><input class="consFlt" data-c="11" placeholder="filter" style="width:95%;font-size:.55rem;padding:.15rem .25rem;border:1px solid var(--g100);border-radius:3px"></th>
+            <th></th>
+          </tr>
+        <tbody id="consBody"><tr><td colspan="13" style="padding:1rem;text-align:center;color:var(--g3)">Loading...</td></tr></tbody>
         </table>
       </div>
       <!-- Pagination -->
@@ -4256,7 +4271,7 @@ async function enrichConsFromLinkedIn(id){
       var real=(p.experience||[]).filter(function(e){return e.duration});
       if(!c.currentCompany&&(p.company||(real[0]&&real[0].companyName))){up.currentCompany=p.company||real[0].companyName;changed.push('company')}
       if(!c.currentRole&&(p.title||(real[0]&&real[0].title))){up.currentRole=p.title||real[0].title;changed.push('role')}
-      if(!c.location){var L=isLat(p.location)?p.location:((real.filter(function(e){return isLat(e.location)})[0]||{}).location||'');if(L){up.location=L.replace(/,\s*India$/i,'');changed.push('location')}}
+      if(!c.location){var L=isLat(p.location)?p.location:((real.filter(function(e){return isLat(e.location)})[0]||{}).location||'');if(L){up.location=normLoc(L).replace(/,\s*India$/i,'');changed.push('location')}}
       if(!c.yearsExperience&&!c.yearsManual){var months=0;real.forEach(function(e){var m=String(e.duration||'').match(/(\d+)\s*yr/),mm=String(e.duration||'').match(/(\d+)\s*mo/);months+=(m?parseInt(m[1])*12:0)+(mm?parseInt(mm[1]):0)});var yrs=months?Math.round(months/1.2)/10:0;var stated=((p.summary||'')+' '+(p.headline||'')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i);if(stated&&parseInt(stated[1])>yrs)yrs=parseInt(stated[1]);if(yrs){up.yearsExperience=yrs;changed.push('years')}}
       var union=function(a,b){var s={},o=[];(a||[]).concat(b||[]).forEach(function(x){var k=String(x||'').trim();if(k&&!s[k.toLowerCase()]){s[k.toLowerCase()]=1;o.push(k)}});return o};
       if(p.skills&&p.skills.length){var sk=union(c.skills,p.skills.filter(function(s){return !/\b(school|university|college|institute)\b/i.test(s)}));if(sk.length>(c.skills||[]).length){up.skills=sk;changed.push('skills +'+(sk.length-(c.skills||[]).length))}}
@@ -4561,7 +4576,7 @@ function renderManageProfile(){
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline));
   h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.72rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
-  h+=fld('Location',esc(c.location)+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
+  h+=fld('Location',esc(normLoc(c.location))+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
   h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.62rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual'))+(c.upwork&&c.upwork.profileUrl?' <a href="'+esc(c.upwork.profileUrl)+'" target="_blank" style="color:#14A800;font-size:.68rem">Upwork ↗</a>':'')+(c.linkedinUrl?' <a href="'+esc(c.linkedinUrl)+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>':''));
   h+='</div>';
@@ -5146,6 +5161,16 @@ async function openReviewPending(){
   document.body.appendChild(ov);rvRender();
 }
 function rvSortBy(k){_rvSort=k;rvRender()}
+function applyConsFilters(){
+  var fs=Array.prototype.filter.call(document.querySelectorAll('.consFlt'),function(i){return i.value.trim()});
+  var rows=document.querySelectorAll('#consBody tr');
+  rows.forEach(function(tr){
+    if(tr.children.length<10)return; // placeholder rows
+    var show=fs.every(function(f){var ci=parseInt(f.getAttribute('data-c'));var cell=tr.children[ci];return cell&&cell.innerText.toLowerCase().indexOf(f.value.trim().toLowerCase())>=0});
+    tr.style.display=show?'':'none';
+  });
+}
+document.addEventListener('input',function(e){if(e.target&&e.target.classList&&e.target.classList.contains('consFlt'))applyConsFilters()});
 var _rvColW={},_rvResizing=false;
 function rvAttachResizers(){
   var tbl=document.querySelector('#rvTable table');if(!tbl)return;
@@ -5202,6 +5227,15 @@ async function aiFmtSummary(elId,link){
     h=h.split(/\n{2,}/).map(function(par){return '<p style="margin:.35rem 0">'+par.split('\n').map(function(L){var sx=L.trim();return /^[-*\u2022]/.test(sx)?'<span style="display:block;padding-left:.8rem;text-indent:-.6rem">'+sx+'</span>':sx}).filter(Boolean).join('<br>')+'</p>'}).join('');
     el.innerHTML=h;link.textContent='✨ formatted';
   }catch(e){link.textContent='⚠️ '+e.message}
+}
+function normLoc(s){
+  s=String(s||'').trim();if(!s)return s;
+  // LinkedIn locale leakage: "Spojené státy (United States)" — prefer the English name in parentheses
+  var pm=s.match(/\(([A-Za-z][A-Za-z\s.\-]{2,})\)\s*$/);if(pm)return pm[1].trim();
+  var d={'spojené státy':'United States','vereinigte staaten':'United States','états-unis':'United States','estados unidos':'United States','stati uniti':'United States','verenigde staten':'United States','indie':'India','indien':'India','inde':'India','spojené království':'United Kingdom','vereinigtes königreich':'United Kingdom','royaume-uni':'United Kingdom','reino unido':'United Kingdom'};
+  var lo=s.toLowerCase();
+  for(var k in d){if(lo===k||lo.indexOf(k)===0)return d[k]}
+  return s;
 }
 function rvFmtSummary(t){
   t=esc(String(t||'').trim());if(!t)return '<span style="color:var(--g3)">'+String.fromCharCode(8212)+'</span>';
@@ -5336,7 +5370,7 @@ function acApplyLinkedInProfile(p,url,st){
       (function(){var isLat=function(s){s=String(s||'');return s&&(s.replace(/[^A-Za-z]/g,'').length>=s.replace(/[\s,.\-]/g,'').length*0.5)};
       var useLoc=isLat(loc)?loc:'';
       if(!useLoc){var _fx=(p.experience||[]).filter(function(e){return e.duration&&isLat(e.location)})[0];if(_fx)useLoc=_fx.location}
-      if(useLoc)setIf('acLocation',useLoc.replace(/,\s*India$/i,''));})();   // #496i: non-Latin location converted via first Latin experience location
+      if(useLoc)setIf('acLocation',normLoc(useLoc).replace(/,\s*India$/i,''));})();   // #496i: non-Latin location converted via first Latin experience location
       if(/india/i.test(loc))setIf('acCountry','India');else if(loc.indexOf(',')>0)setIf('acCountry',loc.split(',').pop().trim());
       if(typed.country){var cEl=document.getElementById('acCountry');if(cEl)cEl.value=typed.country;}   // typed country is authoritative
       setIf('acLinkedin',url);
