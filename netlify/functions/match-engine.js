@@ -426,13 +426,15 @@ function applyHardGates(req, profile) {
 
   // Clearance
   if (req.requiresClearance) {
-    if (profile.securityClearance === 'unknown') flags.push('Clearance required — not stated on profile, verify');
-    else if (!/secret|ts|clearance|public trust/i.test(profile.securityClearance)) reasons.push('Lacks required security clearance');
+    var _sc = profile.securityClearance || 'unknown';
+    if (_sc === 'unknown') flags.push('Clearance required — not stated on profile, verify');
+    else if (!/secret|ts|clearance|public trust/i.test(_sc)) reasons.push('Lacks required security clearance');
   }
   // Citizenship / work authorization
   if (req.requiresCitizen) {
-    if (profile.workAuthorization === 'unknown') flags.push('US citizenship required — not stated, verify');
-    else if (!/citizen|gc|green card/i.test(profile.workAuthorization)) reasons.push('Does not meet citizenship requirement');
+    var _wa = profile.workAuthorization || 'unknown';
+    if (_wa === 'unknown') flags.push('US citizenship required — not stated, verify');
+    else if (!/citizen|gc|green card/i.test(_wa)) reasons.push('Does not meet citizenship requirement');
   }
   // Availability (only a flag, never a hard fail for now)
   if (profile.availability === 'unknown') flags.push('Availability not stated, confirm');
@@ -1062,9 +1064,15 @@ exports.handler = async function (event) {
         if (toScore.length > budget) { moreToScore = true; toScore = toScore.slice(0, budget); }
       }
 
+      if (typeof mcDbg !== 'undefined') { mcDbg.evalCap = EVAL_CAP; mcDbg.toScoreLen = toScore.length; }
       if (toScore.length) {
         var gated = toScore.map(function (p) { return { p: p, gate: applyHardGates(req, p) }; });
         var passing = gated.filter(function (g) { return g.gate.passed; }).map(function (g) { return g.p; });
+        if (typeof mcDbg !== 'undefined') {
+          mcDbg.gatedOut = gated.length - passing.length;
+          mcDbg.gateReasons = gated.filter(function (g) { return !g.gate.passed; }).slice(0, 3).map(function (g) { return (g.p.name || '?') + ': ' + g.gate.reasons.join('; '); });
+          mcDbg.reqGates = { clearance: !!req.requiresClearance, citizen: !!req.requiresCitizen };
+        }
         try {
           var SUB = 4;
           for (var b = 0; b < passing.length; b += SUB) {
