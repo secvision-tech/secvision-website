@@ -512,7 +512,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
       },
       body: JSON.stringify({
         model: SCORING_MODEL,
-        max_tokens: 1200,
+        max_tokens: 2000,
         system: sys,
         messages: [{ role: 'user', content: prompt }]
       }),
@@ -529,7 +529,13 @@ async function scoreProfilesBatch(req, profiles, weights) {
   var text = (data.content || []).filter(function (c) { return c.type === 'text'; }).map(function (c) { return c.text; }).join('');
   text = text.replace(/```json|```/g, '').trim();
   var scores;
-  try { scores = JSON.parse(text); } catch (e) { throw new Error('LLM returned unparseable JSON'); }
+  try { scores = JSON.parse(text); }
+  catch (e) {
+    // #541: the model sometimes wraps the array in a word of prose — extract the JSON array
+    var jm = text.match(/\[[\s\S]*\]/);
+    if (jm) { try { scores = JSON.parse(jm[0]); } catch (e2) {} }
+    if (!scores) throw new Error('LLM returned unparseable JSON: ' + text.slice(0, 160));
+  }
 
   // Merge scores back onto profiles + compute weighted overall
   return profiles.map(function (p, idx) {
