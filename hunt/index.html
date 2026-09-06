@@ -4253,6 +4253,42 @@ async function setConsLinkedin(id){
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{linkedinUrl:v}})});
     var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
 }
+async function editConsField(id,field,label,cur,isList){
+  var v=prompt(label+':',cur||'');if(v===null)return;
+  var upd={};upd[field]=isList?v.split(',').map(function(s){return s.trim()}).filter(Boolean):v.trim();
+  try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:upd})});
+    var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
+}
+async function enrichFromResume(){
+  var cm=manageProfileData;if(!cm){alert('Open a profile first');return}
+  var f=(document.getElementById('mpResumeFile')||{}).files;f=f&&f[0];
+  if(!f){mpMsg('Choose the PDF/Word file first (the file picker on the left).','#B45309');return}
+  if(f.size>4*1024*1024){mpMsg('File too large (max 4 MB).','#B91C1C');return}
+  var isPdf=/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name);
+  var isDocx=/\.docx$/i.test(f.name)||/wordprocessingml/i.test(f.type);
+  if(!isPdf&&!isDocx){mpMsg('Use a PDF or Word (.docx) file.','#B91C1C');return}
+  mpMsg('🤖 Parsing the document with AI...','var(--pri)');
+  try{
+    var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(',')[1])};r.onerror=rej;r.readAsDataURL(f)});
+    var body={action:'parseResume'};if(isPdf)body.pdfBase64=b64;else body.docxBase64=b64;
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify(body)});
+    var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');return}
+    var p=d.parsed||{},up={},changed=[];
+    var fillIf=function(field,val,lab){if(val&&String(val).trim()&&!cm[field]){up[field]=String(val).trim();changed.push(lab)}};
+    fillIf('currentCompany',p.company,'company');fillIf('location',p.location,'location');fillIf('country',p.country,'country');
+    fillIf('email',p.email,'email');fillIf('phone',p.phone,'phone');fillIf('linkedinUrl',p.linkedinUrl,'linkedin');
+    fillIf('currentRole',p.role,'role');fillIf('summary',(p.summary||'').slice(0,2500),'summary');
+    if(p.yearsExperience&&!cm.yearsExperience&&!cm.yearsManual){up.yearsExperience=p.yearsExperience;changed.push('years')}
+    var union=function(a,b){var s={},o=[];(a||[]).concat(b||[]).forEach(function(x){var k=String(x||'').trim();if(k&&!s[k.toLowerCase()]){s[k.toLowerCase()]=1;o.push(k)}});return o};
+    var sk=union(cm.skills,p.skills);if(sk.length>(cm.skills||[]).length){up.skills=sk;changed.push('skills +'+(sk.length-(cm.skills||[]).length))}
+    var ce=union(cm.certifications,p.certifications);if(ce.length>(cm.certifications||[]).length){up.certifications=ce;changed.push('certs +'+(ce.length-(cm.certifications||[]).length))}
+    var co=union(cm.compliance,p.compliance);if(co.length>(cm.compliance||[]).length){up.compliance=co;changed.push('compliance +'+(co.length-(cm.compliance||[]).length))}
+    if(!changed.length){mpMsg('ℹ️ Nothing new — the profile already has everything this document offers.','var(--g5)');return}
+    var ur=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:cm._id,updates:up})});
+    var ud=await ur.json();if(ud.error){mpMsg('⚠️ '+ud.error,'#B91C1C');return}
+    mpMsg('✅ Enriched: '+changed.join(', '),'#047857');setTimeout(function(){openManageProfile(cm._id)},900);
+  }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C')}
+}
 async function editConsCompany(id,cur){
   var v=prompt('Company name:',cur||'');if(v===null)return;
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{currentCompany:v.trim()}})});
@@ -4579,7 +4615,7 @@ function renderManageProfile(){
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .72rem;margin-bottom:.72rem;font-size:.84rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.84rem;padding:.72rem;background:var(--g1);border-radius:6px">';
   h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>'
-    :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'').replace(/\s\w\.$/,'')+'" '+String(c.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.68rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a> <a href="#" onclick="setConsLinkedin(\''+c._id+'\');return false" title="Paste the LinkedIn URL" style="font-size:.68rem;text-decoration:none">✏️ set URL</a>'));
+    :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'').replace(/\s\w\.$/,'')+'" '+String(c.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.68rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a>'));
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline));
   h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.72rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
@@ -4666,7 +4702,7 @@ function renderManageProfile(){
     if(canContact)h+='<button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
     h+='</div>';
   }else{
-    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem"><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-right:.4rem" title="AI-parse the selected PDF/Word file and fill missing fields; skills/certs/compliance are merged">📄 Enrich (Resume)</button><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
     else h+='<span style="font-size:.72rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';

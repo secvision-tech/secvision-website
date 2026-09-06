@@ -328,6 +328,31 @@ exports.handler = async function(event) {
         contractType: j0.contractType || '', workType: j0.workType || '', jobUrl: j0.jobUrl || body.url || ''
       } }) };
     }
+    // ============ #544 PARSE RESUME / PROFILE PDF -> enrichment fields ============
+    if (action === 'parseResume') {
+      var RKEY = process.env.ANTHROPIC_API_KEY;
+      if (!RKEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI key not configured' }) };
+      var rTxt = String(body.text || '').slice(0, 24000);
+      if (!rTxt && body.docxBase64) {
+        try { var mmr = require('mammoth'); var rd = await mmr.extractRawText({ buffer: Buffer.from(body.docxBase64, 'base64') }); rTxt = String(rd.value || '').slice(0, 24000); }
+        catch (rme) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Could not read the Word document: ' + rme.message }) }; }
+      }
+      if (!rTxt && !body.pdfBase64) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Provide a PDF or Word resume' }) };
+      var rInstr = 'Extract from this resume / freelancer profile document into STRICT JSON (no prose): {"name":string,"role":string (current/primary title),"company":string (current or most recent employer; empty for independent freelancers),"location":string (city, state),"country":string,"email":string,"phone":string,"linkedinUrl":string,"yearsExperience":number (total professional years; 0 if unstated),"skills":array (technical skills and tools, e.g. Splunk, Microsoft Sentinel, Python, AWS),"certifications":array (e.g. OSCP, CISSP, Splunk Core Certified),"compliance":array (frameworks/standards, e.g. ISO 27001, PCI DSS, NIST),"employment":array of {"title","company","duration"} (most recent 5),"summary":string (max 1500 chars, the professional overview)}. NEVER invent - empty/0 when not in the document.';
+      var rContent = body.pdfBase64
+        ? [{ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: body.pdfBase64 } }, { type: 'text', text: rInstr }]
+        : [{ type: 'text', text: rInstr + '\n\nDOCUMENT:\n' + rTxt }];
+      try {
+        var rr2 = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': RKEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 3000, messages: [{ role: 'user', content: rContent }] }) });
+        if (!rr2.ok) { var rt2 = await rr2.text(); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI parse failed (' + rr2.status + ')', detail: rt2.slice(0, 180) }) }; }
+        var rj2 = await rr2.json();
+        var rTxtOut = (rj2.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
+        var rm2 = rTxtOut.match(/\{[\s\S]*\}/);
+        if (!rm2) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI returned no JSON' }) };
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ parsed: JSON.parse(rm2[0]) }) };
+      } catch (re2) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Resume parse error: ' + re2.message }) }; }
+    }
     // ============ #526 FETCH ANY PUBLIC JOB-PAGE URL -> text -> same AI parse ============
     if (action === 'parseJDFromUrl') {
       var gu = String(body.url || '').trim();
