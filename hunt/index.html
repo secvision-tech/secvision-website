@@ -4256,8 +4256,11 @@ async function setConsLinkedin(id){
 var _mpPending={};
 function editConsField(id,field,label,cur,isList){
   var v=prompt(label+':',cur||'');if(v===null)return;
-  _mpPending[field]=isList?v.split(',').map(function(s){return s.trim()}).filter(Boolean):v.trim();
-  mpMsg('✏️ '+label+' staged — press 💾 Save Profile to persist ('+Object.keys(_mpPending).length+' pending).','#B45309');
+  var val=isList?v.split(',').map(function(s){return s.trim()}).filter(Boolean):v.trim();
+  _mpPending[field]=val;
+  if(manageProfileData)manageProfileData[field]=val;   // show the edit immediately
+  renderManageProfile();
+  mpMsg('✏️ '+label+' updated on screen — press 💾 Save Profile to persist ('+Object.keys(_mpPending).length+' pending).','#B45309');
 }
 async function saveProfileEdits(){
   var cm=manageProfileData;if(!cm)return;
@@ -4725,10 +4728,10 @@ function renderManageProfile(){
   if(c.hasResume){
     h+='<div style="display:flex;align-items:center;gap:.62rem;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
       +'<button onclick="viewResume()" style="padding:.25rem .72rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">View</button>';
-    if(canContact)h+='<button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
+    if(canContact)h+='<button onclick="enrichFromResume()" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;font-weight:600;margin-right:.4rem" title="AI-parse the stored resume and fill missing fields">📄 Enrich (Resume)</button><button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
     h+='</div>';
   }else{
-    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-left:.4rem" title="AI-parse the selected file (or the stored resume) and fill missing fields; skills/certs/compliance merged">📄 Enrich (Resume)</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem" onchange="var b=document.getElementById(\'mpEnrichResumeBtn\');if(b){b.disabled=!this.files.length;b.style.opacity=this.files.length?\'1\':\'.5\'}"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" disabled style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-left:.4rem;opacity:.5" title="AI-parse the selected file (or the stored resume) and fill missing fields; skills/certs/compliance merged">📄 Enrich (Resume)</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
     else h+='<span style="font-size:.72rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';
