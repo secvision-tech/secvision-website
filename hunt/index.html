@@ -4253,24 +4253,49 @@ async function setConsLinkedin(id){
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{linkedinUrl:v}})});
     var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
 }
-async function editConsField(id,field,label,cur,isList){
+var _mpPending={};
+function editConsField(id,field,label,cur,isList){
   var v=prompt(label+':',cur||'');if(v===null)return;
-  var upd={};upd[field]=isList?v.split(',').map(function(s){return s.trim()}).filter(Boolean):v.trim();
-  try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:upd})});
-    var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
+  _mpPending[field]=isList?v.split(',').map(function(s){return s.trim()}).filter(Boolean):v.trim();
+  mpMsg('✏️ '+label+' staged — press 💾 Save Profile to persist ('+Object.keys(_mpPending).length+' pending).','#B45309');
+}
+async function saveProfileEdits(){
+  var cm=manageProfileData;if(!cm)return;
+  if(!Object.keys(_mpPending).length){mpMsg('Nothing to save — no staged edits.','var(--g5)');return}
+  try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:cm._id,updates:_mpPending})});
+    var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');return}
+    _mpPending={};mpMsg('✅ Profile saved.','#047857');setTimeout(function(){openManageProfile(cm._id)},700);
+  }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C')}
 }
 async function enrichFromResume(){
   var cm=manageProfileData;if(!cm){alert('Open a profile first');return}
   var f=(document.getElementById('mpResumeFile')||{}).files;f=f&&f[0];
-  if(!f){mpMsg('Choose the PDF/Word file first (the file picker on the left).','#B45309');return}
-  if(f.size>4*1024*1024){mpMsg('File too large (max 4 MB).','#B91C1C');return}
-  var isPdf=/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name);
-  var isDocx=/\.docx$/i.test(f.name)||/wordprocessingml/i.test(f.type);
-  if(!isPdf&&!isDocx){mpMsg('Use a PDF or Word (.docx) file.','#B91C1C');return}
-  mpMsg('🤖 Parsing the document with AI...','var(--pri)');
-  try{
+  var storedMode=false;
+  if(!f){
+    // no file picked — fall back to the resume already stored on the profile
+    mpMsg('No file selected — using the stored resume...','var(--pri)');
+    try{
+      var sr=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'getResume',id:cm._id})});
+      var sd=await sr.json();
+      if(sd.error||!sd.data){mpMsg('⚠️ No file selected and no stored resume — choose a PDF/Word file first.','#B45309');return}
+      var isPdfS=/pdf/i.test(sd.mimeType||'')||/\.pdf$/i.test(sd.fileName||'');
+      var isDocxS=/wordprocessingml/i.test(sd.mimeType||'')||/\.docx$/i.test(sd.fileName||'');
+      if(!isPdfS&&!isDocxS){mpMsg('⚠️ Stored resume is not PDF/.docx — upload one or pick a file.','#B91C1C');return}
+      var body0={action:'parseResume'};if(isPdfS)body0.pdfBase64=sd.data;else body0.docxBase64=sd.data;
+      window._enrichBody=body0;storedMode=true;
+    }catch(se){mpMsg('⚠️ '+se.message,'#B91C1C');return}
+  }
+  if(f&&f.size>4*1024*1024){mpMsg('File too large (max 4 MB).','#B91C1C');return}
+  var body;
+  if(f){
+    var isPdf=/pdf$/i.test(f.type)||/\.pdf$/i.test(f.name);
+    var isDocx=/\.docx$/i.test(f.name)||/wordprocessingml/i.test(f.type);
+    if(!isPdf&&!isDocx){mpMsg('Use a PDF or Word (.docx) file.','#B91C1C');return}
     var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(',')[1])};r.onerror=rej;r.readAsDataURL(f)});
-    var body={action:'parseResume'};if(isPdf)body.pdfBase64=b64;else body.docxBase64=b64;
+    body={action:'parseResume'};if(isPdf)body.pdfBase64=b64;else body.docxBase64=b64;
+  } else body=window._enrichBody;
+  mpMsg('🤖 Parsing the '+(storedMode?'stored resume':'document')+' with AI...','var(--pri)');
+  try{
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify(body)});
     var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');return}
     var p=d.parsed||{},up={},changed=[];
@@ -4340,7 +4365,8 @@ async function editConsYears(id,cur){
     openManageProfile(id);   // re-render with the corrected value
   }catch(e){alert(e.message)}
 }
-async function openManageProfile(id){window._mpCurId=id;(function(){var i=consultantsData.findIndex(function(x){return String(x._id)===String(id)});setTimeout(function(){var p=document.getElementById('mpPrevBtn'),nx=document.getElementById('mpNextBtn');if(p)p.style.visibility=i>0?'visible':'hidden';if(nx)nx.style.visibility=(i>=0&&i<consultantsData.length-1)?'visible':'hidden'},60)})();
+async function openManageProfile(id){
+  _mpPending={};window._mpCurId=id;(function(){var i=consultantsData.findIndex(function(x){return String(x._id)===String(id)});setTimeout(function(){var p=document.getElementById('mpPrevBtn'),nx=document.getElementById('mpNextBtn');if(p)p.style.visibility=i>0?'visible':'hidden';if(nx)nx.style.visibility=(i>=0&&i<consultantsData.length-1)?'visible':'hidden'},60)})();
   manageProfileId=id;
   // if not opened via the job candidates table, there's no job context or candidate navigation
   if(!_refreshCandidatesOnClose){_matchJobContext=null;_candidateNavIdx=-1}
@@ -4614,12 +4640,12 @@ function renderManageProfile(){
   }
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .72rem;margin-bottom:.72rem;font-size:.84rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.84rem;padding:.72rem;background:var(--g1);border-radius:6px">';
-  h+=fld('Name',esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>'
-    :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'').replace(/\s\w\.$/,'')+'" '+String(c.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.68rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a>'));
+  h+=fld('Name',esc(c.name)+' <a href="#" onclick="editConsField(\''+c._id+'\',\'name\',\'Name\',\''+esc(c.name||'').replace(/'/g,'')+'\',false);return false" title="Edit name" style="font-size:.66rem;text-decoration:none">✏️</a>'+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>'
+    :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'')+'" '+String(c.currentRole||'').split(' ').slice(0,3).join(' ')+' '+String(normLoc(c.location)||'').split(',')[0]+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.68rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a>'));
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
-  h+=fld('Role',esc(c.currentRole||c.headline));
+  h+=fld('Role',esc(c.currentRole||c.headline)+' <a href="#" onclick="editConsField(\''+c._id+'\',\'currentRole\',\'Role\',\''+esc(c.currentRole||'').replace(/'/g,'')+'\',false);return false" title="Edit role" style="font-size:.66rem;text-decoration:none">✏️</a>');
   h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.72rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
-  h+=fld('Location',esc(normLoc(c.location))+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
+  h+=fld('Location',esc(normLoc(c.location))+' <a href="#" onclick="editConsField(\''+c._id+'\',\'location\',\'Location\',\''+esc(normLoc(c.location)||'').replace(/'/g,'')+'\',false);return false" title="Edit location" style="font-size:.66rem;text-decoration:none">✏️</a>'+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
   h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.62rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual'))+(c.upwork&&c.upwork.profileUrl?' <a href="'+esc(c.upwork.profileUrl)+'" target="_blank" style="color:#14A800;font-size:.68rem">Upwork ↗</a>':'')+(c.linkedinUrl?' <a href="'+esc(c.linkedinUrl)+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>':''));
   h+='</div>';
@@ -4646,7 +4672,7 @@ function renderManageProfile(){
       +'<span style="background:#FEF08A;padding:0 .2rem;border-radius:2px;font-weight:700">Highlighted</span> skills &amp; certs match the requirements for '
       +'<strong>'+esc(_matchJobContext.title||'this job')+'</strong>'+(matchedCount?' — '+matchedCount+' match'+(matchedCount>1?'es':''):'')+'.</div>';
   }
-  if((c.skills||[]).length)h+='<div style="margin-bottom:.62rem"><span style="font-size:.68rem;color:var(--g4)">Skills:</span> '+(c.skills||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#EEF2FF','#4338CA')}).join(' ')+'</div>';
+  if((c.skills||[]).length)h+='<div style="margin-bottom:.62rem"><span style="font-size:.68rem;color:var(--g4)">Skills:</span> '+(c.skills||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#EEF2FF','#4338CA')}).join(' ')+' <a href="#" onclick="editConsField(\''+c._id+'\',\'skills\',\'Skills (comma-separated)\',\''+esc((c.skills||[]).join(', ')).replace(/'/g,'')+'\',true);return false" title="Edit skills list" style="font-size:.66rem;text-decoration:none">✏️</a>'+'</div>';
   if((c.certifications||[]).length)h+='<div style="margin-bottom:.72rem"><span style="font-size:.68rem;color:var(--g4)">Certs:</span> '+(c.certifications||[]).map(function(s){return chip(s,matchesJobReq(s,reqToks),'#ECFDF5','#047857')}).join(' ')+'</div>';
 
   if(canStatus){
@@ -4702,7 +4728,7 @@ function renderManageProfile(){
     if(canContact)h+='<button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
     h+='</div>';
   }else{
-    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem"><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-right:.4rem" title="AI-parse the selected PDF/Word file and fill missing fields; skills/certs/compliance are merged">📄 Enrich (Resume)</button><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-left:.4rem" title="AI-parse the selected file (or the stored resume) and fill missing fields; skills/certs/compliance merged">📄 Enrich (Resume)</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
     else h+='<span style="font-size:.72rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';
@@ -4742,7 +4768,7 @@ function renderManageProfile(){
   }
 
   if(curUserRole==='admin'||curUserRole==='super_admin'){
-    h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;text-align:right"><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
+    h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;display:flex;justify-content:space-between;align-items:center"><button onclick="saveProfileEdits()" style="padding:.3rem .84rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">💾 Save Profile</button><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
   }
   document.getElementById('mpBody').innerHTML=h;
   // #419: show any previously-saved matched jobs immediately (no scoring, free).
