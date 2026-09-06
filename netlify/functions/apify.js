@@ -782,9 +782,9 @@ exports.handler = async function(event) {
       var col = db.collection('jobs');
 
       // Extraction patterns (same as job-search.js)
-      var TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|Cloud\s*Apps))?|Microsoft\s*Sentinel|Microsoft\s*Entra(?:\s*ID)?|Microsoft\s*(?:Information\s*Protection|Purview|Intune)|M365(?:\s*Security)?|Azure\s*(?:Sentinel|AD|Monitor|Log\s*Analytics)|Conditional\s*Access|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM)|Chronicle|Tenable|Qualys|Nessus|Rapid7|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|FortiAnalyzer|FortiManager|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|Phantom|Swimlane|KQL|SPL|YARA|Sigma|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|AWS|GCP|Google\s*Cloud|Prisma\s*Cloud|Wiz|Terraform|Ansible|Kubernetes|Docker|Jenkins|Python|Bash|PowerShell|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|IAM|PAM|MFA|SSO|UEBA|Aqua|Twistlock|Trivy|Falco|Sysdig|Anchore|Checkov|McAfee(?:\s*(?:SIEM|ESM|ePO))?|Trellix|SD[\s-]*WAN|SCADA|Modbus|DNP3|OPC[\s-]*UA?|Federated\s*Identity|AWS\s*VPC\s*Flow\s*Logs|TCP\/IP|DNS|VPN|IPSec|SAST|DAST|CI\/CD|DevSecOps/gi;
+      var TOOL_RE = /Microsoft\s*Defender(?:\s*(?:for\s*)?(?:Endpoint|Cloud|Identity|Office|Cloud\s*Apps))?|Microsoft\s*Sentinel|Microsoft\s*Entra(?:\s*ID)?|Microsoft\s*(?:Information\s*Protection|Purview|Intune)|M365(?:\s*Security)?|Azure\s*(?:Sentinel|AD|Monitor|Log\s*Analytics)|Conditional\s*Access|Azure|Splunk|QRadar|CrowdStrike|SentinelOne|Palo\s*Alto|Cortex\s*XDR|Cortex\s*XSOAR|LogRhythm|Elastic\s*(?:Security|SIEM)|Chronicle|Tenable|Qualys|Nessus|Rapid7|Carbon\s*Black|Fortinet|FortiSIEM|FortiGate|FortiAnalyzer|FortiManager|Check\s*Point|Cisco\s*(?:ASA|Firepower|SecureX|Umbrella)|Snort|Suricata|Wireshark|Burp\s*Suite|Metasploit|Phantom|Swimlane|KQL|SPL|YARA|Sigma|\bDNS\b|\bDHCP\b|\bNTP\b|\bBGP\b|\bOSPF\b|\bRIP\b|\bMPLS\b|\bVPN\b|IPSec|ServiceNow|Jira|Proofpoint|Mimecast|Zscaler|Okta|CyberArk|BeyondTrust|Varonis|DarkTrace|Vectra|Tanium|Exabeam|Securonix|AWS|GCP|Google\s*Cloud|Prisma\s*Cloud|Wiz|Terraform|Ansible|Kubernetes|Docker|Jenkins|Python|Bash|PowerShell|SIEM|SOAR|EDR|XDR|NDR|IDS[\s\/]*IPS|DLP|WAF|CASB|CSPM|IAM|PAM|MFA|SSO|UEBA|Aqua|Twistlock|Trivy|Falco|Sysdig|Anchore|Checkov|McAfee(?:\s*(?:SIEM|ESM|ePO))?|Trellix|SD[\s-]*WAN|SCADA|Modbus|DNP3|OPC[\s-]*UA?|Federated\s*Identity|AWS\s*VPC\s*Flow\s*Logs|TCP\/IP|DNS|VPN|IPSec|SAST|DAST|CI\/CD|DevSecOps/gi;
       var CERT_RE = /CISSP|CISM|CISA|CEH|OSCP|OSCE|GPEN|GCIH|GCIA|GCED|GCFA|GCFE|GNFA|GMON|GSEC|GREM|GWAPT|CompTIA\s*Security\+|CompTIA\s*CySA\+|CompTIA\s*CASP\+|CompTIA\s*Network\+|CompTIA\s*Server\+|CompTIA\s*A\+|CompTIA\s*Linux\+|CompTIA\s*Cloud\+|CompTIA\s*PenTest\+|CompTIA\s*SecurityX|(?<![\w+])Security\+|(?<![\w+])Network\+|(?<![\w+])CySA\+|(?<![\w+])PenTest\+|(?<![\w+])CASP\+|SC-100|SC-200|SC-300|SC-400|AZ-\d{3}|DP-\d{3}|AI-\d{3}|MS-\d{3}|PL-\d{3}|CCSP|CCNA|CCNP|CRISC|SSCP|SANS|GIAC|ITIL|PCNSE|SABSA|NSE\s*[4-8]|Fortinet\s*NSE|Azure\s*Security\s*Engineer(?:\s*Associate)?/gi;
-      var COMP_RE = /SOC\s*2|ISO\s*27001|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|MITRE\s*ATT&CK|Zero\s*Trust|NERC\s*CIP|OWASP\s*Top\s*10|NIST\s*RMF|STIX[\s\/]*TAXII|\bNIST\b/gi;
+      var COMP_RE = /SOC\s*2|ISO\s*27001|NIST\s*(?:SP\s*)?800-53|NIST\s*(?:SP\s*)?800-61|NIST\s*(?:SP\s*)?800-171|NIST\s*CSF|PCI[\s-]*DSS|HIPAA|GDPR|FedRAMP|HITRUST|CMMC|CCPA|FISMA|SOX|COBIT|CIS\s*Controls|MITRE\s*ATT&CK|Zero\s*Trust|NERC\s*CIP|OWASP\s*Top\s*10|NIST\s*RMF|STIX[\s\/]*TAXII|\bCIS\b|\bNIST\b/gi;
 
       function uniqueMatch(text, re) {
         if (!text) return [];
@@ -820,6 +820,9 @@ exports.handler = async function(event) {
         var fullText = (j.title || '') + ' ' + desc;
 
         var tools = uniqueMatch(fullText, TOOL_RE).join(', ') || 'See details';
+        // #548: required experience ("10+ years of experience...")
+        var expm = fullText.match(/(\d{1,2})\s*\+?\s*(?:years?|yrs)[^.\n]{0,60}?experience/i) || fullText.match(/experience[^.\n]{0,60}?(\d{1,2})\s*\+?\s*(?:years?|yrs)/i);
+        var experienceRequired = expm ? (expm[1] + '+ years') : '';
         var certs = uniqueMatch(fullText, CERT_RE).join(', ') || 'See details';
         var compliance = uniqueMatch(fullText, COMP_RE).join(', ') || 'See details';
         var jobType = detectJobType(j.contractType, desc);
@@ -858,6 +861,7 @@ exports.handler = async function(event) {
           remote: remote,
           tools: tools,
           certifications: certs,
+          experience: experienceRequired || undefined,  // #548: engine reads job.experience
           compliance: compliance,
           contact: contact,
           posterFullName: j.posterFullName || '',
