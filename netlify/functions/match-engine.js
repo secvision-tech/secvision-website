@@ -1093,6 +1093,7 @@ exports.handler = async function (event) {
           // A sub-batch failed (e.g. timeout). Earlier sub-batches are saved; signal retry.
           scoreError = scErr.message;
           moreToScore = true;
+          if (typeof mcDbg !== 'undefined') mcDbg.scoreErr = String(scErr.message || scErr).slice(0, 300);
         }
       }
 
@@ -1135,7 +1136,7 @@ exports.handler = async function (event) {
           // tells the user to source locally rather than silently showing foreign consultants.
           inCountryMatches: all.filter(function (m) { return m.locationFit && m.locationFit.sameCountry === true; }).length,
           jobCountry: req.country || '',
-          evaluated: preScored.length + newlyScored.length, poolDebug: (typeof mcDbg!=="undefined"?(mcDbg.newScored=newlyScored.length,mcDbg.skippedCached=preScored.length,mcDbg):null),
+          evaluated: preScored.length + newlyScored.length, scoreError: (typeof scoreError !== 'undefined' ? scoreError : null), poolDebug: (typeof mcDbg!=="undefined"?(mcDbg.newScored=newlyScored.length,mcDbg.skippedCached=preScored.length,mcDbg):null),
           unscoredLeft: unscoredLeft > 0 ? unscoredLeft : 0,
           moreToScore: keepScoring,          // frontend auto-continues ONLY on this
           canScoreMore: canScoreMore,        // offer a manual "score more" instead
