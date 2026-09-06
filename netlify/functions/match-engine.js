@@ -492,10 +492,11 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'NOTE: geography/location/time zone is scored by a separate deterministic system — do NOT consider candidate location in ANY dimension.\n' +
     'Engagement type: ' + (req.isContractRole ? 'CONTRACT — prefer candidates who are contractors/consultants/freelancers open to contract work (see contractorLikely flag). Penalize role score for candidates who appear to be settled full-time employees not open to contract.' : 'Full-time or either') + '\n\n' +
     'CANDIDATES (JSON array):\n' + JSON.stringify(compact) + '\n\n' +
+    'UNKNOWN vs ABSENT: if a candidate lists NO certifications, score certifications 45 (unverified — not zero) and add "certs unverified" to the reason; same for compliance (score 45 when none listed). Only score these low when the profile suggests the candidate genuinely lacks them despite a detailed profile.' + String.fromCharCode(10) +
     'For EACH candidate return an object with these 0-100 scores:\n' +
     '  skills, certifications, compliance, role, experience, rate' + (scoreEducation ? ', education' : '') + '\n' +
     '(rate: 50 if unknown. For CONTRACT roles, factor contractor-availability into "role".' +
-    (scoreEducation ? ' Score "education" 0-100 vs required education.' : '') + ') Add a SHORT "reason" (max 12 words).\n' +
+    (scoreEducation ? ' Score "education" 0-100 vs required education.' : '') + ') Add a SHORT "reason" (max 8 words).\n' +
     'Respond with ONLY a JSON array, no other text:\n' +
     '[{"i":0,"skills":85,"certifications":70,"compliance":60,"role":90,"experience":80,"rate":50' + (scoreEducation ? ',"education":75' : '') + ',"reason":"..."}]';
 
@@ -512,7 +513,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
       },
       body: JSON.stringify({
         model: SCORING_MODEL,
-        max_tokens: 2000,
+        max_tokens: 3000,
         system: sys,
         messages: [{ role: 'user', content: prompt }]
       }),
@@ -534,6 +535,11 @@ async function scoreProfilesBatch(req, profiles, weights) {
     // #541: the model sometimes wraps the array in a word of prose — extract the JSON array
     var jm = text.match(/\[[\s\S]*\]/);
     if (jm) { try { scores = JSON.parse(jm[0]); } catch (e2) {} }
+    if (!scores) {
+      // #543: truncated output has no closing ] — salvage every COMPLETE object
+      var lb = text.indexOf('['), le = text.lastIndexOf('}');
+      if (lb >= 0 && le > lb) { try { scores = JSON.parse(text.slice(lb, le + 1) + ']'); } catch (e3) {} }
+    }
     if (!scores) throw new Error('LLM returned unparseable JSON: ' + text.slice(0, 160));
   }
 
