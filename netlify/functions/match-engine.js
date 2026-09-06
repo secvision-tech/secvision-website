@@ -21,7 +21,7 @@ const PROFILE_ACTOR_ID = 'bebity~linkedin-premium-actor';
 const SCORING_MODEL = 'claude-sonnet-4-6';
 // Bump when the scoring formula changes so cached scores are recomputed rather than
 // silently kept. v2 = added the remote-aware location penalty.
-const SCORING_VERSION = 2;
+const SCORING_VERSION = 3;   // #542 rubric change: unverified certs floor
 
 const TENANT_ID = process.env.ENTRA_TENANT_ID || '';
 const CLIENT_ID = process.env.ENTRA_CLIENT_ID || '';
