@@ -4270,8 +4270,13 @@ async function saveProfileEdits(){
     _mpPending={};mpMsg('✅ Profile saved.','#047857');setTimeout(function(){openManageProfile(cm._id)},700);
   }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C')}
 }
+function _enrSt(msg,color){
+  var s=document.getElementById('mpEnrichStatus');if(s){s.textContent=msg||'';s.style.color=color||'var(--pri)'}
+  var b=document.getElementById('mpEnrichResumeBtn');if(b){b.disabled=!!msg&&msg.indexOf('⏳')===0;b.style.opacity=b.disabled?'.5':'1'}
+}
 async function enrichFromResume(){
   var cm=manageProfileData;if(!cm){alert('Open a profile first');return}
+  _enrSt('⏳ enriching...');
   var f=(document.getElementById('mpResumeFile')||{}).files;f=f&&f[0];
   var storedMode=false;
   if(!f){
@@ -4297,10 +4302,10 @@ async function enrichFromResume(){
     var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(',')[1])};r.onerror=rej;r.readAsDataURL(f)});
     body={action:'parseResume'};if(isPdf)body.pdfBase64=b64;else body.docxBase64=b64;
   } else body=window._enrichBody;
-  mpMsg('🤖 Parsing the '+(storedMode?'stored resume':'document')+' with AI...','var(--pri)');
+  mpMsg('🤖 Parsing the '+(storedMode?'stored resume':'document')+' with AI...','var(--pri)');_enrSt('⏳ parsing with AI...');
   try{
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify(body)});
-    var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');return}
+    var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');_enrSt('⚠️ failed','#B91C1C');return}
     var p=d.parsed||{},up={},changed=[];
     var fillIf=function(field,val,lab){if(val&&String(val).trim()&&!cm[field]){up[field]=String(val).trim();changed.push(lab)}};
     fillIf('currentCompany',p.company,'company');fillIf('location',p.location,'location');fillIf('country',p.country,'country');
@@ -4311,11 +4316,11 @@ async function enrichFromResume(){
     var sk=union(cm.skills,p.skills);if(sk.length>(cm.skills||[]).length){up.skills=sk;changed.push('skills +'+(sk.length-(cm.skills||[]).length))}
     var ce=union(cm.certifications,p.certifications);if(ce.length>(cm.certifications||[]).length){up.certifications=ce;changed.push('certs +'+(ce.length-(cm.certifications||[]).length))}
     var co=union(cm.compliance,p.compliance);if(co.length>(cm.compliance||[]).length){up.compliance=co;changed.push('compliance +'+(co.length-(cm.compliance||[]).length))}
-    if(!changed.length){mpMsg('ℹ️ Nothing new — the profile already has everything this document offers.','var(--g5)');return}
+    if(!changed.length){mpMsg('ℹ️ Nothing new — the profile already has everything this document offers.','var(--g5)');_enrSt('ℹ️ nothing new','var(--g5)');return}
     var ur=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:cm._id,updates:up})});
     var ud=await ur.json();if(ud.error){mpMsg('⚠️ '+ud.error,'#B91C1C');return}
-    mpMsg('✅ Enriched: '+changed.join(', '),'#047857');setTimeout(function(){openManageProfile(cm._id)},900);
-  }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C')}
+    window._mpAfterMsg={t:'✅ Enriched: '+changed.join(', '),c:'#047857'};_enrSt('✅ done');setTimeout(function(){openManageProfile(cm._id)},900);
+  }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C');_enrSt('⚠️ failed','#B91C1C')}
 }
 async function editConsCompany(id,cur){
   var v=prompt('Company name:',cur||'');if(v===null)return;
@@ -4622,6 +4627,7 @@ function mjDeleteJob(jobId){
 }
 
 function renderManageProfile(){
+  setTimeout(function(){if(window._mpAfterMsg){mpMsg(window._mpAfterMsg.t,window._mpAfterMsg.c);var s=document.getElementById('mpEnrichStatus');if(s){s.textContent='✅ enriched';s.style.color='#047857'}window._mpAfterMsg=null}},60);
   var c=manageProfileData;if(!c)return;
   var isAdmin=(curUserRole==='admin'||curUserRole==='super_admin');
   var isPlaced=(c.availability==='placed'||c.pipelineStatus==='placed');
@@ -4728,10 +4734,10 @@ function renderManageProfile(){
   if(c.hasResume){
     h+='<div style="display:flex;align-items:center;gap:.62rem;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
       +'<button onclick="viewResume()" style="padding:.25rem .72rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">View</button>';
-    if(canContact)h+='<button onclick="enrichFromResume()" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;font-weight:600;margin-right:.4rem" title="AI-parse the stored resume and fill missing fields">📄 Enrich (Resume)</button><button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
+    if(canContact)h+='<button onclick="enrichFromResume()" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;font-weight:600;margin-right:.4rem" title="AI-parse the stored resume and fill missing fields">📄 Enrich (Resume)</button><span id="mpEnrichStatus" style="font-size:.72rem;margin:0 .45rem;color:var(--pri)"></span><button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
     h+='</div>';
   }else{
-    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem" onchange="var b=document.getElementById(\'mpEnrichResumeBtn\');if(b){b.disabled=!this.files.length;b.style.opacity=this.files.length?\'1\':\'.5\'}"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" disabled style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-left:.4rem;opacity:.5" title="AI-parse the selected file (or the stored resume) and fill missing fields; skills/certs/compliance merged">📄 Enrich (Resume)</button><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem" onchange="var b=document.getElementById(\'mpEnrichResumeBtn\');if(b){b.disabled=!this.files.length;b.style.opacity=this.files.length?\'1\':\'.5\'}"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" disabled style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-left:.4rem;opacity:.5" title="AI-parse the selected file (or the stored resume) and fill missing fields; skills/certs/compliance merged">📄 Enrich (Resume)</button><span id="mpEnrichStatus" style="font-size:.72rem;margin:0 .45rem;color:var(--pri)"></span><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
     else h+='<span style="font-size:.72rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';
