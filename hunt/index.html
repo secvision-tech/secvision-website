@@ -4267,7 +4267,7 @@ async function saveProfileEdits(){
   if(!Object.keys(_mpPending).length){mpMsg('Nothing to save — no staged edits.','var(--g5)');return}
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:cm._id,updates:_mpPending})});
     var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');return}
-    _mpPending={};mpMsg('✅ Profile saved.','#047857');setTimeout(function(){openManageProfile(cm._id)},700);
+    _mpPending={};window._mpChanged=true;mpMsg('✅ Profile saved.','#047857');setTimeout(function(){openManageProfile(cm._id)},700);
   }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C')}
 }
 function _enrSt(msg,color){
@@ -4319,10 +4319,10 @@ async function enrichFromResume(){
     if(!changed.length){mpMsg('ℹ️ Nothing new — the profile already has everything this document offers.','var(--g5)');_enrSt('ℹ️ nothing new','var(--g5)');return}
     var ur=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:cm._id,updates:up})});
     var ud=await ur.json();if(ud.error){mpMsg('⚠️ '+ud.error,'#B91C1C');return}
-    window._mpAfterMsg={t:'✅ Enriched: '+changed.join(', '),c:'#047857'};_enrSt('✅ done');setTimeout(function(){openManageProfile(cm._id)},900);
+    window._mpAfterMsg={t:'✅ Enriched: '+changed.join(', '),c:'#047857'};window._mpChanged=true;_enrSt('✅ done');setTimeout(function(){openManageProfile(cm._id)},900);
   }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C');_enrSt('⚠️ failed','#B91C1C')}
 }
-async function editConsCompany(id,cur){
+async function editConsCompany(id,cur){window._mpChanged=true;
   var v=prompt('Company name:',cur||'');if(v===null)return;
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{currentCompany:v.trim()}})});
     var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
@@ -4404,6 +4404,7 @@ async function openManageProfile(id){
   }catch(e){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">Error: '+esc(e.message)+'</div>'}
 }
 function closeManageProfile(){
+  if(window._mpChanged){window._mpChanged=false;try{loadConsultants(true)}catch(e){}}
   var p=document.getElementById('manageProfilePopup');if(p)p.style.display='none';
   manageProfileId=null;manageProfileData=null;
   _matchJobContext=null; // #398: don't carry job-skill highlighting into the next popup
