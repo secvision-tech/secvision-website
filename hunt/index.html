@@ -5250,9 +5250,34 @@ async function _aiDraft(kind,job,profile,fallbackFn){
   try{
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'draftOutreach',kind:kind,job:job,profile:profile||null})});
     var d=await r.json();
-    if(d&&d.body){_ctModal(kind==='client'?'✉️ Contact Client — '+(job.company||''):'✉️ Contact Consultant'+(profile&&profile.name?' — '+profile.name:''),d.subject||'',d.body,(profile&&profile.email)||'');return true}
+    if(d&&(d.html||d.body)){_ctModalRich(kind==='client'?'✉️ Contact Client — '+(job.company||''):'✉️ Contact Consultant'+(profile&&profile.name?' — '+profile.name:''),d.subject||'',d.html||'',d.body||'',(profile&&profile.email)||'');return true}
   }catch(e){}
   return false;
+}
+function _ctModalRich(title,subject,html,plain,mailto){
+  window._ctHtml=html;window._ctPlain=plain;
+  var ov=document.createElement('div');ov.id='ctOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1600;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:720px;max-width:96%;max-height:90vh;overflow:auto;padding:1rem">'
+   +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">'+title+'</b><button onclick="document.getElementById(\'ctOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
+   +'<div style="font-size:.62rem;color:var(--g5);margin:.25rem 0 .4rem">Rich HTML draft — editable below; "Copy (rich)" pastes into Outlook/Gmail with formatting and table intact.</div>'
+   +'<input id="ctSubj" value="'+String(subject).replace(/"/g,'&quot;')+'" style="width:100%;padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px;margin-bottom:.4rem">'
+   +'<div id="ctPreview" contenteditable="true" style="border:1px solid var(--g100);border-radius:6px;padding:.6rem;max-height:52vh;overflow:auto;font-size:.72rem">'+(html||('<pre style="white-space:pre-wrap;font-family:inherit">'+String(plain).replace(/</g,'&lt;')+'</pre>'))+'</div>'
+   +'<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">'
+   +'<button onclick="ctCopyRich(this)" style="padding:.35rem .8rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📋 Copy (rich — Outlook/Gmail)</button>'
+   +'<button onclick="navigator.clipboard.writeText(window._ctPlain);this.textContent=\'✅ Copied plain\'" style="padding:.35rem .8rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📋 Copy plain (LinkedIn)</button>'
+   +(mailto?'<button onclick="window.location.href=\'mailto:'+mailto+'?subject=\'+encodeURIComponent(document.getElementById(\'ctSubj\').value)+\'&body=\'+encodeURIComponent(window._ctPlain)" style="padding:.35rem .8rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📧 Open in Email (plain)</button>':'')
+   +'</div></div>';
+  document.body.appendChild(ov);
+}
+async function ctCopyRich(btn){
+  var el=document.getElementById('ctPreview');
+  var htmlNow=el?el.innerHTML:window._ctHtml;
+  try{
+    await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([htmlNow],{type:'text/html'}),'text/plain':new Blob([window._ctPlain||el.innerText],{type:'text/plain'})})]);
+    btn.textContent='✅ Copied rich';
+  }catch(e){
+    var range=document.createRange();range.selectNodeContents(el);var sel=getSelection();sel.removeAllRanges();sel.addRange(range);document.execCommand('copy');sel.removeAllRanges();btn.textContent='✅ Copied';
+  }
 }
 async function contactClient(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
