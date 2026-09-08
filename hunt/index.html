@@ -1913,7 +1913,9 @@ async function viewDet(i){
   // #418: when this popup was opened from a consultant's Match Jobs, DON'T offer Match
   // Profiles — that would loop consultant->job->consultant. We still show the job's already
   // saved candidates below (read-only), just no new fetch/match from here.
+  window._currentJobDoc=j;
   if(CAP.canContacts&&!mjFromConsultant)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
+  if(CAP.canContacts)h+='<button onclick="contactClient()" class="dm-apply" style="background:#047857;border:none;cursor:pointer">✉️ Contact Client</button>';
   if(mjFromConsultant)h+='<span style="font-size:.6rem;color:var(--g5);font-style:italic">Opened from a consultant — matched candidates for this job are shown below.</span>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--ac);text-decoration:underline">View original posting &rarr;</a>';
   h+='</div>';
@@ -5230,6 +5232,58 @@ async function saveDemand(){
     setTimeout(function(){document.getElementById('adOverlay').remove();try{searchDbJobs&&searchDbJobs()}catch(e){}},1400);
   }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
 }
+// ===== #550 outreach drafts: client (job popup) + consultant (match rows) =====
+function _ctModal(title,subject,bodyText,mailto){
+  var ov=document.createElement('div');ov.id='ctOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1600;display:flex;align-items:center;justify-content:center';
+  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:640px;max-width:95%;max-height:88vh;overflow:auto;padding:1rem">'
+   +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">'+title+'</b><button onclick="document.getElementById(\'ctOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
+   +'<div style="font-size:.62rem;color:var(--g5);margin:.25rem 0 .4rem">Review and edit, then send by email or copy for a LinkedIn message.</div>'
+   +'<input id="ctSubj" value="'+subject.replace(/"/g,'&quot;')+'" style="width:100%;padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px;margin-bottom:.4rem">'
+   +'<textarea id="ctBody" style="width:100%;height:300px;font-size:.7rem;border:1px solid var(--g100);border-radius:4px;padding:.5rem">'+bodyText.replace(/</g,'&lt;')+'</textarea>'
+   +'<div style="display:flex;gap:.5rem;margin-top:.5rem">'
+   +(mailto?'<button onclick="var s=document.getElementById(\'ctSubj\').value,b=document.getElementById(\'ctBody\').value;window.location.href=\'mailto:'+mailto+'?subject=\'+encodeURIComponent(s)+\'&body=\'+encodeURIComponent(b)" style="padding:.35rem .8rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📧 Open in Email</button>':'')
+   +'<button onclick="navigator.clipboard.writeText(document.getElementById(\'ctBody\').value);this.textContent=\'✅ Copied\'" style="padding:.35rem .8rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📋 Copy for LinkedIn</button>'
+   +'</div></div>';
+  document.body.appendChild(ov);
+}
+function contactClient(){
+  var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
+  var has=function(v){return v&&String(v).trim()&&!/^see details$|^not disclosed$|^tbd/i.test(String(v).trim())};
+  var miss=[];
+  if(!has(j.salary)&&!has(j.rate))miss.push('the offered rate (per hour, currency, and C2C/W2 basis)');
+  if(!/remote|yes/i.test(String(j.remote||'')+' '+String(j.workType||'')))miss.push('whether fully remote delivery from India is acceptable');
+  if(!/shift|edt|est|overlap|hours/i.test(j.description||''))miss.push('the expected working-hours overlap / shift timings');
+  if(!has(j.contractDuration))miss.push('the contract duration and expected start date');
+  var body='Hello,\n\nThank you for sharing the '+(j.title||'requirement')+' requirement. Our understanding:\n\n'
+   +'\u2022 Role: '+(j.title||'-')+'\n'
+   +'\u2022 Client/Company: '+(j.company||'-')+'\n'
+   +(has(j.tools)?'\u2022 Key technologies: '+j.tools+'\n':'')
+   +(has(j.skills)?'\u2022 Skills: '+j.skills+'\n':'')
+   +(has(j.experience)?'\u2022 Experience: '+j.experience+'\n':'')
+   +(has(j.certifications)?'\u2022 Certifications: '+j.certifications+'\n':'')
+   +(has(j.compliance)?'\u2022 Compliance: '+j.compliance+'\n':'')
+   +'\u2022 Location/Mode: '+(j.location||'-')+'\n'
+   +(miss.length?'\nTo propose the right consultants quickly, could you please confirm:\n'+miss.map(function(m,i){return (i+1)+'. '+m.charAt(0).toUpperCase()+m.slice(1)}).join('\n')+'\n':'')
+   +'\nWe can share matched consultant profiles as soon as these are confirmed.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com';
+  _ctModal('✉️ Contact Client — '+(j.company||''),'RE: '+(j.title||'Requirement')+' — clarifications to propose the right consultants',body,'');
+}
+function contactConsultant(sid){
+  var j=window._currentJobDoc||{};
+  var list=(j.candidateProfiles||[]);var meta=null;
+  for(var q=0;q<list.length;q++)if(list[q].sourceId===sid)meta=list[q];
+  var p=window._mcProfiles&&_mcProfiles[sid]?_mcProfiles[sid]:meta||{};
+  var em=p.email||'';
+  var reqRows=[['Role',j.title],['Technology',j.tools],['Skills',j.skills],['Experience',j.experience],['Certifications',j.certifications],['Compliance',j.compliance]]
+    .filter(function(r){return r[1]&&!/^see details$/i.test(String(r[1]).trim())});
+  var asks=['your current availability and notice period'];
+  if(!p.rateExpectation)asks.push('your expected rate (USD/hr, contract)');
+  asks.push('your flexibility for US-hours overlap (evening/night shift IST)');
+  var body='Hello'+(p.name?' '+String(p.name).split(' ')[0]:'')+',\n\nSecVision Technologies (Pune) places India-based security consultants on remote US/EU contract engagements. We have a live requirement that matches your profile:\n\n'
+   +reqRows.map(function(r){return '\u2022 '+r[0]+': '+r[1]}).join('\n')
+   +'\n\nIf this interests you, could you please share:\n'+asks.map(function(a,i){return (i+1)+'. '+a.charAt(0).toUpperCase()+a.slice(1)}).join('\n')
+   +'\n\nNo fees to you at any stage; engagement-by-engagement, non-exclusive.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com';
+  _ctModal('✉️ Contact Consultant'+(p.name?' — '+p.name:''),'Contract opportunity: '+(j.title||'Security role')+' (remote, US client)',body,em);
+}
 var _rvList=[],_rvSort='new';
 async function openReviewPending(){
   var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'listPending'})});
@@ -5855,7 +5909,9 @@ async function loadJobCandidates(){
       +'<th style="text-align:left;overflow:hidden;width:14ch">Pipeline</th>'
       +'<th style="text-align:center;width:16ch">Action</th>'
       +'</tr></thead><tbody>';
+    window._mcProfiles=window._mcProfiles||{};
     list.forEach(function(c,i){
+      _mcProfiles[c.sourceId]=c;
       var pct=Math.round(c.overall||0);
       var col=pct>=80?'#047857':(pct>=70?'#0891B2':'#B45309');
       var loc=c.location||c.country||'';
@@ -5871,6 +5927,7 @@ async function loadJobCandidates(){
         +'<td>'+pipelineBadge(c.pipelineStatus)+'</td>'
         +'<td style="text-align:center;white-space:nowrap;overflow:visible">'
         +((c._id&&!mjFromConsultant)?'<button class="vb" onclick="openManageProfileFromJob(\''+c._id+'\')" style="font-size:.58rem">'+(CAP.canStatus?'Manage':'View')+'</button> ':'')
+        +(CAP.canContacts?'<button class="vb" onclick="contactConsultant(\''+esc(c.sourceId)+'\')" title="Draft an outreach email/LinkedIn message for this consultant about this job" style="font-size:.58rem;background:#047857;color:#fff">✉️</button> ':'')
         +((CAP.canStatus&&!mjFromConsultant)?'<button class="cand-del" data-sid="'+esc(c.sourceId)+'" data-name="'+esc(c.name)+'" style="padding:.15rem .5rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Delete</button>':'')
         +'</td></tr>';
     });
