@@ -5246,11 +5246,24 @@ function _ctModal(title,subject,bodyText,mailto){
    +'</div></div>';
   document.body.appendChild(ov);
 }
-function contactClient(){
+async function _aiDraft(kind,job,profile,fallbackFn){
+  try{
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'draftOutreach',kind:kind,job:job,profile:profile||null})});
+    var d=await r.json();
+    if(d&&d.body){_ctModal(kind==='client'?'✉️ Contact Client — '+(job.company||''):'✉️ Contact Consultant'+(profile&&profile.name?' — '+profile.name:''),d.subject||'',d.body,(profile&&profile.email)||'');return true}
+  }catch(e){}
+  return false;
+}
+async function contactClient(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
+  var ld=document.createElement('div');ld.id='ctLoading';ld.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld.textContent='🤖 Drafting message with AI...';document.body.appendChild(ld);
+  var ok=await _aiDraft('client',j,null);
+  var l=document.getElementById('ctLoading');if(l)l.remove();
+  if(ok)return;
   var has=function(v){return v&&String(v).trim()&&!/^see details$|^not disclosed$|^tbd/i.test(String(v).trim())};
   var miss=[];
-  if(!has(j.salary)&&!has(j.rate))miss.push('the offered rate (per hour, currency, and C2C/W2 basis)');
+  var isUS=/united states|usa/i.test((j.detectedCountry||j.country||''));
+  if(!has(j.salary)&&!has(j.rate))miss.push('the offered rate (per hour, currency'+(isUS?', and C2C/W2 basis':'')+')');
   if(!/remote|yes/i.test(String(j.remote||'')+' '+String(j.workType||'')))miss.push('whether fully remote delivery from India is acceptable');
   if(!/shift|edt|est|overlap|hours/i.test(j.description||''))miss.push('the expected working-hours overlap / shift timings');
   if(!has(j.contractDuration))miss.push('the contract duration and expected start date');
@@ -5264,24 +5277,36 @@ function contactClient(){
    +(has(j.compliance)?'\u2022 Compliance: '+j.compliance+'\n':'')
    +'\u2022 Location/Mode: '+(j.location||'-')+'\n'
    +(miss.length?'\nTo propose the right consultants quickly, could you please confirm:\n'+miss.map(function(m,i){return (i+1)+'. '+m.charAt(0).toUpperCase()+m.slice(1)}).join('\n')+'\n':'')
-   +'\nWe can share matched consultant profiles as soon as these are confirmed.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com';
+   +'\nAbout us, briefly: SecVision Technologies is a Pune-based cybersecurity services company led by a Microsoft Certified Cybersecurity Architect Expert (18+ years, 2 US patents), providing certified SOC and cloud-security consultants to clients in the USA and Europe.\n'
+   +'\nWe can share matched consultant profiles as soon as these are confirmed. Beyond this requirement, we would value building a long-term partnership with '+(j.company||'your team')+' — so you have a reliable bench partner for future security staffing needs as well.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com';
   _ctModal('✉️ Contact Client — '+(j.company||''),'RE: '+(j.title||'Requirement')+' — clarifications to propose the right consultants',body,'');
 }
-function contactConsultant(sid){
+async function contactConsultant(sid){
   var j=window._currentJobDoc||{};
+  var pv=(window._mcProfiles&&_mcProfiles[sid])||{};
+  var ld2=document.createElement('div');ld2.id='ctLoading';ld2.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld2.textContent='🤖 Drafting message with AI...';document.body.appendChild(ld2);
+  var ok2=await _aiDraft('consultant',j,pv);
+  var l2=document.getElementById('ctLoading');if(l2)l2.remove();
+  if(ok2)return;
   var list=(j.candidateProfiles||[]);var meta=null;
   for(var q=0;q<list.length;q++)if(list[q].sourceId===sid)meta=list[q];
   var p=window._mcProfiles&&_mcProfiles[sid]?_mcProfiles[sid]:meta||{};
   var em=p.email||'';
   var reqRows=[['Role',j.title],['Technology',j.tools],['Skills',j.skills],['Experience',j.experience],['Certifications',j.certifications],['Compliance',j.compliance]]
     .filter(function(r){return r[1]&&!/^see details$/i.test(String(r[1]).trim())});
+  var consIndia=/india/i.test(p.country||'');
+  var jobUS=/united states|usa/i.test((j.detectedCountry||j.country||''));
   var asks=['your current availability and notice period'];
   if(!p.rateExpectation)asks.push('your expected rate (USD/hr, contract)');
-  asks.push('your flexibility for US-hours overlap (evening/night shift IST)');
-  var body='Hello'+(p.name?' '+String(p.name).split(' ')[0]:'')+',\n\nSecVision Technologies (Pune) places India-based security consultants on remote US/EU contract engagements. We have a live requirement that matches your profile:\n\n'
+  if(consIndia&&jobUS)asks.push('your flexibility for US-hours overlap (evening/night shift IST)');
+  else asks.push('your flexibility for working-hours overlap with the client\'s time zone');
+  var intro=consIndia
+    ?'SecVision Technologies places India-based security consultants on remote US/EU contract engagements.'
+    :'SecVision Technologies engages independent security consultants worldwide for remote contract engagements with US/EU clients.';
+  var body='Hello'+(p.name?' '+String(p.name).split(' ')[0]:'')+',\n\n'+intro+' We have a live requirement that matches your profile:\n\n'
    +reqRows.map(function(r){return '\u2022 '+r[0]+': '+r[1]}).join('\n')
    +'\n\nIf this interests you, could you please share:\n'+asks.map(function(a,i){return (i+1)+'. '+a.charAt(0).toUpperCase()+a.slice(1)}).join('\n')
-   +'\n\nNo fees to you at any stage; engagement-by-engagement, non-exclusive.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com';
+   +'\n\nNo fees to you at any stage; engagement-by-engagement, non-exclusive.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com\nPune, India';
   _ctModal('✉️ Contact Consultant'+(p.name?' — '+p.name:''),'Contract opportunity: '+(j.title||'Security role')+' (remote, US client)',body,em);
 }
 var _rvList=[],_rvSort='new';

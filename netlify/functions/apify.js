@@ -328,6 +328,28 @@ exports.handler = async function(event) {
         contractType: j0.contractType || '', workType: j0.workType || '', jobUrl: j0.jobUrl || body.url || ''
       } }) };
     }
+    // ============ #551 AI OUTREACH DRAFT (client / consultant) ============
+    if (action === 'draftOutreach') {
+      var OKEY = process.env.ANTHROPIC_API_KEY;
+      if (!OKEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI key not configured' }) };
+      var oj = body.job || {}, op = body.profile || {}, kind = body.kind === 'consultant' ? 'consultant' : 'client';
+      var jobUS = /united states|usa/i.test(String(oj.detectedCountry || oj.country || ''));
+      var consIndia = /india/i.test(String(op.country || ''));
+      var oPrompt = kind === 'client'
+        ? 'Write a professional, concise business email (plain text) from Sunil Shilimkar, Business Head, SecVision Technologies LLP (Pune-based cybersecurity services company; leadership: Microsoft Certified Cybersecurity Architect Expert, 18+ years, 2 US patents; clients in USA/Europe) to the client contact about this staffing requirement. Structure: (1) one-line thanks; (2) "Our understanding:" followed by a neat aligned label-value list (Role, Client, Key technologies, Skills, Experience, Certifications, Compliance, Location/Mode) using ONLY fields present in the data - omit missing/"See details" ones; (3) numbered clarification questions ONLY for genuinely missing items among: offered hourly rate' + (jobUS ? ' (and C2C/W2 basis - this is a US engagement)' : '') + ', remote-from-India acceptability, working-hours/shift overlap, contract duration and start date; (4) one short line offering matched consultant profiles once confirmed; (5) one warm line about building a long-term partnership with the company; sign off with full signature ending "Pune, India". No markdown symbols, no asterisks. JOB DATA: '
+        : 'Write a professional, warm, concise outreach email (plain text) from Sunil Shilimkar, Business Head, SecVision Technologies LLP to a security consultant about a live contract requirement. ' + (consIndia ? 'The consultant is India-based: frame SecVision as placing India-based security consultants on remote US/EU contract engagements.' : 'The consultant is outside India: frame SecVision as engaging independent security consultants worldwide for remote US/EU contract engagements.') + ' Structure: (1) greeting by first name if given; (2) one-line intro; (3) "The requirement:" as a neat aligned label-value list (Role, Technology, Skills, Experience, Certifications, Compliance) using ONLY populated fields (skip "See details"); (4) numbered questions: availability and notice period; expected rate (USD/hr, contract) ONLY if profile has no rate; ' + (consIndia && jobUS ? 'flexibility for US-hours overlap (evening/night shift IST);' : 'flexibility for working-hours overlap with the client timezone;') + ' (5) close with "No fees to you at any stage; engagement-by-engagement, non-exclusive." then full signature ending "Pune, India". No markdown symbols. JOB DATA: ';
+      var oData = JSON.stringify({ job: { title: oj.title, company: oj.company, tools: oj.tools, skills: oj.skills, experience: oj.experience, certifications: oj.certifications, compliance: oj.compliance, location: oj.location, remote: oj.remote, salary: oj.salary, duration: oj.contractDuration, country: oj.detectedCountry || oj.country, description_hints: String(oj.description || '').slice(0, 1200) }, consultant: kind === 'consultant' ? { name: op.name, country: op.country, rate: op.rateExpectation || '' } : undefined });
+      try {
+        var orr = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': OKEY, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 1400, messages: [{ role: 'user', content: oPrompt + oData + '\n\nAlso output a subject line as the FIRST line prefixed "SUBJECT: ".' }] }) });
+        if (!orr.ok) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI draft failed (' + orr.status + ')' }) };
+        var oout = ((await orr.json()).content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
+        var subj = '', bodyTxt = oout;
+        var sm = oout.match(/^SUBJECT:\s*(.+)$/m);
+        if (sm) { subj = sm[1].trim(); bodyTxt = oout.replace(/^SUBJECT:.*$/m, '').trim(); }
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ subject: subj, body: bodyTxt }) };
+      } catch (oe) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: oe.message }) }; }
+    }
     // ============ #544 PARSE RESUME / PROFILE PDF -> enrichment fields ============
     if (action === 'parseResume') {
       var RKEY = process.env.ANTHROPIC_API_KEY;
