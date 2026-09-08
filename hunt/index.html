@@ -5248,9 +5248,14 @@ function _ctModal(title,subject,bodyText,mailto){
 }
 async function _aiDraft(kind,job,profile,fallbackFn){
   try{
-    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'draftOutreach',kind:kind,job:job,profile:profile||null})});
+    var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'draftOutreach',kind:kind,job:job,profile:profile||null,force:!!window._ctForce})});window._ctForce=false;
     var d=await r.json();
-    if(d&&(d.html||d.body)){_ctModalRich(kind==='client'?'✉️ Contact Client — '+(job.company||''):'✉️ Contact Consultant'+(profile&&profile.name?' — '+profile.name:''),d.subject||'',d.html||'',d.body||'',(profile&&profile.email)||'');return true}
+    if(d&&(d.html||d.body)){
+      var fn=(profile&&profile.name?String(profile.name).split(' ')[0]:'there');
+      d.html=String(d.html||'').replace(/\{\{FirstName\}\}/g,fn);
+      d.body=String(d.body||'').replace(/\{\{FirstName\}\}/g,fn);
+      window._ctCtx={kind:kind,job:job,profile:profile};
+      _ctModalRich(kind==='client'?'✉️ Contact Client — '+(job.company||''):'✉️ Contact Consultant'+(profile&&profile.name?' — '+profile.name:''),d.subject||'',d.html||'',d.body||'',(profile&&profile.email)||'');return true}
   }catch(e){}
   return false;
 }
@@ -5263,6 +5268,7 @@ function _ctModalRich(title,subject,html,plain,mailto){
    +'<input id="ctSubj" value="'+String(subject).replace(/"/g,'&quot;')+'" style="width:100%;padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px;margin-bottom:.4rem">'
    +'<div id="ctPreview" contenteditable="true" style="border:1px solid var(--g100);border-radius:6px;padding:.6rem;max-height:52vh;overflow:auto;font-size:.72rem">'+(html||('<pre style="white-space:pre-wrap;font-family:inherit">'+String(plain).replace(/</g,'&lt;')+'</pre>'))+'</div>'
    +'<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">'
+   +'<button onclick="window._ctForce=true;document.getElementById(\'ctOverlay\').remove();(_ctCtx.kind===\'client\'?contactClient():contactConsultant(_ctCtx.profile&&_ctCtx.profile.sourceId))" title="Discard the stored draft and generate a fresh one with AI" style="padding:.35rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">♻️ Regenerate</button>'
    +'<button onclick="ctCopyRich(this)" style="padding:.35rem .8rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📋 Copy (rich — Outlook/Gmail)</button>'
    +'<button onclick="navigator.clipboard.writeText(window._ctPlain);this.textContent=\'✅ Copied plain\'" style="padding:.35rem .8rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📋 Copy plain (LinkedIn)</button>'
    +(mailto?'<button onclick="window.location.href=\'mailto:'+mailto+'?subject=\'+encodeURIComponent(document.getElementById(\'ctSubj\').value)+\'&body=\'+encodeURIComponent(window._ctPlain)" style="padding:.35rem .8rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📧 Open in Email (plain)</button>':'')
