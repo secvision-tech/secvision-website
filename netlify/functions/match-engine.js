@@ -1086,10 +1086,15 @@ exports.handler = async function (event) {
           mcDbg.reqGates = { clearance: !!req.requiresClearance, citizen: !!req.requiresCitizen };
         }
         try {
+          // #564: sub-batches run in PARALLEL (sequential runs hit the gateway's ~26s kill);
+          // results persist per profile as each batch settles.
           var SUB = 4;
-          for (var b = 0; b < passing.length; b += SUB) {
-            var chunk = passing.slice(b, b + SUB);
-            var llmScored = await scoreProfilesBatch(req, chunk, weights);
+          var chunks = [];
+          for (var b = 0; b < passing.length; b += SUB) chunks.push(passing.slice(b, b + SUB));
+          var settled = await Promise.allSettled(chunks.map(function (ch) { return scoreProfilesBatch(req, ch, weights); }));
+          for (var sbi = 0; sbi < settled.length; sbi++) {
+            if (settled[sbi].status !== 'fulfilled') { scoreError = String((settled[sbi].reason && settled[sbi].reason.message) || settled[sbi].reason).slice(0, 300); moreToScore = true; if (typeof mcDbg !== 'undefined') mcDbg.scoreErr = scoreError; continue; }
+            var llmScored = settled[sbi].value || [];
             for (var i = 0; i < llmScored.length; i++) {
               var r = llmScored[i];
               var gate = gated.find(function (g) { return g.p.sourceId === r.profile.sourceId; });

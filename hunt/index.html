@@ -5800,7 +5800,7 @@ async function safeMatchJson(r){
   var txt=await r.text();
   try{return JSON.parse(txt)}
   catch(e){
-    if(/Inactivity Timeout|<HTML/i.test(txt))return {error:'The request took too long (gateway timeout). This can happen on the first fetch for a new role — please retry.',retry:true};
+    if(/Inactivity Timeout|<HTML/i.test(txt))return {error:'The server took too long (gateway timeout). Any profiles already scored WERE saved — just click Score-more again to continue.',retry:true};
     return {error:'Unexpected server response. Please retry.',retry:true};
   }
 }
