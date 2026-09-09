@@ -924,10 +924,17 @@ exports.handler = async function(event) {
           dateScanned: new Date()
         };
 
-        // Upsert: match by linkedinJobId or jobId
+        // #559: dedup by linkedinJobId / jobId / content fingerprint (title+company+location)
+        var fpBasis = (String(jobDoc.titleClean || jobDoc.title || '').toLowerCase().trim() + '|' + String(jobDoc.company || '').toLowerCase().trim() + '|' + String(jobDoc.location || '').toLowerCase().trim());
+        var fpH = 0; for (var fz = 0; fz < fpBasis.length; fz++) { fpH = ((fpH << 5) - fpH + fpBasis.charCodeAt(fz)) | 0; }
+        var fpKey = 'fp_' + Math.abs(fpH).toString(36);
+        var orArr = [];
+        if (j.linkedinJobId) orArr.push({ linkedinJobId: j.linkedinJobId });
+        if (j.jobId) orArr.push({ jobId: j.jobId });
+        orArr.push({ fpKey: fpKey });
         ops.push({
           updateOne: {
-            filter: { $or: [{ linkedinJobId: j.linkedinJobId }, { jobId: j.jobId }] },
+            filter: { $or: orArr },
             update: {
               $set: {
                 title: jobDoc.title, titleClean: jobDoc.titleClean, company: jobDoc.company,
@@ -942,7 +949,7 @@ exports.handler = async function(event) {
                 applyLink: jobDoc.applyLink, jobUrl: jobDoc.jobUrl,
                 experienceLevel: jobDoc.experienceLevel, sector: jobDoc.sector,
                 benefits: jobDoc.benefits, applicationsCount: jobDoc.applicationsCount,
-                detectedCountry: jobDoc.detectedCountry, dateScanned: jobDoc.dateScanned
+                detectedCountry: jobDoc.detectedCountry, dateScanned: jobDoc.dateScanned, fpKey: fpKey
               },
               $setOnInsert: {
                 status: 'new', companyType: '', notes: '',

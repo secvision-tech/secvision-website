@@ -5251,7 +5251,7 @@ async function _aiDraft(kind,job,profile,fallbackFn){
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'draftOutreach',kind:kind,job:job,profile:profile||null,force:!!window._ctForce})});window._ctForce=false;
     var d=await r.json();
     if(d&&(d.html||d.body)){
-      if(d.cached){var lx=document.getElementById('ctLoading');if(lx)lx.textContent='📦 Stored draft';}
+      var lx=document.getElementById('ctLoading');if(lx)lx.textContent=d.cached?'📦 From saved draft':'🤖 Generated with AI (saved for next time)';
       var fn=(profile&&profile.name?String(profile.name).split(' ')[0]:'there');
       d.html=String(d.html||'').replace(/\{\{FirstName\}\}/g,fn);
       d.body=String(d.body||'').replace(/\{\{FirstName\}\}/g,fn);
@@ -5288,8 +5288,9 @@ async function ctCopyRich(btn){
 }
 async function contactClient(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
-  var ld=document.createElement('div');ld.id='ctLoading';ld.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld.textContent='🤖 Drafting message with AI...';document.body.appendChild(ld);
-  var ok=await _aiDraft('client',j,null);
+  var ld=document.createElement('div');ld.id='ctLoading';ld.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld.textContent='✉️ Preparing message...';document.body.appendChild(ld);
+  var jb=Object.assign({},j,{jobId:String(j._id||j.jobId||'')});
+  var ok=await _aiDraft('client',jb,null);
   var l=document.getElementById('ctLoading');if(l)l.remove();
   if(ok)return;
   var has=function(v){return v&&String(v).trim()&&!/^see details$|^not disclosed$|^tbd/i.test(String(v).trim())};
@@ -5316,8 +5317,9 @@ async function contactClient(){
 async function contactConsultant(sid){
   var j=window._currentJobDoc||{};
   var pv=(window._mcProfiles&&_mcProfiles[sid])||{};
-  var ld2=document.createElement('div');ld2.id='ctLoading';ld2.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld2.textContent='🤖 Drafting message with AI...';document.body.appendChild(ld2);
-  var ok2=await _aiDraft('consultant',j,pv);
+  var ld2=document.createElement('div');ld2.id='ctLoading';ld2.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld2.textContent='✉️ Preparing message...';document.body.appendChild(ld2);
+  var jb2=Object.assign({},j,{jobId:String(j._id||j.jobId||'')});
+  var ok2=await _aiDraft('consultant',jb2,pv);
   var l2=document.getElementById('ctLoading');if(l2)l2.remove();
   if(ok2)return;
   var list=(j.candidateProfiles||[]);var meta=null;
