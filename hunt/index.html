@@ -417,7 +417,7 @@ body.role-viewer .edit-btn{display:none!important}
         <h2 style="font-size:.9rem;color:var(--pri);margin:0">🛡️ Consultant Database</h2>
         <div style="display:flex;gap:.4rem">
           <button onclick="refreshConsultants()" style="padding:.3rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔄 Refresh</button>
-          <button onclick="openUpworkFetch()" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🧲 Upwork Fetch</button><button onclick="openLinkedInHarvest()" style="padding:.3rem .7rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔗 LinkedIn Fetch</button><button id="promoteCachedBtn" onclick="openReviewPending()" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;display:none">⬆️ Import Cached Profiles</button>
+          <button onclick="openUpworkFetch()" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🧲 Upwork Fetch</button><button onclick="exportConsultantsCsv()" style="padding:.3rem .7rem;background:#065F46;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600" title="Download the currently filtered consultants as CSV (opens in Excel)">⬇️ Export CSV</button><button onclick="openLinkedInHarvest()" style="padding:.3rem .7rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔗 LinkedIn Fetch</button><button id="promoteCachedBtn" onclick="openReviewPending()" style="padding:.3rem .7rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600;display:none">⬆️ Import Cached Profiles</button>
           <button id="addConsultantBtn" onclick="openAddConsultant()" style="padding:.3rem .7rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">+ Add Profile</button>
         </div>
       </div>
@@ -5251,6 +5251,7 @@ async function _aiDraft(kind,job,profile,fallbackFn){
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'draftOutreach',kind:kind,job:job,profile:profile||null,force:!!window._ctForce})});window._ctForce=false;
     var d=await r.json();
     if(d&&(d.html||d.body)){
+      if(d.cached){var lx=document.getElementById('ctLoading');if(lx)lx.textContent='📦 Stored draft';}
       var fn=(profile&&profile.name?String(profile.name).split(' ')[0]:'there');
       d.html=String(d.html||'').replace(/\{\{FirstName\}\}/g,fn);
       d.body=String(d.body||'').replace(/\{\{FirstName\}\}/g,fn);
@@ -5350,6 +5351,28 @@ async function openReviewPending(){
   document.body.appendChild(ov);rvRender();
 }
 function rvSortBy(k){_rvSort=k;rvRender()}
+function consFilteredData(){
+  var certOnly=document.getElementById('consCertified')&&document.getElementById('consCertified').checked;
+  var data=certOnly?consultantsData.filter(function(cc){return matchedPriorityCerts(cc.certifications).length>0}):consultantsData.slice();
+  var flt=(window._consColFilters||{});var fk=Object.keys(flt).filter(function(k){return flt[k]});
+  if(fk.length){
+    var FMAP={1:function(cc){return cc.name||''},2:function(cc){return (cc.currentRole||cc.headline||'')},3:function(cc){return cc.currentCompany||''},4:function(cc){return cc.location||''},5:function(cc){return cc.country||''},6:function(cc){return cc.engagementType||''},7:function(cc){return cc.availability||''},8:function(cc){return cc.pipelineStatus||''},9:function(cc){return (cc.email||'')+' '+(cc.phone||'')},10:function(cc){return cc.source||''},11:function(cc){return (cc.skills||[]).join(' ')}};
+    data=data.filter(function(cc){return fk.every(function(k){var fn=FMAP[k];return fn&&fn(cc).toLowerCase().indexOf(flt[k])>=0})});
+  }
+  return data;
+}
+function exportConsultantsCsv(){
+  var data=consFilteredData();
+  if(!data.length){alert('No consultants in the current view.');return}
+  var esc=function(v){v=(v==null?'':String(v)).replace(/"/g,'""');return /[",\n]/.test(v)?'"'+v+'"':v};
+  var cols=['Name','Role','Company','Location','Country','Type','Availability','Pipeline','Email','Phone','LinkedIn','Source','Years','Rate','Skills','Certifications','Compliance'];
+  var rows=[cols.join(',')];
+  data.forEach(function(cc){rows.push([cc.name,cc.currentRole||cc.headline,cc.currentCompany,cc.location,cc.country,cc.engagementType,cc.availability,cc.pipelineStatus,cc.email,cc.phone,cc.linkedinUrl,cc.source,cc.yearsExperience,cc.rateExpectation,(cc.skills||[]).join('; '),(cc.certifications||[]).join('; '),(cc.compliance||[]).join('; ')].map(esc).join(','))});
+  var blob=new Blob(['\ufeff'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='SecVision_Consultants_'+new Date().toISOString().slice(0,10)+'.csv';
+  document.body.appendChild(a);a.click();a.remove();
+}
 function applyConsFilters(){
   // #532: collect filters, reset to page 1, re-render over the full dataset
   var m={};
