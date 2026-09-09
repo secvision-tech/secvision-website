@@ -1916,6 +1916,7 @@ async function viewDet(i){
   window._currentJobDoc=j;
   if(CAP.canContacts&&!mjFromConsultant)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
   if(CAP.canContacts)h+='<button onclick="contactClient()" class="dm-apply" style="background:#047857;border:none;cursor:pointer">✉️ Contact Client</button>';
+  if(CAP.canStatus)h+='<button onclick="deleteJobProfile()" class="dm-apply" style="background:#DC2626;border:none;cursor:pointer" title="Permanently delete this job profile">🗑 Delete Job</button>';
   if(mjFromConsultant)h+='<span style="font-size:.6rem;color:var(--g5);font-style:italic">Opened from a consultant — matched candidates for this job are shown below.</span>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--ac);text-decoration:underline">View original posting &rarr;</a>';
   h+='</div>';
@@ -5285,6 +5286,20 @@ async function ctCopyRich(btn){
   }catch(e){
     var range=document.createRange();range.selectNodeContents(el);var sel=getSelection();sel.removeAllRanges();sel.addRange(range);document.execCommand('copy');sel.removeAllRanges();btn.textContent='✅ Copied';
   }
+}
+async function deleteJobProfile(){
+  var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
+  var label=(j.title||'this job')+(j.company?' — '+j.company:'');
+  if(!confirm('Delete the job profile "'+label+'" permanently?\n\nThis removes the job (including its saved matches, outreach drafts, assignments and comments reference). Consultant profiles themselves are NOT deleted.\n\nThis cannot be undone.'))return;
+  if(!confirm('Really delete "'+label+'"? Final confirmation.'))return;
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteJob',id:String(j._id||''),jobId:String(j.jobId||'')})});
+    var d=await r.json();
+    if(d.error){alert('⚠️ '+d.error);return}
+    alert('🗑 Deleted: '+(d.title||label));
+    var dm=document.getElementById('detailOverlay');if(dm)dm.style.display='none';
+    try{searchDbJobs&&searchDbJobs()}catch(e){}
+  }catch(e){alert('⚠️ '+e.message)}
 }
 async function contactClient(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}

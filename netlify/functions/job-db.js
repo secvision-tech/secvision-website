@@ -226,7 +226,7 @@ exports.handler = async (event) => {
 
     // Define RBAC rules per action
     var ACTION_ROLES = {
-      'search': ALL_ACTIVE, 'getDashboard': ALL_ACTIVE, 'getJob': ALL_ACTIVE,
+      'search': ALL_ACTIVE, 'getDashboard': ALL_ACTIVE, 'getJob': ALL_ACTIVE, 'deleteJob': ['super_admin', 'admin', 'manager'],
       'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE,
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       // #336: company/job field edits are manager+ ; status is analyst+
@@ -353,6 +353,19 @@ exports.handler = async (event) => {
     }
 
     // ACTION: get - get single job with full description
+    if (action === 'deleteJob') {
+      // #560: permanent job deletion (role-gated), removes the job document only —
+      // consultants referenced as candidates remain untouched in their own collection.
+      var { ObjectId: DOID } = require('mongodb');
+      var dq = null;
+      if (body.id && /^[0-9a-f]{24}$/i.test(String(body.id))) dq = { _id: new DOID(String(body.id)) };
+      else if (body.jobId) dq = { jobId: String(body.jobId) };
+      if (!dq) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Provide id or jobId' }) };
+      var ddoc = await col.findOne(dq, { projection: { title: 1, company: 1 } });
+      if (!ddoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      await col.deleteOne({ _id: ddoc._id });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ deleted: true, title: ddoc.title || '', company: ddoc.company || '' }) };
+    }
     if (action === 'get') {
       var { ObjectId } = require('mongodb');
       var job = await col.findOne({ _id: new ObjectId(body.id) });
