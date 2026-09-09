@@ -1797,6 +1797,16 @@ function matchAvailBadge(m){
 }
 function detNav(d){var n=currentViewIdx+d;if(n>=0&&n<allJobs.length)viewDet(n)}   // #460
 async function viewDet(i){
+  console.time('viewDet');
+  try{await _viewDetCore(i)}
+  catch(e){console.error('viewDet FAILED:',e);alert('Job popup failed: '+e.message)}
+  finally{
+    console.timeEnd('viewDet');
+    var _ov=document.getElementById('detailOverlay');
+    console.log('viewDet diagnostics — index:',i,'| job found:',!!(allJobs&&allJobs[i]),'| overlay has open class:',!!(_ov&&_ov.classList.contains('open')),'| overlay computed display:',_ov?getComputedStyle(_ov).display:'no-overlay');
+  }
+}
+async function _viewDetCore(i){
   mjFromConsultant=!!_mjPending;_mjPending=false;  // #418: one-shot; normal opens default to false
   currentViewIdx=i;
   var j=allJobs[i];if(!j)return;
