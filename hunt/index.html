@@ -5230,7 +5230,7 @@ async function saveDemand(){
     if(d.error){st.textContent='⚠️ '+d.error;go.disabled=false;return}
     if(d.filtered){st.textContent='⚠️ The pipeline judged this not cybersecurity-relevant — add security terms to the description.';go.disabled=false;return}
     st.textContent='✅ Requirement saved ('+(d.saved!=null?d.saved:1)+'). It now appears in the jobs table and matches against consultants.';
-    setTimeout(function(){document.getElementById('adOverlay').remove();try{searchDbJobs&&searchDbJobs()}catch(e){}},1400);
+    setTimeout(function(){document.getElementById('adOverlay').remove();try{if(typeof searchDb==='function')searchDb()}catch(e){}},1400);
   }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
 }
 // ===== #550 outreach drafts: client (job popup) + consultant (match rows) =====
@@ -5298,7 +5298,7 @@ async function deleteJobProfile(){
     if(d.error){alert('⚠️ '+d.error);return}
     alert('🗑 Deleted: '+(d.title||label));
     var dm=document.getElementById('detailOverlay');if(dm)dm.style.display='none';
-    try{searchDbJobs&&searchDbJobs()}catch(e){}
+    try{if(typeof searchDb==='function')searchDb()}catch(e){}
   }catch(e){alert('⚠️ '+e.message)}
 }
 async function contactClient(){
