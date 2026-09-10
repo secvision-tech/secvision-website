@@ -456,6 +456,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
       role: p.currentRole || p.headline,
       years: p.yearsExperience,
       contractor: p.contractorSignal ? p.contractorSignal.likely : false,
+      rate: p.rateExpectation || p.hourlyRate || '',   // #570: the scorer must SEE the candidate's rate
       skills: (p.skills || []).slice(0, 25),
       certs: (p.certifications || []).slice(0, 12),
       summary: (p.summary || '').slice(0, 200),
@@ -488,6 +489,8 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Certifications preferred: ' + (req.certifications.join(', ') || 'none') + '\n' +
     'Compliance experience: ' + (req.compliance.join(', ') || 'none') + '\n' +
     'Experience required: ' + (req.experienceRequired || 'not specified') + '\n' +
+    'Rate/Budget offered: ' + (req.salary || 'not specified') + '\n' +
+    'RATE SCORING RULE: score the rate dimension ONLY from the two rates. Candidate rate comfortably within/below the offered budget = 85-100 (the further below, the higher); slightly above budget = 55-70; far above = 10-40. If EITHER the budget or the candidate rate is missing, score rate exactly 50 (neutral unknown) - never guess or assume an average.\n' +
     (scoreEducation ? 'Education required: ' + req.educationRequired + '\n' : '') +
     'NOTE: geography/location/time zone is scored by a separate deterministic system — do NOT consider candidate location in ANY dimension.\n' +
     'Engagement type: ' + (req.isContractRole ? 'CONTRACT — prefer candidates who are contractors/consultants/freelancers open to contract work (see contractorLikely flag). Penalize role score for candidates who appear to be settled full-time employees not open to contract.' : 'Full-time or either') + '\n\n' +
