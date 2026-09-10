@@ -674,7 +674,12 @@ const LOC_PENALTY = {
 };
 
 function jobIsRemote(req) {
-  var hay = ((req.remote || '') + ' ' + (req.jobType || '') + ' ' + (req.title || '') + ' ' + (req.location || '')).toLowerCase();
+  // #572: the remote field itself is authoritative when it carries an explicit value —
+  // "Yes"/"true" (the popup edit stores "Yes") means remote even though the WORD isn't there.
+  var rf = String(req.remote || '').trim().toLowerCase();
+  if (/^(yes|true|remote)\b/.test(rf)) return true;
+  if (/^(no|false)\b/.test(rf) && !/hybrid|remote/.test(rf)) return false;
+  var hay = (rf + ' ' + (req.jobType || '') + ' ' + (req.title || '') + ' ' + (req.location || '')).toLowerCase();
   if (/\b(remote|work from home|wfh|telecommute|anywhere|distributed)\b/.test(hay)) return true;
   if (/\b(on-?site|onsite|in-?office|hybrid)\b/.test(hay)) return false;
   return null; // unknown
