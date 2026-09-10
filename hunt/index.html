@@ -4228,7 +4228,7 @@ function renderConsultants(){
     if(!contact)contact='<span style="color:var(--g3);font-size:.55rem">—</span>';
     h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
       +'<td style="padding:.4rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+rowNum+'</td>'
-      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+matchJobsBadge(c)+(c.contractSignal?' <span title="Profile signals contract/freelance intent" style="font-size:.5rem;background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;padding:.02rem .25rem;border-radius:3px;font-weight:700">⚡C2C</span>':'')+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
+      +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+matchJobsBadge(c)+(c.contractSignal?' <span title="Profile signals contract/freelance intent" style="font-size:.5rem;background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;padding:.02rem .25rem;border-radius:3px;font-weight:700">⚡C2C</span>':'')+(c.linkedinUrl?' <a href="'+normUrl(c.linkedinUrl)+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
       +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
@@ -4691,14 +4691,14 @@ function renderManageProfile(){
   }
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .72rem;margin-bottom:.72rem;font-size:.84rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.84rem;padding:.72rem;background:var(--g1);border-radius:6px">';
-  h+=fld('Name',esc(c.name)+' <a href="#" onclick="editConsField(\''+c._id+'\',\'name\',\'Name\',\''+esc(c.name||'').replace(/'/g,'')+'\',false);return false" title="Edit name" style="font-size:.66rem;text-decoration:none">✏️</a>'+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>'
+  h+=fld('Name',esc(c.name)+' <a href="#" onclick="editConsField(\''+c._id+'\',\'name\',\'Name\',\''+esc(c.name||'').replace(/'/g,'')+'\',false);return false" title="Edit name" style="font-size:.66rem;text-decoration:none">✏️</a>'+(c.linkedinUrl?' <a href="'+normUrl(c.linkedinUrl)+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>'
     :' <a href="https://www.google.com/search?q='+encodeURIComponent('"'+String(c.name||'')+'" '+String(c.currentRole||'').split(' ').slice(0,3).join(' ')+' '+String(normLoc(c.location)||'').split(',')[0]+' '+(c.country||'')+' site:linkedin.com/in')+'" target="_blank" title="Search LinkedIn (Google X-ray)" style="font-size:.68rem;color:#0E7490;text-decoration:none">🔍 Find LinkedIn</a>'));
   h+=fld('Consultant ID',idChip(c._id||c.sourceId));
   h+=fld('Role',esc(c.currentRole||c.headline)+' <a href="#" onclick="editConsField(\''+c._id+'\',\'currentRole\',\'Role\',\''+esc(c.currentRole||'').replace(/'/g,'')+'\',false);return false" title="Edit role" style="font-size:.66rem;text-decoration:none">✏️</a>');
   h+=fld('Company',esc(c.currentCompany||'')+' <a href="#" onclick="editConsCompany(\''+c._id+'\',\''+esc(c.currentCompany||'').replace(/'/g,'')+'\');return false" title="Edit company" style="text-decoration:none;font-size:.65rem">✏️</a>'+(c.linkedinUrl?' <a href="#" onclick="enrichConsFromLinkedIn(\''+c._id+'\');return false" title="Fill empty fields (company, location, years, skills, certs, summary) from the LinkedIn profile" style="text-decoration:none;font-size:.72rem;color:#0E7490">🔄 Enrich from LinkedIn</a>':''));
   h+=fld('Location',esc(normLoc(c.location))+' <a href="#" onclick="editConsField(\''+c._id+'\',\'location\',\'Location\',\''+esc(normLoc(c.location)||'').replace(/'/g,'')+'\',false);return false" title="Edit location" style="font-size:.66rem;text-decoration:none">✏️</a>'+(c.country?' ('+esc(c.country)+')':'')+(c.location||c.country?' <a href="https://www.google.com/maps/search/?api=1&query='+encodeURIComponent((c.location?c.location+', ':'')+(c.country||''))+'" target="_blank" title="Open on Google Maps" style="text-decoration:none">📍</a>':''));
   h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.62rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
-  h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual'))+(c.upwork&&c.upwork.profileUrl?' <a href="'+esc(c.upwork.profileUrl)+'" target="_blank" style="color:#14A800;font-size:.68rem">Upwork ↗</a>':'')+(c.linkedinUrl?' <a href="'+esc(c.linkedinUrl)+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>':''));
+  h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual'))+(c.upwork&&c.upwork.profileUrl?' <a href="'+esc(c.upwork.profileUrl)+'" target="_blank" style="color:#14A800;font-size:.68rem">Upwork ↗</a>':'')+(c.linkedinUrl?' <a href="'+esc(normUrl(c.linkedinUrl))+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>':''));
   h+='</div>';
   // Stage 3: reverse matching — which open roles does this consultant fit?
   h+='<div style="border:1px solid #DDD6FE;background:#FAF5FF;border-radius:6px;padding:.62rem .72rem;margin-bottom:.84rem">'
@@ -5496,6 +5496,7 @@ async function aiFmtSummary(elId,link){
     el.innerHTML=h;link.textContent='✨ formatted';
   }catch(e){link.textContent='⚠️ '+e.message}
 }
+function normUrl(u){u=String(u||'').trim();if(!u)return'';return /^https?:\/\//i.test(u)?u:'https://'+u.replace(/^\/+/,'');}
 function normLoc(s){
   s=String(s||'').trim();if(!s)return s;
   // LinkedIn locale leakage: "Spojené státy (United States)" — prefer the English name in parentheses
@@ -6062,7 +6063,7 @@ async function loadJobCandidates(){
       h+='<tr'+selCls+' data-sid="'+esc(c.sourceId)+'" style="border-bottom:1px solid var(--g1)">'
         +'<td style="color:var(--g4);font-weight:600;text-align:right">'+(i+1)+'</td>'
         +'<td style="text-align:right"><span style="font-weight:700;color:'+col+'">'+pct+'%</span></td>'
-        +'<td style="font-weight:600" title="'+esc(c.name)+'">'+esc(c.name)+(c.linkedinUrl?' <a href="'+c.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
+        +'<td style="font-weight:600" title="'+esc(c.name)+'">'+esc(c.name)+(c.linkedinUrl?' <a href="'+normUrl(c.linkedinUrl)+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
         +'<td style="color:var(--g5)" title="'+esc(c.currentRole||'')+'">'+esc(c.currentRole||'—')+'</td>'
         +'<td style="color:var(--g5);text-align:right" title="Years of experience">'+(c.yearsExperience?c.yearsExperience+'y':'—')+'</td>'
         +'<td style="color:var(--g5)" title="'+esc(loc)+'">'+esc(loc||'—')+'</td>'
@@ -6169,7 +6170,7 @@ function matchCard(m,rank){
   var cardId='mc'+rank;
   return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
-    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+matchAvailBadge(m)+(m.linkedinUrl?' <a href="'+m.linkedinUrl+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
+    +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+matchAvailBadge(m)+(m.linkedinUrl?' <a href="'+normUrl(m.linkedinUrl)+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
     +'<div style="font-size:.6rem;color:var(--g5)">'+esc(m.headline||m.currentRole||'')+'</div>'
     +'<div style="font-size:.55rem;color:var(--g4)">'+esc(m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
     +'<div style="text-align:center;flex-shrink:0"><div style="font-size:1.3rem;font-weight:800;color:'+col+';line-height:1">'+m.overall+'%</div><div style="font-size:.5rem;color:var(--g4)">match</div></div>'

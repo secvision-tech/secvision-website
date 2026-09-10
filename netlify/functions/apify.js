@@ -523,7 +523,7 @@ exports.handler = async function(event) {
           name: name, currentRole: (ai && ai.role) || (real[0] && real[0].title) || (hlOk ? hl.split('|')[0].trim() : ''),
           currentCompany: (real[0] && real[0].companyName) || '',
           location: String(loc).replace(/,\s*India$/i, ''), country: wantC.replace(/\b\w/g, function (c) { return c.toUpperCase(); }),
-          rateExpectation: '', linkedinUrl: p.linkedinUrl || p.url || ('https://www.linkedin.com/in/' + slug), email: '',
+          rateExpectation: '', linkedinUrl: (function(u){u=String(u||'').trim();return u?(/^https?:\/\//i.test(u)?u:'https://'+u):'https://www.linkedin.com/in/'+slug})(p.linkedinUrl || p.url), email: '',
           skills: luniq((p.skills || []).filter(function (sx) { return !/\b(school|university|college|institute)\b/i.test(sx); }).concat((ai && ai.tools) || [])).slice(0, 40),
           certifications: luniq(((p.certifications || []).map(function (cc) { return cc.name || cc; })).concat((ai && ai.certifications) || [])),
           compliance: luniq((ai && ai.standards) || []),
