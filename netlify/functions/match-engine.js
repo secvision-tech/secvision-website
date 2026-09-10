@@ -1450,6 +1450,38 @@ exports.handler = async function (event) {
     }
 
     // ---- Stage 3: matchJobs — reverse matching, one consultant -> jobs in a time window ----
+    // ============ #566 SCORE ONE CONSULTANT vs ONE JOB (inspector — shows sub-60 too) ============
+    if (action === 'scoreOne') {
+      var { ObjectId: SOID } = require('mongodb');
+      var scCol = db.collection('consultant_profiles');
+      var sjCol = db.collection('jobs');
+      var sp = null;
+      try { sp = await scCol.findOne(/^[0-9a-f]{24}$/i.test(String(body.consultantId)) ? { _id: new SOID(String(body.consultantId)) } : { sourceId: String(body.consultantId) }); } catch (se) {}
+      if (!sp) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Consultant not found' }) };
+      var sjq = /^[0-9a-f]{24}$/i.test(String(body.jobId)) ? { $or: [{ _id: new SOID(String(body.jobId)) }, { jobId: String(body.jobId) }] } : { jobId: String(body.jobId) };
+      var sj = await sjCol.findOne(sjq, { projection: { jobId: 1, title: 1, company: 1 } });
+      if (!sj) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Job not found for id ' + String(body.jobId) }) };
+      var sReq = await getReq(sj.jobId || String(body.jobId));
+      if (!sReq) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Could not build requirement from the job' }) };
+      var sWeights = DEFAULT_WEIGHTS;
+      var sGate = applyHardGates(sReq, sp);
+      var sCacheKey = 'matchCache.' + sReq.jobId;
+      var sCached = sp.matchCache && sp.matchCache[sReq.jobId];
+      if (sCached && sCached.v === SCORING_VERSION && !body.force) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: sCached.overall, dimensions: sCached.dimensions || {}, reason: sCached.reason || '', flags: sCached.flags || [], gatePassed: sGate.passed, gateReasons: sGate.reasons, cached: true, job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
+      }
+      if (!sGate.passed) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: 0, dimensions: {}, reason: 'Disqualified: ' + sGate.reasons.join('; '), flags: sGate.flags, gatePassed: false, gateReasons: sGate.reasons, cached: false, job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
+      }
+      try {
+        var sRes = await scoreProfilesBatch(sReq, [sp], sWeights);
+        var sr0 = sRes && sRes[0];
+        if (!sr0) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Scoring returned nothing — retry' }) };
+        var sEntry = { overall: sr0.overall, dimensions: sr0.dimensions, reason: sr0.reason, flags: sGate.flags, scoredAt: new Date(), v: SCORING_VERSION };
+        try { await scCol.updateOne({ _id: sp._id }, { $set: { [sCacheKey]: sEntry } }); } catch (pe) {}
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: sr0.overall, dimensions: sr0.dimensions, reason: sr0.reason, flags: sGate.flags, gatePassed: true, cached: false, job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
+      } catch (sce) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Scoring failed: ' + sce.message }) }; }
+    }
     if (action === 'matchJobs') {
       var consId = body.consultantId || '';
       if (!consId) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'consultantId required' }) };

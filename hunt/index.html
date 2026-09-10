@@ -4460,6 +4460,30 @@ function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="f
 
 // ---- Stage 3: Match Jobs (reverse matching from a consultant) ----
 var mjState={consultantId:null,page:0,evalCap:50};
+async function scoreVsJob(){
+  var cm=manageProfileData;if(!cm)return;
+  var jid=(document.getElementById('mpProbeJobId').value||'').trim();
+  var out=document.getElementById('mpProbeResult'),btn=document.getElementById('mpProbeBtn');
+  if(!jid){out.innerHTML='<span style="font-size:.7rem;color:#B45309">Enter a Job ID.</span>';return}
+  btn.disabled=true;out.innerHTML='<span style="font-size:.7rem;color:var(--g5)">⏳ Scoring against the job...</span>';
+  try{
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'scoreOne',consultantId:String(cm._id),jobId:jid})});
+    var d=await r.json();btn.disabled=false;
+    if(d.error){out.innerHTML='<span style="font-size:.7rem;color:#B91C1C">⚠️ '+esc(d.error)+'</span>';return}
+    var pct=Math.round(d.overall||0);
+    var col=pct>=60?'#047857':(pct>=40?'#B45309':'#B91C1C');
+    var dims=d.dimensions||{};
+    var bar=function(label,val){val=Math.round(val||0);return '<div style="display:flex;align-items:center;gap:.4rem;font-size:.66rem;margin:.12rem 0"><span style="width:9ch;color:var(--g5)">'+label+'</span><div style="flex:1;background:#F1F5F9;border-radius:3px;height:9px;max-width:220px"><div style="width:'+val+'%;background:'+(val>=60?'#10B981':(val>=40?'#F59E0B':'#EF4444'))+';height:9px;border-radius:3px"></div></div><span style="width:4ch;text-align:right">'+val+'</span></div>'};
+    out.innerHTML='<div style="border:1px solid var(--g100);border-radius:8px;padding:.55rem .7rem;background:#FAFAFA">'
+      +'<div style="display:flex;align-items:center;gap:.7rem;margin-bottom:.3rem"><span style="font-size:1.15rem;font-weight:800;color:'+col+'">'+pct+'%</span>'
+      +'<span style="font-size:.72rem;color:var(--g5)">vs <b>'+esc((d.job&&d.job.title)||'')+'</b>'+((d.job&&d.job.company)?' — '+esc(d.job.company):'')+'</span>'
+      +(d.cached?'<span style="font-size:.6rem;background:#EEF2FF;color:#4338CA;border-radius:3px;padding:.05rem .3rem">cached</span>':'')+'</div>'
+      +bar('Skills',dims.skills)+bar('Certs',dims.certifications)+bar('Compliance',dims.compliance)+bar('Role',dims.role)+bar('Experience',dims.experience)+bar('Rate',dims.rate)
+      +(d.reason?'<div style="font-size:.68rem;color:#374151;margin-top:.3rem"><b>Reason:</b> '+esc(d.reason)+'</div>':'')
+      +((d.flags&&d.flags.length)?'<div style="font-size:.64rem;color:#92400E;margin-top:.2rem">⚑ '+d.flags.map(esc).join(' · ')+'</div>':'')
+      +'</div>';
+  }catch(e){btn.disabled=false;out.innerHTML='<span style="font-size:.7rem;color:#B91C1C">⚠️ '+esc(e.message)+'</span>'}
+}
 function runMatchJobs(page,noScore){
   var c=manageProfileData;
   if(!c)return;
@@ -4684,6 +4708,8 @@ function renderManageProfile(){
     +'<option value="1m">Last 1 month</option></select>'
     +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.2rem .72rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
     +'</span></div>'
+    +'<div style="margin-top:.45rem;display:flex;gap:.4rem;align-items:center"><input id="mpProbeJobId" placeholder="Job ID (e.g. 69f8b231f1c8e21d6a11b1cf)" style="flex:1;max-width:340px;padding:.3rem .45rem;font-size:.7rem;border:1px solid var(--g100);border-radius:4px"><button onclick="scoreVsJob()" id="mpProbeBtn" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.7rem;cursor:pointer;font-weight:600" title="Score this consultant against one specific job — result shown even below 60%">🎯 Score vs Job</button></div>'
+    +'<div id="mpProbeResult" style="margin-top:.4rem"></div>'
     +'<div id="mjStatus" style="font-size:.84rem;color:var(--g5);margin-top:.35rem"></div>'
     +'<div id="mjResults" style="margin-top:.4rem"></div>'
     +'</div>';
@@ -5857,6 +5883,13 @@ async function runMatch(page,navOnly,force){
     var ci=document.getElementById('cacheInfo');
     if(ci&&page===0){
       var txt='Evaluated '+(d.evaluated||0)+' of '+(d.cachedCount||0)+' cached profile'+((d.cachedCount||0)===1?'':'s')+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.';
+      // #565: show what THIS click scored, so below-threshold results are visible, not mysterious
+      if(d.justScored&&d.justScored.length){
+        var js=d.justScored.slice().sort(function(a,b){return (b.overall||0)-(a.overall||0)});
+        var crossed=js.filter(function(x){return (x.overall||0)>=60}).length;
+        var top3=js.slice(0,3).map(function(x){return esc((x.name||'?').split(' ')[0])+' '+(x.overall||0)+'%'}).join(', ');
+        txt+=' <span style="color:'+(crossed?'#047857':'#92400E')+'">This click scored '+js.length+' new ('+(js[0]&&js[0].country?esc(js[0].country):'')+'): '+(crossed?crossed+' crossed 60! ':'none ≥60 — ')+'best: '+top3+'.</span>';
+      }
       var extra='';
       // #416: we deliberately stopped early. Say so, and let the user go further if they want.
       if(d.canScoreMore&&d.unscoredLeft>0){
