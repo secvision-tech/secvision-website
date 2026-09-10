@@ -6041,7 +6041,7 @@ async function autoAddCandidates(refs){
   }catch(e){}
   if(jobCandidatesJobId)loadJobCandidates();
 }
-async function _candTh(label,key,align,w){
+function _candTh(label,key,align,w){
   var cs=window._candSort||{key:'overall',dir:-1};
   var arrow=cs.key===key?(cs.dir===1?' ▲':' ▼'):'';
   return '<th onclick="candSortBy(\''+key+'\')" title="Click to sort" style="text-align:'+align+';overflow:hidden;width:'+w+';cursor:pointer;user-select:none">'+label+arrow+'</th>';
