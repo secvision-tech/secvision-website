@@ -6041,6 +6041,22 @@ async function autoAddCandidates(refs){
   }catch(e){}
   if(jobCandidatesJobId)loadJobCandidates();
 }
+async function _candTh(label,key,align,w){
+  var cs=window._candSort||{key:'overall',dir:-1};
+  var arrow=cs.key===key?(cs.dir===1?' ▲':' ▼'):'';
+  return '<th onclick="candSortBy(\''+key+'\')" title="Click to sort" style="text-align:'+align+';overflow:hidden;width:'+w+';cursor:pointer;user-select:none">'+label+arrow+'</th>';
+}
+function candSortBy(key){
+  var cs=window._candSort||{key:'overall',dir:-1};
+  window._candSort=(cs.key===key)?{key:key,dir:-cs.dir}:{key:key,dir:(key==='name'||key==='role'||key==='loc'||key==='type'||key==='pipe')?1:-1};
+  loadJobCandidates();
+}
+var _candFilterTimer=null;
+function candFilterInput(v){
+  window._candFilterVal=v;
+  clearTimeout(_candFilterTimer);
+  _candFilterTimer=setTimeout(function(){var b=document.getElementById('candFilterBox');var pos=b?b.selectionStart:0;loadJobCandidates();setTimeout(function(){var nb=document.getElementById('candFilterBox');if(nb){nb.focus();nb.setSelectionRange(pos,pos)}},120)},350);
+}
 async function loadJobCandidates(){
   var wrap=document.getElementById('jobCandidates');if(!wrap||!jobCandidatesJobId)return;
   wrap.innerHTML='<div style="font-size:.62rem;color:var(--g5)">Loading matched candidates...</div>';
@@ -6048,6 +6064,14 @@ async function loadJobCandidates(){
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'listCandidates',jobId:jobCandidatesJobId})});
     var d=await r.json();
     var list=d.candidates||[];
+    // #573: client-side filter + sort (raw list kept; resize never sorts — grips stop propagation)
+    if(window._candFilterVal){
+      var _cf=window._candFilterVal.toLowerCase();
+      list=list.filter(function(cc){return ((cc.name||'')+' '+(cc.currentRole||cc.headline||'')+' '+(cc.location||'')+' '+(cc.country||'')+' '+(cc.engagementType||'')+' '+(cc.pipelineStatus||'')).toLowerCase().indexOf(_cf)>=0});
+    }
+    var _cs=window._candSort||{key:'overall',dir:-1};
+    var _cv=function(cc){switch(_cs.key){case 'overall':return cc.overall||0;case 'name':return (cc.name||'').toLowerCase();case 'role':return (cc.currentRole||cc.headline||'').toLowerCase();case 'exp':return cc.yearsExperience||0;case 'loc':return ((cc.location||cc.country||'')+'').toLowerCase();case 'type':return (cc.engagementType||'').toLowerCase();case 'pipe':return (cc.pipelineStatus||'').toLowerCase();default:return cc.overall||0}};
+    list=list.slice().sort(function(a,b){var av=_cv(a),bv=_cv(b);return (av<bv?-1:(av>bv?1:0))*_cs.dir});
     var header='<div style="border-top:2px solid var(--g2);padding-top:.7rem">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">'
       +'<div style="font-size:.72rem;font-weight:700;color:var(--pri)">📋 Matched Candidates'+(list.length?' ('+list.length+')':'')+'</div>'
@@ -6057,16 +6081,17 @@ async function loadJobCandidates(){
     // #400: remember the on-screen order so the Manage popup can navigate prev/next
     _candidateNav=list.filter(function(c){return c._id}).map(function(c){return {_id:c._id,name:c.name}});
     var h=header
+      +'<div style="margin-bottom:.35rem"><input id="candFilterBox" placeholder="🔎 Filter candidates (name, role, location, type, pipeline)" value="'+esc(window._candFilterVal||'')+'" oninput="candFilterInput(this.value)" style="width:100%;max-width:380px;padding:.28rem .45rem;font-size:.66rem;border:1px solid var(--g100);border-radius:4px"></div>'
       +'<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px">'
       +'<table id="candTable" style="width:100%;border-collapse:collapse;font-size:.65rem;table-layout:fixed;min-width:110ch"><thead><tr style="background:var(--g1)">'
       +'<th style="text-align:right;overflow:hidden;width:4ch">#</th>'
-      +'<th style="text-align:right;overflow:hidden;width:8ch">Match</th>'
-      +'<th style="text-align:left;overflow:hidden;width:22ch">Name</th>'
-      +'<th style="text-align:left;overflow:hidden;width:24ch">Role</th>'
-      +'<th style="text-align:right;overflow:hidden;width:6ch">Exp</th>'
-      +'<th style="text-align:left;overflow:hidden;width:18ch">Location</th>'
-      +'<th style="text-align:left;overflow:hidden;width:12ch">Type</th>'
-      +'<th style="text-align:left;overflow:hidden;width:14ch">Pipeline</th>'
+      +_candTh('Match','overall','right','8ch')
+      +_candTh('Name','name','left','22ch')
+      +_candTh('Role','role','left','24ch')
+      +_candTh('Exp','exp','right','6ch')
+      +_candTh('Location','loc','left','18ch')
+      +_candTh('Type','type','left','12ch')
+      +_candTh('Pipeline','pipe','left','14ch')
       +'<th style="text-align:center;width:16ch">Action</th>'
       +'</tr></thead><tbody>';
     window._mcProfiles=window._mcProfiles||{};
