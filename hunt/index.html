@@ -4278,10 +4278,12 @@ function editConsField(id,field,label,cur,isList){
 }
 async function saveProfileEdits(){
   var cm=manageProfileData;if(!cm)return;
-  if(!Object.keys(_mpPending).length){mpMsg('Nothing to save — no staged edits.','var(--g5)');return}
+  var ss=document.getElementById('mpSaveStatus');
+  if(!Object.keys(_mpPending).length){mpMsg('Nothing to save — no staged edits.','var(--g5)');if(ss){ss.textContent='nothing to save';ss.style.color='var(--g5)'}return}
+  if(ss){ss.textContent='⏳ saving...';ss.style.color='var(--pri)'}
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:cm._id,updates:_mpPending})});
-    var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');return}
-    _mpPending={};window._mpChanged=true;mpMsg('✅ Profile saved.','#047857');setTimeout(function(){openManageProfile(cm._id)},700);
+    var d=await r.json();if(d.error){mpMsg('⚠️ '+d.error,'#B91C1C');if(ss){ss.textContent='⚠️ failed';ss.style.color='#B91C1C'}return}
+    _mpPending={};window._mpChanged=true;mpMsg('✅ Profile saved.','#047857');if(ss){ss.textContent='✅ saved';ss.style.color='#047857'}setTimeout(function(){openManageProfile(cm._id)},700);
   }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C')}
 }
 function _enrSt(msg,color){
@@ -4480,7 +4482,7 @@ async function scoreVsJob(force){
       +'<span style="font-size:.72rem;color:var(--g5)">vs <b>'+esc((d.job&&d.job.title)||'')+'</b>'+((d.job&&d.job.company)?' — '+esc(d.job.company):'')+'</span>'
       +(d.cached?'<span style="font-size:.6rem;background:#EEF2FF;color:#4338CA;border-radius:3px;padding:.05rem .3rem">cached</span>':'<span style="font-size:.6rem;background:#ECFDF5;color:#047857;border-radius:3px;padding:.05rem .3rem">fresh</span>')+'<button onclick="scoreVsJob(true)" title="Re-evaluate now, bypassing the cached score (new LLM call)" style="margin-left:auto;padding:.15rem .55rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">♻️ Re-evaluate</button>'+'</div>'
       +bar('Skills',dims.skills)+bar('Certs',dims.certifications)+bar('Compliance',dims.compliance)+bar('Role',dims.role)+bar('Experience',dims.experience)+bar('Rate',dims.rate)
-      +(d.reason?'<div style="font-size:.68rem;color:#374151;margin-top:.3rem"><b>Reason:</b> '+esc(d.reason)+'</div>':'')
+      +(d.addedToJob?'<div style="font-size:.66rem;color:#047857;margin-top:.25rem">✅ ≥60% — automatically added to this job\'s matched candidates list.</div>':'')+(d.reason?'<div style="font-size:.68rem;color:#374151;margin-top:.3rem"><b>Reason:</b> '+esc(d.reason)+'</div>':'')
       +((d.flags&&d.flags.length)?'<div style="font-size:.64rem;color:#92400E;margin-top:.2rem">⚑ '+d.flags.map(esc).join(' · ')+'</div>':'')
       +'</div>';
   }catch(e){btn.disabled=false;out.innerHTML='<span style="font-size:.7rem;color:#B91C1C">⚠️ '+esc(e.message)+'</span>'}
@@ -4819,7 +4821,7 @@ function renderManageProfile(){
   }
 
   if(curUserRole==='admin'||curUserRole==='super_admin'){
-    h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;display:flex;justify-content:space-between;align-items:center"><button onclick="saveProfileEdits()" style="padding:.3rem .84rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">💾 Save Profile</button><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
+    h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;display:flex;justify-content:space-between;align-items:center"><button onclick="saveProfileEdits()" style="padding:.3rem .84rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">💾 Save Profile</button><span id="mpSaveStatus" style="font-size:.68rem;margin-left:.5rem;color:var(--g5)"></span><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
   }
   document.getElementById('mpBody').innerHTML=h;
   // #419: show any previously-saved matched jobs immediately (no scoring, free).
