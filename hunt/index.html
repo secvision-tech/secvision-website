@@ -4460,14 +4460,15 @@ function fld(label,val){return '<div style="margin-bottom:.35rem"><span style="f
 
 // ---- Stage 3: Match Jobs (reverse matching from a consultant) ----
 var mjState={consultantId:null,page:0,evalCap:50};
-async function scoreVsJob(){
+async function scoreVsJob(force){
+  window._probeForce=!!force;
   var cm=manageProfileData;if(!cm)return;
   var jid=(document.getElementById('mpProbeJobId').value||'').trim();
   var out=document.getElementById('mpProbeResult'),btn=document.getElementById('mpProbeBtn');
   if(!jid){out.innerHTML='<span style="font-size:.7rem;color:#B45309">Enter a Job ID.</span>';return}
   btn.disabled=true;out.innerHTML='<span style="font-size:.7rem;color:var(--g5)">⏳ Scoring against the job...</span>';
   try{
-    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'scoreOne',consultantId:String(cm._id),jobId:jid})});
+    var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'scoreOne',consultantId:String(cm._id),jobId:jid,force:!!window._probeForce})});
     var d=await r.json();btn.disabled=false;
     if(d.error){out.innerHTML='<span style="font-size:.7rem;color:#B91C1C">⚠️ '+esc(d.error)+'</span>';return}
     var pct=Math.round(d.overall||0);
@@ -4477,7 +4478,7 @@ async function scoreVsJob(){
     out.innerHTML='<div style="border:1px solid var(--g100);border-radius:8px;padding:.55rem .7rem;background:#FAFAFA">'
       +'<div style="display:flex;align-items:center;gap:.7rem;margin-bottom:.3rem"><span style="font-size:1.15rem;font-weight:800;color:'+col+'">'+pct+'%</span>'
       +'<span style="font-size:.72rem;color:var(--g5)">vs <b>'+esc((d.job&&d.job.title)||'')+'</b>'+((d.job&&d.job.company)?' — '+esc(d.job.company):'')+'</span>'
-      +(d.cached?'<span style="font-size:.6rem;background:#EEF2FF;color:#4338CA;border-radius:3px;padding:.05rem .3rem">cached</span>':'')+'</div>'
+      +(d.cached?'<span style="font-size:.6rem;background:#EEF2FF;color:#4338CA;border-radius:3px;padding:.05rem .3rem">cached</span>':'<span style="font-size:.6rem;background:#ECFDF5;color:#047857;border-radius:3px;padding:.05rem .3rem">fresh</span>')+'<button onclick="scoreVsJob(true)" title="Re-evaluate now, bypassing the cached score (new LLM call)" style="margin-left:auto;padding:.15rem .55rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">♻️ Re-evaluate</button>'+'</div>'
       +bar('Skills',dims.skills)+bar('Certs',dims.certifications)+bar('Compliance',dims.compliance)+bar('Role',dims.role)+bar('Experience',dims.experience)+bar('Rate',dims.rate)
       +(d.reason?'<div style="font-size:.68rem;color:#374151;margin-top:.3rem"><b>Reason:</b> '+esc(d.reason)+'</div>':'')
       +((d.flags&&d.flags.length)?'<div style="font-size:.64rem;color:#92400E;margin-top:.2rem">⚑ '+d.flags.map(esc).join(' · ')+'</div>':'')
