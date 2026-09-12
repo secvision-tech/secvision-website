@@ -402,6 +402,7 @@ function extractJobRequirements(job) {
     remote: (job.remote || '') + ' ' + (job.workType || ''),   // #534: manual/scraped jobs carry the mode in workType
     jobType: job.jobType || '',
     salary: job.salary || '',
+    margin: job.margin || '',
     // hard-gate requirements (parsed from description where possible)
     requiresClearance: /clearance|cleared|ts\/sci|secret|public trust/i.test(job.description || job.eligibility || ''),
     requiresCitizen: /u\.?s\.?\s*citizen|must be a citizen|citizenship required/i.test(job.description || job.eligibility || ''),
@@ -445,6 +446,29 @@ function applyHardGates(req, profile) {
 // ---------------------------------------------------------------------------
 // LLM BATCH SCORING — score N profiles against one job in a single call
 // ---------------------------------------------------------------------------
+// #574/#575: the rate offered to the CONSULTANT is the client budget minus SecVision's margin
+// (margin defaults to 25% when the job doesn't specify one). Handles "$40/hr", "$35-45/hr",
+// percentage margins ("25%") and absolute margins in the same unit ("$10/hr").
+function effectiveBudget(salary, margin) {
+  var sRaw = String(salary || '').trim();
+  if (!sRaw || /not disclosed|see details|^tbd|^n\/?a$/i.test(sRaw)) return 'not specified';
+  var nums = sRaw.match(/\d+(?:\.\d+)?/g);
+  if (!nums) return 'not specified';
+  var mRaw = String(margin || '').trim();
+  var pct = null, abs = null;
+  if (!mRaw) pct = 25;                                   // default margin
+  else if (/%/.test(mRaw)) pct = parseFloat(mRaw) || 25;
+  else { var mn = mRaw.match(/\d+(?:\.\d+)?/); abs = mn ? parseFloat(mn[0]) : null; if (abs == null) pct = 25; }
+  var eff = nums.slice(0, 2).map(function (x) {
+    var v = parseFloat(x);
+    var e = (pct != null) ? v * (1 - pct / 100) : Math.max(0, v - abs);
+    return Math.round(e * 100) / 100;
+  });
+  var cur = (sRaw.match(/[$\u20b9\u20ac\u00a3]|USD|INR|EUR/i) || ['$'])[0];
+  var unit = (sRaw.match(/\/\s*(hr|hour|day|week|month|mo|annum|year|yr)/i) || [,'hr'])[1];
+  var span = eff.length > 1 ? eff[0] + '-' + eff[1] : String(eff[0]);
+  return cur + span + '/' + unit + ' (client budget ' + sRaw + ' less SecVision margin ' + (pct != null ? pct + '%' : cur + abs + '/' + unit) + ')';
+}
 async function scoreProfilesBatch(req, profiles, weights) {
   if (!profiles.length) return [];
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
@@ -489,8 +513,8 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Certifications preferred: ' + (req.certifications.join(', ') || 'none') + '\n' +
     'Compliance experience: ' + (req.compliance.join(', ') || 'none') + '\n' +
     'Experience required: ' + (req.experienceRequired || 'not specified') + '\n' +
-    'Rate/Budget offered: ' + (req.salary || 'not specified') + '\n' +
-    'RATE SCORING RULE: score the rate dimension ONLY from the two rates. Candidate rate comfortably within/below the offered budget = 85-100 (the further below, the higher); slightly above budget = 55-70; far above = 10-40. If EITHER the budget or the candidate rate is missing, score rate exactly 50 (neutral unknown) - never guess or assume an average.\n' +
+    'Rate/Budget available for the consultant: ' + effectiveBudget(req.salary, req.margin) + '\n' +
+    'RATE SCORING RULE: score the rate dimension ONLY by comparing the candidate rate against the AVAILABLE-for-consultant rate above (already net of margin). Candidate rate comfortably within/below that available rate = 85-100 (the further below, the higher); slightly above budget = 55-70; far above = 10-40. If EITHER the budget or the candidate rate is missing, score rate exactly 50 (neutral unknown) - never guess or assume an average.\n' +
     (scoreEducation ? 'Education required: ' + req.educationRequired + '\n' : '') +
     'NOTE: geography/location/time zone is scored by a separate deterministic system — do NOT consider candidate location in ANY dimension.\n' +
     'Engagement type: ' + (req.isContractRole ? 'CONTRACT — prefer candidates who are contractors/consultants/freelancers open to contract work (see contractorLikely flag). Penalize role score for candidates who appear to be settled full-time employees not open to contract.' : 'Full-time or either') + '\n\n' +

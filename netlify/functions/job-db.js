@@ -464,7 +464,7 @@ exports.handler = async (event) => {
     // ACTION: updateField - update any editable field by _id
     if (action === 'updateField') {
       var { ObjectId } = require('mongodb');
-      var allowed = ['jobType','salary','experience','location','remote','eligibility'];
+      var allowed = ['jobType','salary','experience','location','remote','eligibility','margin'];
       if (allowed.indexOf(body.field) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Field not editable: ' + body.field }) };
       var upd = {}; upd[body.field] = body.value; upd[body.field + 'UpdatedAt'] = new Date();
       var result = await col.updateOne({ _id: new ObjectId(body.id) }, { $set: upd });
@@ -473,7 +473,7 @@ exports.handler = async (event) => {
 
     // ACTION: updateFieldByJobId - update any editable field by jobId
     if (action === 'updateFieldByJobId') {
-      var allowed = ['jobType','salary','experience','location','remote','eligibility'];
+      var allowed = ['jobType','salary','experience','location','remote','eligibility','margin'];
       if (allowed.indexOf(body.field) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Field not editable: ' + body.field }) };
       var upd = {}; upd[body.field] = body.value; upd[body.field + 'UpdatedAt'] = new Date();
       var result = await col.updateOne({ jobId: body.jobId }, { $set: upd });
