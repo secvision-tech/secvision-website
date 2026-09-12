@@ -1133,6 +1133,15 @@ exports.handler = async function (event) {
               var entry = { overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: gate ? gate.gate.flags : [], scoredAt: new Date(), v: SCORING_VERSION };
               newlyScored.push({ profile: r.profile, overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: entry.flags });
               try { await cacheCol.updateOne({ _id: r.profile._id }, { $set: { ['matchCache.' + req.jobId]: entry } }); } catch (e) {}
+              // #577: sync this job's saved candidate list with the fresh score
+              try {
+                var jcol577 = db.collection('jobs');
+                if ((r.overall || 0) >= MATCH_THRESHOLD) {
+                  await jcol577.updateOne({ jobId: req.jobId, 'candidateProfiles.sourceId': r.profile.sourceId }, { $set: { 'candidateProfiles.$.overall': r.overall || 0, 'candidateProfiles.$.rescoredAt': new Date() } });
+                } else {
+                  await jcol577.updateOne({ jobId: req.jobId }, { $pull: { candidateProfiles: { sourceId: r.profile.sourceId } } });
+                }
+              } catch (e577) {}
             }
           }
           gated.filter(function (g) { return !g.gate.passed; }).forEach(function (g) {
@@ -1511,16 +1520,21 @@ exports.handler = async function (event) {
         if (!sr0) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Scoring returned nothing — retry' }) };
         var sEntry = { overall: sr0.overall, dimensions: sr0.dimensions, reason: sr0.reason, flags: sGate.flags, scoredAt: new Date(), v: SCORING_VERSION };
         try { await scCol.updateOne({ _id: sp._id }, { $set: { [sCacheKey]: sEntry } }); } catch (pe) {}
-        // #567: crossing the threshold auto-saves this consultant to the job's candidate list (once)
-        var sAdded = false;
-        if ((sr0.overall || 0) >= MATCH_THRESHOLD) {
-          try {
-            var sjFull = await sjCol.findOne({ _id: sj._id }, { projection: { candidateProfiles: 1 } });
-            var sHave = (sjFull && sjFull.candidateProfiles || []).some(function (cp) { return cp.sourceId === sp.sourceId; });
+        // #567/#577: keep the job's candidate list in sync with the fresh score —
+        // >=60 joins (or gets its stored score updated); <60 is removed if present.
+        var sAdded = false, sRemoved = false, sUpdated = false;
+        try {
+          var sjFull = await sjCol.findOne({ _id: sj._id }, { projection: { candidateProfiles: 1 } });
+          var sHave = (sjFull && sjFull.candidateProfiles || []).some(function (cp) { return cp.sourceId === sp.sourceId; });
+          if ((sr0.overall || 0) >= MATCH_THRESHOLD) {
             if (!sHave) { await sjCol.updateOne({ _id: sj._id }, { $push: { candidateProfiles: { sourceId: sp.sourceId, overall: sr0.overall || 0, addedAt: new Date(), addedBy: (authUser ? authUser.email : '') } } }); sAdded = true; }
-          } catch (ae) {}
-        }
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: sr0.overall, dimensions: sr0.dimensions, reason: sr0.reason, flags: sGate.flags, gatePassed: true, cached: false, addedToJob: sAdded, job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
+            else { await sjCol.updateOne({ _id: sj._id, 'candidateProfiles.sourceId': sp.sourceId }, { $set: { 'candidateProfiles.$.overall': sr0.overall || 0, 'candidateProfiles.$.rescoredAt': new Date() } }); sUpdated = true; }
+          } else if (sHave) {
+            await sjCol.updateOne({ _id: sj._id }, { $pull: { candidateProfiles: { sourceId: sp.sourceId } } });
+            sRemoved = true;
+          }
+        } catch (ae) {}
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: sr0.overall, dimensions: sr0.dimensions, reason: sr0.reason, flags: sGate.flags, gatePassed: true, cached: false, addedToJob: sAdded, removedFromJob: sRemoved, scoreUpdatedOnJob: sUpdated, job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
       } catch (sce) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Scoring failed: ' + sce.message }) }; }
     }
     if (action === 'matchJobs') {
