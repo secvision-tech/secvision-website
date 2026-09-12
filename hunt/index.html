@@ -4756,7 +4756,7 @@ function renderManageProfile(){
     h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">Location <span style="font-weight:400;color:var(--g4)">(scraped values may be localized — correct if needed)</span></label><input id="mpLocation" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.location||'')+'" placeholder="New York, United States"></div>';
     // #373: LinkedIn URL editable (sometimes incorrect from scraping; enrichment needs it accurate)
     h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">LinkedIn URL</label><input id="mpLinkedin" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.linkedinUrl||'')+'" placeholder="https://www.linkedin.com/in/..."></div>';
-    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem"><button onclick="saveProfileStatus()" style="padding:.35rem .95rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Save Status</button>';
+    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem;align-items:center"><span id="mpStatusSaveSt" style="font-size:.66rem;color:var(--g5);order:2"></span><button onclick="saveProfileStatus()" style="padding:.35rem .95rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Save Status</button>';
     if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.35rem .95rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Claim</button>';
     else h+='<button onclick="releaseProfile()" style="padding:.35rem .95rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Release Claim</button>';
     h+='</div></div>';
@@ -4861,7 +4861,9 @@ function mpMsg(msg,color){
   if(c==='#047857'||c==='var(--pri)')window._mpMsgTimer=setTimeout(function(){if(el)mpClearStatus()},4000);
 }
 
+function _stSt(msg,color){var s=document.getElementById('mpStatusSaveSt');if(s){s.textContent=msg||'';s.style.color=color||'var(--g5)'}}
 async function saveProfileStatus(){
+  _stSt('⏳ saving...','var(--pri)');
   // #379: 'placed' is never set from these dropdowns — it comes only from Mark-as-Placed.
   var availVal=document.getElementById('mpAvail').value;
   var pipeVal=document.getElementById('mpPipeline').value;
@@ -4922,7 +4924,7 @@ async function claimProfile(){
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId})});
     var d=await r.json();
     if(d.error==='claimed'){if(confirm('⚠️ '+d.message+'\n\nOverride and claim?')){await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId,overrideClaim:true})})}else return}
-    _pendingMpMsg={msg:'✅ Claimed by you.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
+    _stSt('✅ saved','#047857');_pendingMpMsg={msg:'✅ Claimed by you.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 async function releaseProfile(){
@@ -5023,7 +5025,7 @@ async function viewResume(){
 async function removeResume(){
   if(!confirm('Remove this resume?'))return;
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'removeResume',id:manageProfileId})});
-    _pendingMpMsg={msg:'✅ Resume removed.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
+    _pendingMpMsg={msg:'✅ Resume removed.',color:'#047857'};window._mpChanged=true;openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 function openAddConsultant(){
