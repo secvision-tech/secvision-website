@@ -54,6 +54,7 @@ var ACTION_ROLES = {
   'releaseConsultant': STATUS_ROLES,
   'createConsultant': MANAGER_UP,
   'updateConsultant': MANAGER_UP,
+  'addScreening': MANAGER_UP, 'deleteScreening': MANAGER_UP,
   'deleteConsultant': ADMIN_UP,          // delete NOT allowed to manager
   'enrichConsultant': STATUS_ROLES,
   'adoptConsultant': MANAGER_UP,
@@ -345,6 +346,21 @@ exports.handler = async function (event) {
     }
 
     // ---- UPDATE (edit fields) ----
+    // ============ #581 SCREENING RESULTS (per consultant, per skill area; 12-month validity) ============
+    if (action === 'addScreening') {
+      var { ObjectId: ScOID } = require('mongodb');
+      var scId = new ScOID(String(body.id));
+      var score = parseFloat(body.score), maxScore = parseFloat(body.maxScore || 100);
+      if (!body.skillArea || isNaN(score) || isNaN(maxScore) || maxScore <= 0) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'skillArea, score and maxScore are required' }) };
+      var entry = { id: String(Date.now()), skillArea: String(body.skillArea).trim(), score: score, maxScore: maxScore, pct: Math.round(score / maxScore * 100), date: body.date ? new Date(body.date) : new Date(), evaluator: authUser ? authUser.email : '', notes: String(body.notes || '').slice(0, 1000), testName: String(body.testName || '').slice(0, 200) };
+      await col.updateOne({ _id: scId }, { $push: { screenings: entry }, $set: { updatedAt: new Date() } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, screening: entry }) };
+    }
+    if (action === 'deleteScreening') {
+      var { ObjectId: ScOID2 } = require('mongodb');
+      await col.updateOne({ _id: new ScOID2(String(body.id)) }, { $pull: { screenings: { id: String(body.screeningId) } } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true }) };
+    }
     if (action === 'updateConsultant') {
       var upd = body.updates || {};
       // normalize array fields if sent as strings

@@ -403,6 +403,11 @@ function extractJobRequirements(job) {
     jobType: job.jobType || '',
     salary: job.salary || '',
     margin: job.margin || '',
+    reqHash: (function () {   // #583 D-C: fingerprint of the scoring-relevant requirement
+      var basis = [job.title, job.skills, job.tools, job.certifications, job.compliance, job.experience, job.salary, job.margin, job.remote, job.workType, job.jobType, job.detectedCountry, job.location].map(function (x) { return String(x || '').toLowerCase().trim(); }).join('|');
+      var h = 0; for (var i = 0; i < basis.length; i++) h = ((h << 5) - h + basis.charCodeAt(i)) | 0;
+      return 'rq_' + Math.abs(h).toString(36);
+    })(),
     // hard-gate requirements (parsed from description where possible)
     requiresClearance: /clearance|cleared|ts\/sci|secret|public trust/i.test(job.description || job.eligibility || ''),
     requiresCitizen: /u\.?s\.?\s*citizen|must be a citizen|citizenship required/i.test(job.description || job.eligibility || ''),
@@ -469,6 +474,20 @@ function effectiveBudget(salary, margin) {
   var span = eff.length > 1 ? eff[0] + '-' + eff[1] : String(eff[0]);
   return cur + span + '/' + unit + ' (client budget ' + sRaw + ' less SecVision margin ' + (pct != null ? pct + '%' : cur + abs + '/' + unit) + ')';
 }
+// #581 D-D: SecVision-verified screenings relevant to this job, still within 12-month validity
+function relevantScreenings(req, p) {
+  var arr = Array.isArray(p.screenings) ? p.screenings : [];
+  if (!arr.length) return [];
+  var cutoff = Date.now() - 365 * 24 * 3600 * 1000;
+  var jobTerms = ((req.skills || []).concat(req.certifications || [], [req.title || '']).join(' ') + ' ' + String(req.tools || '')).toLowerCase();
+  return arr.filter(function (sc) {
+    var d = new Date(sc.date || 0).getTime();
+    if (!(d > cutoff)) return false;
+    var area = String(sc.skillArea || '').toLowerCase();
+    var toks = area.split(/[^a-z0-9]+/).filter(function (t) { return t.length > 2; });
+    return toks.some(function (t) { return jobTerms.indexOf(t) >= 0; });
+  }).map(function (sc) { return { skillArea: sc.skillArea, pct: sc.pct, date: String(sc.date || '').slice(0, 10) }; });
+}
 async function scoreProfilesBatch(req, profiles, weights) {
   if (!profiles.length) return [];
   if (!ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not configured');
@@ -481,6 +500,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
       years: p.yearsExperience,
       contractor: p.contractorSignal ? p.contractorSignal.likely : false,
       rate: p.rateExpectation || p.hourlyRate || '',   // #570: the scorer must SEE the candidate's rate
+      verifiedScreenings: relevantScreenings(req, p),   // #581: SecVision-tested evidence for this job's skill area
       skills: (p.skills || []).slice(0, 25),
       certs: (p.certifications || []).slice(0, 12),
       summary: (p.summary || '').slice(0, 200),
@@ -514,6 +534,7 @@ async function scoreProfilesBatch(req, profiles, weights) {
     'Compliance experience: ' + (req.compliance.join(', ') || 'none') + '\n' +
     'Experience required: ' + (req.experienceRequired || 'not specified') + '\n' +
     'Rate/Budget available for the consultant: ' + effectiveBudget(req.salary, req.margin) + '\n' +
+    'VERIFIED SCREENING RULE: if a candidate carries verifiedScreenings (SecVision-administered tests within the last 12 months for this job\'s skill area), treat that as PROVEN evidence: the skills AND certifications dimensions must each be at least the screening percentage (capped at 90), regardless of how thin the self-written profile is; append \"verified by SecVision screening <pct>%\" to the reason. A verified screening never lowers a dimension.\n' +
     'RATE SCORING RULE: score the rate dimension ONLY by comparing the candidate rate against the AVAILABLE-for-consultant rate above (already net of margin). Candidate rate EQUAL TO OR BELOW that available rate = exactly 100 (affordability is binary - a lower rate is not \"better\"); if the candidate rate is below HALF the available rate, still score 100 but append \"rate well below market - verify seniority\" to the reason; slightly above the available rate = 55-70; far above = 10-40. If EITHER the budget or the candidate rate is missing, score rate exactly 50 (neutral unknown) - never guess or assume an average.\n' +
     (scoreEducation ? 'Education required: ' + req.educationRequired + '\n' : '') +
     'NOTE: geography/location/time zone is scored by a separate deterministic system — do NOT consider candidate location in ANY dimension.\n' +
@@ -1130,7 +1151,7 @@ exports.handler = async function (event) {
             for (var i = 0; i < llmScored.length; i++) {
               var r = llmScored[i];
               var gate = gated.find(function (g) { return g.p.sourceId === r.profile.sourceId; });
-              var entry = { overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: gate ? gate.gate.flags : [], scoredAt: new Date(), v: SCORING_VERSION };
+              var entry = { overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: gate ? gate.gate.flags : [], scoredAt: new Date(), v: SCORING_VERSION, reqHash: req.reqHash };
               newlyScored.push({ profile: r.profile, overall: r.overall, dimensions: r.dimensions, reason: r.reason, flags: entry.flags });
               try { await cacheCol.updateOne({ _id: r.profile._id }, { $set: { ['matchCache.' + req.jobId]: entry } }); } catch (e) {}
               // #577: sync this job's saved candidate list with the fresh score
@@ -1455,6 +1476,29 @@ exports.handler = async function (event) {
       }) };
     }
 
+    // ============ #582 PIPELINE STAGE per job-candidate pair ============
+    if (action === 'setCandidateStage') {
+      if (!/super_admin|admin|manager/.test(String(authUser.role || ''))) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Manager role or above required' }) };
+      var STAGES = ['Screening', 'Submitted', 'Client Interview', 'Selected', 'Contracted', 'Rejected'];
+      var stg = String(body.stage || ''); if (STAGES.indexOf(stg) === -1) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Invalid stage' }) };
+      var jdS = await findJobDoc(body.jobId);
+      if (!jdS) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      var who = authUser ? authUser.email : '';
+      var setS = { 'candidateProfiles.$.stage': stg, 'candidateProfiles.$.stageAt': new Date(), 'candidateProfiles.$.stageBy': who, 'candidateProfiles.$.stageReason': String(body.reason || '').slice(0, 500) };
+      var rS = await jobsCol.updateOne({ _id: jdS._id, 'candidateProfiles.sourceId': String(body.sourceId) }, { $set: setS, $push: { 'candidateProfiles.$.stageHistory': { stage: stg, at: new Date(), by: who, reason: String(body.reason || '').slice(0, 500) } } });
+      if (!rS.matchedCount) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Candidate not on this job' }) };
+      // D-B conflict rule: Contracted here => annotate this consultant on every OTHER job (visible, never auto-rejected)
+      var annotated = 0;
+      if (stg === 'Contracted') {
+        try {
+          var ann = await jobsCol.updateMany({ _id: { $ne: jdS._id }, 'candidateProfiles.sourceId': String(body.sourceId) },
+            { $set: { 'candidateProfiles.$[el].engagedElsewhere': { jobId: jdS.jobId || String(jdS._id), title: jdS.title || '', company: jdS.company || '', at: new Date() } } },
+            { arrayFilters: [{ 'el.sourceId': String(body.sourceId) }] });
+          annotated = ann.modifiedCount || 0;
+        } catch (eA) {}
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, stage: stg, annotatedOtherJobs: annotated }) };
+    }
     if (action === 'listCandidates') {
       var jd = await findJobDoc(body.jobId);
       if (!jd) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ candidates: [] }) };
@@ -1463,10 +1507,18 @@ exports.handler = async function (event) {
       var ids = cps.map(function (c) { return c.sourceId; });
       var profs = await cacheCol.find({ sourceId: { $in: ids } }).toArray();
       var byId = {}; profs.forEach(function (p) { byId[p.sourceId] = p; });
+      var reqL = null; try { reqL = await getReq(String(jd._id)); } catch (eL) {}
       var out = cps.map(function (c) {
         var p = byId[c.sourceId] || {};
+        var mc = (p.matchCache && reqL) ? p.matchCache[reqL.jobId] : null;
+        var scs = Array.isArray(p.screenings) ? p.screenings : [];
+        var fresh = scs.filter(function (x) { return new Date(x.date || 0).getTime() > Date.now() - 365 * 24 * 3600 * 1000; });
+        var best = fresh.length ? fresh.reduce(function (a, b) { return (b.pct || 0) > (a.pct || 0) ? b : a; }) : null;
         return {
           _id: p._id ? p._id.toString() : '', sourceId: c.sourceId, overall: c.overall, addedAt: c.addedAt,
+          stage: c.stage || 'Screening', stageAt: c.stageAt || null, stageReason: c.stageReason || '', engagedElsewhere: c.engagedElsewhere || null,
+          screening: best ? { pct: best.pct, skillArea: best.skillArea, date: String(best.date || '').slice(0, 10) } : null,
+          stale: !!(mc && reqL && mc.reqHash && mc.reqHash !== reqL.reqHash),
           name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',
           yearsExperience: (p.yearsExperience === undefined || p.yearsExperience === null) ? null : p.yearsExperience,
           currentCompany: p.currentCompany || '', location: p.location || '', country: p.country || '',
@@ -1509,7 +1561,7 @@ exports.handler = async function (event) {
       var sCacheKey = 'matchCache.' + sReq.jobId;
       var sCached = sp.matchCache && sp.matchCache[sReq.jobId];
       if (sCached && sCached.v === SCORING_VERSION && !body.force) {
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: sCached.overall, dimensions: sCached.dimensions || {}, reason: sCached.reason || '', flags: sCached.flags || [], gatePassed: sGate.passed, gateReasons: sGate.reasons, cached: true, job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: sCached.overall, dimensions: sCached.dimensions || {}, reason: sCached.reason || '', flags: sCached.flags || [], gatePassed: sGate.passed, gateReasons: sGate.reasons, cached: true, stale: !!(sCached.reqHash && sCached.reqHash !== sReq.reqHash), job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
       }
       if (!sGate.passed) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ overall: 0, dimensions: {}, reason: 'Disqualified: ' + sGate.reasons.join('; '), flags: sGate.flags, gatePassed: false, gateReasons: sGate.reasons, cached: false, job: { title: sj.title, company: sj.company, jobId: sj.jobId } }) };
@@ -1518,7 +1570,7 @@ exports.handler = async function (event) {
         var sRes = await scoreProfilesBatch(sReq, [sp], sWeights);
         var sr0 = sRes && sRes[0];
         if (!sr0) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Scoring returned nothing — retry' }) };
-        var sEntry = { overall: sr0.overall, dimensions: sr0.dimensions, reason: sr0.reason, flags: sGate.flags, scoredAt: new Date(), v: SCORING_VERSION };
+        var sEntry = { overall: sr0.overall, dimensions: sr0.dimensions, reason: sr0.reason, flags: sGate.flags, scoredAt: new Date(), v: SCORING_VERSION, reqHash: sReq.reqHash };
         try { await scCol.updateOne({ _id: sp._id }, { $set: { [sCacheKey]: sEntry } }); } catch (pe) {}
         // #567/#577: keep the job's candidate list in sync with the fresh score —
         // >=60 joins (or gets its stored score updated); <60 is removed if present.
