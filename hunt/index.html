@@ -4753,14 +4753,21 @@ async function loadConsultantDocs(){
     h+='<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px"><table id="docTable" style="width:100%;border-collapse:collapse;font-size:.74rem;table-layout:fixed;min-width:120ch"><thead><tr style="background:var(--g1)">'
       +th('Type','docType','16ch')+th('File','fileName','30ch')+th('Document date','docDate','13ch')+th('Signed','signed','9ch')+th('Uploaded on','uploadedAt','13ch')+th('Uploaded by','uploadedBy','14ch')+th('Note','note','22ch')
       +'<th style="text-align:center;padding:.45rem .5rem;width:22ch">Actions</th></tr></thead><tbody>';
+    h+=docRowsHtml(docs,canDel)+'</tbody></table></div>';
+    box.innerHTML=h;
+    try{attachColResizers('docTable')}catch(e){}
+  }catch(e){box.innerHTML='<div style="color:#B91C1C;font-size:.7rem">'+esc(e.message)+'</div>'}
+}
+function docRowsHtml(docs,canDel){
+  var h='';
     docs.forEach(function(x){
       var kb=Math.max(1,Math.round((x.size||0)/1024));
       var C='padding:.42rem .5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
       h+='<tr style="border-bottom:1px solid var(--g2)"><td style="'+C+';font-weight:700;color:var(--pri)" title="'+esc(x.docType||'')+'">'+esc(x.docType||'')+'</td>'
         +'<td style="'+C+'" title="'+esc(x.fileName||'')+' · SHA-256: '+esc(x.sha256||'')+'">'+esc(x.fileName||'')+' <span style="color:var(--g5)">('+kb+' KB)</span></td>'
-        +'<td style="'+C+'">'+esc(x.docDate?String(x.docDate).slice(0,10):'—')+'</td>'
+        +'<td style="'+C+'">'+(x.docDate?esc(fmtDate(x.docDate)):'—')+'</td>'
         +'<td style="'+C+'">'+(x.signed?'<span style="color:#047857;font-weight:700">✓ signed</span>':'—')+'</td>'
-        +'<td style="'+C+'">'+esc(String(x.uploadedAt||'').slice(0,10))+'</td><td style="'+C+'" title="'+esc(x.uploadedBy||'')+'">'+esc((x.uploadedBy||'').split('@')[0])+'</td>'
+        +'<td style="'+C+'">'+esc(fmtDate(x.uploadedAt))+'</td><td style="'+C+'" title="'+esc(x.uploadedBy||'')+'">'+esc((x.uploadedBy||'').split('@')[0])+'</td>'
         +'<td style="'+C+';color:var(--g4)" title="'+esc(x.note||'')+'">'+esc(x.note||'')+'</td>'
         +'<td style="padding:.42rem .5rem;text-align:center;white-space:nowrap">'
         +'<button class="vb" onclick="openConsultantDoc(\''+x._id+'\',false)" style="font-size:.6rem">👁 View</button> '
@@ -4768,14 +4775,28 @@ async function loadConsultantDocs(){
         +(canDel?'<button class="vb" onclick="toggleDocSigned(\''+x._id+'\','+(x.signed?'false':'true')+')" style="font-size:.6rem" title="Mark signed / unsigned">✍</button> <button class="vb" onclick="deleteConsultantDoc(\''+x._id+'\',\''+esc(x.fileName||'')+'\')" style="font-size:.6rem;color:#B91C1C">🗑</button>':'')
         +'</td></tr>';
     });
-    box.innerHTML=h+'</tbody></table></div>';
-    try{attachColResizers('docTable')}catch(e){}
-  }catch(e){box.innerHTML='<div style="color:#B91C1C;font-size:.7rem">'+esc(e.message)+'</div>'}
+  return h;
+}
+function docSortedList(){
+  var ds=window._docSort||{key:'uploadedAt',dir:-1};
+  var dv=function(x){switch(ds.key){case 'docType':return (x.docType||'').toLowerCase();case 'fileName':return (x.fileName||'').toLowerCase();case 'docDate':return x.docDate||'';case 'signed':return x.signed?1:0;case 'uploadedAt':return x.uploadedAt||'';case 'uploadedBy':return (x.uploadedBy||'').toLowerCase();case 'note':return (x.note||'').toLowerCase();default:return x.uploadedAt||''}};
+  return (window._docList||[]).slice().sort(function(a,b){var av=dv(a),bv=dv(b);return (av<bv?-1:(av>bv?1:0))*ds.dir});
 }
 function docSortBy(key){
   var ds=window._docSort||{key:'uploadedAt',dir:-1};
   window._docSort=(ds.key===key)?{key:key,dir:-ds.dir}:{key:key,dir:(key==='uploadedAt'||key==='docDate'||key==='signed')?-1:1};
-  loadConsultantDocs();
+  var tb=document.querySelector('#docTable tbody');
+  if(!tb){loadConsultantDocs();return}
+  tb.innerHTML=docRowsHtml(docSortedList(),!!window._docCanDel);
+  // update arrows in place — headers, widths and resizers stay untouched
+  var ds2=window._docSort;
+  document.querySelectorAll('#docTable thead th[onclick]').forEach(function(th){
+    var k=(th.getAttribute('onclick')||'').match(/docSortBy\('([^']+)'\)/);k=k?k[1]:'';
+    var label=th.textContent.replace(/ [▲▼]$/,'').replace(/\s*$/,'');
+    var grip=th.querySelector('.rh-gen');
+    th.textContent=label+(ds2.key===k?(ds2.dir===1?' ▲':' ▼'):'');
+    if(grip)th.appendChild(grip);
+  });
 }
 async function uploadConsultantDoc(){
   var cm=manageProfileData;if(!cm)return;
