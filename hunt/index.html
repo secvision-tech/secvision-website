@@ -4750,9 +4750,9 @@ async function loadConsultantDocs(){
     var dv=function(x){switch(ds.key){case 'docType':return (x.docType||'').toLowerCase();case 'fileName':return (x.fileName||'').toLowerCase();case 'docDate':return x.docDate||'';case 'signed':return x.signed?1:0;case 'uploadedAt':return x.uploadedAt||'';case 'uploadedBy':return (x.uploadedBy||'').toLowerCase();case 'note':return (x.note||'').toLowerCase();default:return x.uploadedAt||''}};
     var docs=d.docs.slice().sort(function(a,b){var av=dv(a),bv=dv(b);return (av<bv?-1:(av>bv?1:0))*ds.dir});
     var th=function(label,key,w,align){var arrow=ds.key===key?(ds.dir===1?' ▲':' ▼'):'';return '<th onclick="docSortBy(\''+key+'\')" title="Click to sort" style="text-align:'+(align||'left')+';padding:.45rem .5rem;cursor:pointer;user-select:none;overflow:hidden;width:'+w+'">'+label+arrow+'</th>'};
-    h+='<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px"><table id="docTable" style="width:100%;border-collapse:collapse;font-size:.74rem;table-layout:fixed;min-width:120ch"><thead><tr style="background:var(--g1)">'
+    h+='<div style="overflow-x:auto;border:1px solid var(--g2);border-radius:6px"><table id="docTable" style="width:100%;border-collapse:collapse;font-size:.74rem;table-layout:fixed;min-width:132ch"><thead><tr style="background:var(--g1)">'
       +th('Type','docType','16ch')+th('File','fileName','30ch')+th('Document date','docDate','13ch')+th('Signed','signed','9ch')+th('Uploaded on','uploadedAt','13ch')+th('Uploaded by','uploadedBy','14ch')+th('Note','note','22ch')
-      +'<th style="text-align:center;padding:.45rem .5rem;width:22ch">Actions</th></tr></thead><tbody>';
+      +'<th style="text-align:center;padding:.45rem .5rem;width:34ch">Actions</th></tr></thead><tbody>';
     h+=docRowsHtml(docs,canDel)+'</tbody></table></div>';
     box.innerHTML=h;
     try{attachColResizers('docTable')}catch(e){}
@@ -4783,6 +4783,7 @@ function docSortedList(){
   return (window._docList||[]).slice().sort(function(a,b){var av=dv(a),bv=dv(b);return (av<bv?-1:(av>bv?1:0))*ds.dir});
 }
 function docSortBy(key){
+  if(wasResizing)return;   // a resize just ended over this header — not a sort click
   var ds=window._docSort||{key:'uploadedAt',dir:-1};
   window._docSort=(ds.key===key)?{key:key,dir:-ds.dir}:{key:key,dir:(key==='uploadedAt'||key==='docDate'||key==='signed')?-1:1};
   var tb=document.querySelector('#docTable tbody');
@@ -6278,6 +6279,7 @@ function _candTh(label,key,align,w){
   return '<th onclick="candSortBy(\''+key+'\')" title="Click to sort" style="text-align:'+align+';overflow:hidden;width:'+w+';cursor:pointer;user-select:none">'+label+arrow+'</th>';
 }
 function candSortBy(key){
+  if(wasResizing)return;   // resize release is not a sort
   var cs=window._candSort||{key:'overall',dir:-1};
   window._candSort=(cs.key===key)?{key:key,dir:-cs.dir}:{key:key,dir:(key==='name'||key==='role'||key==='loc'||key==='type'||key==='pipe')?1:-1};
   loadJobCandidates();
