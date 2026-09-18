@@ -401,7 +401,7 @@ body.role-viewer .edit-btn{display:none!important}
           <div class="dash-sec-sub">Contract positions where you can place SOC/security consultants for immediate billing</div>
           <div class="dash-charts" style="grid-template-columns:1fr 1fr 1fr">
             <div class="dash-chart-box"><div class="dash-chart-title">Contract Jobs by Country</div><div id="chartContractCountry" class="css-chart"></div></div>
-            <div class="dash-chart-box"><div class="dash-chart-title">Top Contract Skills in Demand</div><div id="chartContractSkills" class="css-chart"></div></div>
+            <div class="dash-chart-box"><div class="dash-chart-title">Top Contract Technology/Tools in Demand</div><div id="chartContractSkills" class="css-chart"></div></div>
             <div class="dash-chart-box"><div class="dash-chart-title">Top Certifications in Demand</div><div id="chartContractCerts" class="css-chart"></div></div>
           </div>
           <div id="contractTable" class="dash-table-wrap"></div>
@@ -4475,7 +4475,7 @@ function screeningsSection(c){
     h+='<div style="display:flex;gap:.5rem;align-items:center;font-size:.66rem;margin:.15rem 0;'+(fresh?'':'opacity:.55')+'">'
      +'<span style="font-weight:800;color:'+((s.pct||0)>=70?'#047857':'#B45309')+';width:5ch">'+(s.pct||0)+'%</span>'
      +'<span style="font-weight:600">'+esc(s.skillArea||'')+'</span>'
-     +'<span style="color:var(--g5)">'+esc(String(s.date||'').slice(0,10))+(fresh?'':' · expired — re-test due')+(s.testName?' · '+esc(s.testName):'')+'</span>'
+     +'<span style="color:var(--g5)">'+esc(fmtDate(s.date))+(fresh?'':' · expired — re-test due')+(s.testName?' · '+esc(s.testName):'')+'</span>'
      +(s.notes?'<span style="color:var(--g4);font-style:italic" title="'+esc(s.notes)+'">📝</span>':'')
      +(CAP.canStatus?'<a href="#" onclick="deleteScreening(\''+esc(s.id)+'\');return false" title="Remove this result" style="text-decoration:none;font-size:.6rem;margin-left:auto">🗑</a>':'')
      +'</div>';
