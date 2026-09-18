@@ -353,6 +353,11 @@ exports.handler = async function (event) {
     var DOC_TYPES = ['NDA', 'Engagement Agreement', 'Aadhaar', 'PAN', 'Passport', 'Address Proof', 'Experience Letter', 'Education', 'Certification', 'Resume', 'Timesheet', 'Invoice', 'Other'];
     var DOC_MIME_OK = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|application\/vnd\.ms-(excel|powerpoint)|image\/(jpeg|png))$/i;
     var docsCol = db.collection('consultant_docs');
+    // AES-256-GCM at rest: key from DOC_ENC_KEY (64 hex chars). Only the application can decrypt.
+    var _dk = process.env.DOC_ENC_KEY || '';
+    var DOC_KEY = /^[0-9a-fA-F]{64}$/.test(_dk) ? Buffer.from(_dk, 'hex') : null;
+    function encB64(b64) { var cr = require('crypto'); var iv = cr.randomBytes(12); var ci = cr.createCipheriv('aes-256-gcm', DOC_KEY, iv); var enc = Buffer.concat([ci.update(Buffer.from(b64, 'base64')), ci.final()]); return Buffer.concat([iv, ci.getAuthTag(), enc]).toString('base64'); }
+    function decB64(blob) { var cr = require('crypto'); var buf = Buffer.from(blob, 'base64'); var iv = buf.subarray(0, 12), tag = buf.subarray(12, 28), enc = buf.subarray(28); var de = cr.createDecipheriv('aes-256-gcm', DOC_KEY, iv); de.setAuthTag(tag); return Buffer.concat([de.update(enc), de.final()]).toString('base64'); }
     if (action === 'listDocs') {
       var lq = { consultantId: String(body.id), deleted: { $ne: true } };
       var docs = await docsCol.find(lq, { projection: { data: 0 } }).sort({ uploadedAt: -1 }).toArray();
@@ -364,10 +369,11 @@ exports.handler = async function (event) {
       if (body.fileData.length > 7 * 1024 * 1024) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'File too large (max ~5MB)' }) };
       var mt = String(body.mimeType || 'application/octet-stream');
       if (!DOC_MIME_OK.test(mt)) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unsupported file type. Allowed: PDF, Word, Excel, PowerPoint, JPEG, PNG' }) };
+      if (!DOC_KEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Document encryption key not configured (DOC_ENC_KEY). Uploads are disabled until it is set.' }) };
       var dtype = DOC_TYPES.indexOf(String(body.docType)) >= 0 ? String(body.docType) : 'Other';
       var crypto = require('crypto');
       var sha = crypto.createHash('sha256').update(Buffer.from(body.fileData, 'base64')).digest('hex');
-      var rec = { consultantId: String(body.id), docType: dtype, fileName: String(body.fileName).slice(0, 200), mimeType: mt, size: Math.round(body.fileData.length * 0.75), sha256: sha, data: body.fileData, note: String(body.note || '').slice(0, 300), uploadedAt: new Date(), uploadedBy: authUser.email, signed: !!body.signed, deleted: false, history: [{ at: new Date(), by: authUser.email, event: 'uploaded' }] };
+      var rec = { consultantId: String(body.id), docType: dtype, fileName: String(body.fileName).slice(0, 200), mimeType: mt, size: Math.round(body.fileData.length * 0.75), sha256: sha, data: encB64(body.fileData), enc: 'aes-256-gcm', docDate: body.docDate ? new Date(body.docDate) : null, note: String(body.note || '').slice(0, 300), uploadedAt: new Date(), uploadedBy: authUser.email, signed: !!body.signed, deleted: false, history: [{ at: new Date(), by: authUser.email, event: 'uploaded' }] };
       var ins = await docsCol.insertOne(rec);
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, docId: ins.insertedId.toString(), sha256: sha }) };
     }
@@ -376,9 +382,12 @@ exports.handler = async function (event) {
       var gd = await docsCol.findOne({ _id: new DOID2(String(body.docId)), deleted: { $ne: true } });
       if (!gd) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Document not found' }) };
       var crypto2 = require('crypto');
-      var shaNow = crypto2.createHash('sha256').update(Buffer.from(gd.data, 'base64')).digest('hex');
+      var plain;
+      try { plain = gd.enc === 'aes-256-gcm' ? (DOC_KEY ? decB64(gd.data) : null) : gd.data; } catch (de) { plain = null; }
+      if (!plain) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Document cannot be decrypted (key missing or data altered)' }) };
+      var shaNow = crypto2.createHash('sha256').update(Buffer.from(plain, 'base64')).digest('hex');
       try { await docsCol.updateOne({ _id: gd._id }, { $push: { history: { at: new Date(), by: authUser.email, event: 'viewed' } } }); } catch (e) {}
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ fileName: gd.fileName, mimeType: gd.mimeType, data: gd.data, sha256: gd.sha256, integrityOk: shaNow === gd.sha256 }) };
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ fileName: gd.fileName, mimeType: gd.mimeType, data: plain, sha256: gd.sha256, integrityOk: shaNow === gd.sha256 }) };
     }
     if (action === 'updateDoc') {
       var { ObjectId: DOID3 } = require('mongodb');
@@ -386,6 +395,7 @@ exports.handler = async function (event) {
       if (body.docType && DOC_TYPES.indexOf(String(body.docType)) >= 0) upd.docType = String(body.docType);
       if (typeof body.note === 'string') upd.note = body.note.slice(0, 300);
       if (typeof body.signed === 'boolean') upd.signed = body.signed;
+      if (body.docDate) upd.docDate = new Date(body.docDate);
       await docsCol.updateOne({ _id: new DOID3(String(body.docId)) }, { $set: upd, $push: { history: { at: new Date(), by: authUser.email, event: 'updated', changes: Object.keys(upd) } } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true }) };
     }

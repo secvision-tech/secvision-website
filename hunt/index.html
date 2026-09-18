@@ -4733,22 +4733,24 @@ async function loadConsultantDocs(){
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'listDocs',id:String(cm._id)})});
     var d=await r.json();if(d.error){box.innerHTML='<div style="color:#B91C1C;font-size:.7rem">'+esc(d.error)+'</div>';return}
     var r0=(curUserRole||'');var canUp=/super_admin|admin|manager/.test(r0),canDel=/super_admin|admin/.test(r0);
-    var h='<div style="font-size:.62rem;color:var(--g5);margin-bottom:.5rem">Every file is SHA-256 hashed at upload and re-verified on every download (tamper-evident). View: all roles · Upload: manager+ · Modify/Delete: admin+ (soft-delete, retained for audit).</div>';
+    var h='<div style="font-size:.66rem;color:var(--g5);margin-bottom:.5rem">Consultant documents — NDA, agreements, identity and verification records. Files are stored encrypted and each download is integrity-checked.</div>';
     if(canUp){
       h+='<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;background:#F8FAFC;border:1px solid var(--g2);border-radius:6px;padding:.5rem;margin-bottom:.6rem">'
         +'<select id="docType" style="font-size:.66rem;padding:.25rem">'+(d.types||[]).map(function(t){return '<option>'+esc(t)+'</option>'}).join('')+'</select>'
         +'<input type="file" id="docFile" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" style="font-size:.66rem">'
+        +'<label style="font-size:.64rem" title="Date on the document itself (e.g. signing date)">Document date <input type="date" id="docDate" style="font-size:.64rem;padding:.2rem"></label>'
         +'<label style="font-size:.64rem"><input type="checkbox" id="docSigned"> Signed copy</label>'
         +'<input id="docNote" placeholder="Note (optional)" style="font-size:.66rem;padding:.25rem .4rem;border:1px solid var(--g100);border-radius:4px;width:18ch">'
         +'<button onclick="uploadConsultantDoc()" id="docUpBtn" style="padding:.28rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.66rem;cursor:pointer;font-weight:600">⬆️ Upload</button>'
         +'<span id="docUpSt" style="font-size:.64rem;color:var(--g5)"></span></div>';
     }
     if(!(d.docs||[]).length){h+='<div style="font-size:.7rem;color:var(--g5)">No documents on file.</div>';box.innerHTML=h;return}
-    h+='<table style="width:100%;border-collapse:collapse;font-size:.66rem"><thead><tr style="background:var(--g1)"><th style="text-align:left;padding:.3rem">Type</th><th style="text-align:left;padding:.3rem">File</th><th style="text-align:left;padding:.3rem">Signed</th><th style="text-align:left;padding:.3rem">Uploaded</th><th style="text-align:left;padding:.3rem">By</th><th style="text-align:left;padding:.3rem">Note</th><th style="text-align:center;padding:.3rem">Actions</th></tr></thead><tbody>';
+    h+='<table style="width:100%;border-collapse:collapse;font-size:.66rem"><thead><tr style="background:var(--g1)"><th style="text-align:left;padding:.3rem">Type</th><th style="text-align:left;padding:.3rem">File</th><th style="text-align:left;padding:.3rem">Document date</th><th style="text-align:left;padding:.3rem">Signed</th><th style="text-align:left;padding:.3rem">Uploaded on</th><th style="text-align:left;padding:.3rem">Uploaded by</th><th style="text-align:left;padding:.3rem">Note</th><th style="text-align:center;padding:.3rem">Actions</th></tr></thead><tbody>';
     d.docs.forEach(function(x){
       var kb=Math.max(1,Math.round((x.size||0)/1024));
       h+='<tr style="border-bottom:1px solid var(--g2)"><td style="padding:.3rem;font-weight:700;color:var(--pri)">'+esc(x.docType||'')+'</td>'
         +'<td style="padding:.3rem" title="SHA-256: '+esc(x.sha256||'')+'">'+esc(x.fileName||'')+' <span style="color:var(--g5)">('+kb+' KB)</span></td>'
+        +'<td style="padding:.3rem">'+esc(x.docDate?String(x.docDate).slice(0,10):'—')+'</td>'
         +'<td style="padding:.3rem">'+(x.signed?'<span style="color:#047857;font-weight:700">✓ signed</span>':'—')+'</td>'
         +'<td style="padding:.3rem">'+esc(String(x.uploadedAt||'').slice(0,10))+'</td><td style="padding:.3rem">'+esc((x.uploadedBy||'').split('@')[0])+'</td>'
         +'<td style="padding:.3rem;color:var(--g4)">'+esc(x.note||'')+'</td>'
@@ -4769,7 +4771,7 @@ async function uploadConsultantDoc(){
   st.textContent='⏳ uploading...';st.style.color='var(--pri)';document.getElementById('docUpBtn').disabled=true;
   try{
     var b64=await new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(',')[1])};r.onerror=rej;r.readAsDataURL(f)});
-    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'uploadDoc',id:String(cm._id),docType:document.getElementById('docType').value,fileName:f.name,mimeType:f.type||'application/octet-stream',fileData:b64,signed:document.getElementById('docSigned').checked,note:document.getElementById('docNote').value})});
+    var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'uploadDoc',id:String(cm._id),docType:document.getElementById('docType').value,fileName:f.name,mimeType:f.type||'application/octet-stream',fileData:b64,signed:document.getElementById('docSigned').checked,note:document.getElementById('docNote').value,docDate:document.getElementById('docDate').value||''})});
     var d=await r.json();document.getElementById('docUpBtn').disabled=false;
     if(d.error){st.textContent='⚠️ '+d.error;st.style.color='#B91C1C';return}
     st.textContent='✅ uploaded (hash '+String(d.sha256||'').slice(0,10)+'…)';st.style.color='#047857';
@@ -4952,8 +4954,8 @@ function renderManageProfile(){
     h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;display:flex;justify-content:space-between;align-items:center"><button onclick="saveProfileEdits()" style="padding:.3rem .84rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">💾 Save Profile</button><span id="mpSaveStatus" style="font-size:.68rem;margin-left:.5rem;color:var(--g5)"></span><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
   }
   var tabs='<div style="display:flex;gap:.3rem;border-bottom:2px solid var(--g2);margin-bottom:.7rem">'
-    +'<button id="mpTabBtnProfile" onclick="mpShowTab(\'profile\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid var(--pri);background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:var(--pri)">👤 Profile</button>'
-    +'<button id="mpTabBtnDocs" onclick="mpShowTab(\'docs\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid transparent;background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:var(--g5)">📁 Documents</button>'
+    +'<button id="mpTabBtnProfile" onclick="mpShowTab(\'profile\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid var(--pri);background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:var(--pri)">Profile</button>'
+    +'<button id="mpTabBtnDocs" onclick="mpShowTab(\'docs\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid transparent;background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:var(--g5)">Document Vault</button>'
     +'</div>';
   document.getElementById('mpBody').innerHTML=tabs+'<div id="mpTabProfile">'+h+'</div><div id="mpTabDocs" style="display:none"></div>';
   if(window._mpActiveTab==='docs')mpShowTab('docs');
