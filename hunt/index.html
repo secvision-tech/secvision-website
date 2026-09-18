@@ -4482,14 +4482,17 @@ function screeningsSection(c){
   });
   if(CAP.canStatus){
     var I='padding:.35rem .5rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px';
-    h+='<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1.4fr 3fr auto;gap:.45rem;align-items:end;margin-top:.5rem">'
-     +'<label style="font-size:.6rem;color:var(--g5)">Skill area<input id="scArea" value="Splunk-SPL-SOC" placeholder="e.g. Splunk-SPL-SOC" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
-     +'<label style="font-size:.6rem;color:var(--g5)">Score<input id="scScore" type="number" placeholder="e.g. 84" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
-     +'<label style="font-size:.6rem;color:var(--g5)">Out of<input id="scMax" type="number" value="100" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
-     +'<label style="font-size:.6rem;color:var(--g5)">Test date<input id="scDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
-     +'<label style="font-size:.6rem;color:var(--g5)">Notes<input id="scNotes" placeholder="Optional — e.g. strong on SPL, weak on DNS aggregation" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
-     +'<button onclick="addScreening()" style="padding:.4rem .8rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.7rem;cursor:pointer;font-weight:600;white-space:nowrap">＋ Record result</button>'
-     +'</div><div id="scStatus" style="font-size:.64rem;color:var(--g5);margin-top:.25rem"></div>';
+    var L='font-size:.62rem;color:var(--g5);display:block';
+    h+='<div style="display:grid;grid-template-columns:3fr 1.2fr 1.2fr 1.6fr;gap:.6rem;align-items:end;margin-top:.5rem">'
+     +'<label style="'+L+'">Skill area<input id="scArea" value="Splunk-SPL-SOC" placeholder="e.g. Splunk-SPL-SOC" style="'+I+';width:100%;min-width:24ch;box-sizing:border-box;display:block"></label>'
+     +'<label style="'+L+'">Score<input id="scScore" type="number" placeholder="e.g. 84" style="'+I+';width:100%;min-width:10ch;box-sizing:border-box;display:block"></label>'
+     +'<label style="'+L+'">Out of<input id="scMax" type="number" value="100" style="'+I+';width:100%;min-width:10ch;box-sizing:border-box;display:block"></label>'
+     +'<label style="'+L+'">Test date<input id="scDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="'+I+';width:100%;min-width:14ch;box-sizing:border-box;display:block"></label>'
+     +'</div>'
+     +'<div style="display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:end;margin-top:.45rem">'
+     +'<label style="'+L+'">Notes<input id="scNotes" placeholder="Optional — e.g. strong on SPL, weak on DNS aggregation" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
+     +'<button onclick="addScreening()" style="padding:.42rem 1rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;white-space:nowrap">＋ Record result</button>'
+     +'</div><div id="scStatus" style="font-size:.64rem;color:var(--g5);margin-top:.3rem"></div>';
   }
   return h+'</div>';
 }
@@ -4757,14 +4760,26 @@ async function loadConsultantDocs(){
     h+=docRowsHtml(docs,canDel)+'</tbody></table></div>';
     box.innerHTML=h;
     try{attachColResizers('docTable')}catch(e){}
+    docBindRowSelect();
   }catch(e){box.innerHTML='<div style="color:#B91C1C;font-size:.7rem">'+esc(e.message)+'</div>'}
+}
+function docBindRowSelect(){
+  window._selectedDocs=window._selectedDocs||{};
+  document.querySelectorAll('#docTable tbody tr').forEach(function(tr){
+    tr.onclick=function(e){
+      if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.closest('a')||e.target.closest('button'))return;
+      this.classList.toggle('row-hl');
+      var id=this.dataset.did;
+      if(this.classList.contains('row-hl'))window._selectedDocs[id]=true;else delete window._selectedDocs[id];
+    };
+  });
 }
 function docRowsHtml(docs,canDel){
   var h='';
     docs.forEach(function(x){
       var kb=Math.max(1,Math.round((x.size||0)/1024));
       var C='padding:.42rem .5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
-      h+='<tr style="border-bottom:1px solid var(--g2)"><td style="'+C+';font-weight:700;color:var(--pri)" title="'+esc(x.docType||'')+'">'+esc(x.docType||'')+'</td>'
+      h+='<tr data-did="'+esc(x._id)+'"'+(window._selectedDocs&&window._selectedDocs[x._id]?' class="row-hl"':'')+' style="border-bottom:1px solid var(--g2);cursor:pointer"><td style="'+C+';font-weight:700;color:var(--pri)" title="'+esc(x.docType||'')+'">'+esc(x.docType||'')+'</td>'
         +'<td style="'+C+'" title="'+esc(x.fileName||'')+' · SHA-256: '+esc(x.sha256||'')+'">'+esc(x.fileName||'')+' <span style="color:var(--g5)">('+kb+' KB)</span></td>'
         +'<td style="'+C+'">'+(x.docDate?esc(fmtDate(x.docDate)):'—')+'</td>'
         +'<td style="'+C+'">'+(x.signed?'<span style="color:#047857;font-weight:700">✓ signed</span>':'—')+'</td>'
@@ -4790,6 +4805,7 @@ function docSortBy(key){
   var tb=document.querySelector('#docTable tbody');
   if(!tb){loadConsultantDocs();return}
   tb.innerHTML=docRowsHtml(docSortedList(),!!window._docCanDel);
+  docBindRowSelect();
   // update arrows in place — headers, widths and resizers stay untouched
   var ds2=window._docSort;
   document.querySelectorAll('#docTable thead th[onclick]').forEach(function(th){
