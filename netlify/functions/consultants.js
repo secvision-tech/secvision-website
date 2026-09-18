@@ -55,6 +55,7 @@ var ACTION_ROLES = {
   'createConsultant': MANAGER_UP,
   'updateConsultant': MANAGER_UP,
   'addScreening': MANAGER_UP, 'deleteScreening': MANAGER_UP,
+  'listDocs': VIEW_ROLES, 'getDoc': VIEW_ROLES, 'uploadDoc': MANAGER_UP, 'deleteDoc': ADMIN_UP, 'updateDoc': ADMIN_UP,
   'deleteConsultant': ADMIN_UP,          // delete NOT allowed to manager
   'enrichConsultant': STATUS_ROLES,
   'adoptConsultant': MANAGER_UP,
@@ -346,6 +347,54 @@ exports.handler = async function (event) {
     }
 
     // ---- UPDATE (edit fields) ----
+    // ============ #583 CONSULTANT DOCUMENT VAULT (NDA, agreements, BGV docs) ============
+    // Files live in their own collection (not on the consultant doc) so the 16MB doc limit is never approached.
+    // Every file is hashed (SHA-256) at upload; the hash is re-checked on download -> tamper-evident.
+    var DOC_TYPES = ['NDA', 'Engagement Agreement', 'Aadhaar', 'PAN', 'Passport', 'Address Proof', 'Experience Letter', 'Education', 'Certification', 'Resume', 'Timesheet', 'Invoice', 'Other'];
+    var DOC_MIME_OK = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|application\/vnd\.ms-(excel|powerpoint)|image\/(jpeg|png))$/i;
+    var docsCol = db.collection('consultant_docs');
+    if (action === 'listDocs') {
+      var lq = { consultantId: String(body.id), deleted: { $ne: true } };
+      var docs = await docsCol.find(lq, { projection: { data: 0 } }).sort({ uploadedAt: -1 }).toArray();
+      docs.forEach(function (d) { d._id = d._id.toString(); });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ docs: docs, types: DOC_TYPES }) };
+    }
+    if (action === 'uploadDoc') {
+      if (!body.fileData || !body.fileName) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'File data and name required' }) };
+      if (body.fileData.length > 7 * 1024 * 1024) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'File too large (max ~5MB)' }) };
+      var mt = String(body.mimeType || 'application/octet-stream');
+      if (!DOC_MIME_OK.test(mt)) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unsupported file type. Allowed: PDF, Word, Excel, PowerPoint, JPEG, PNG' }) };
+      var dtype = DOC_TYPES.indexOf(String(body.docType)) >= 0 ? String(body.docType) : 'Other';
+      var crypto = require('crypto');
+      var sha = crypto.createHash('sha256').update(Buffer.from(body.fileData, 'base64')).digest('hex');
+      var rec = { consultantId: String(body.id), docType: dtype, fileName: String(body.fileName).slice(0, 200), mimeType: mt, size: Math.round(body.fileData.length * 0.75), sha256: sha, data: body.fileData, note: String(body.note || '').slice(0, 300), uploadedAt: new Date(), uploadedBy: authUser.email, signed: !!body.signed, deleted: false, history: [{ at: new Date(), by: authUser.email, event: 'uploaded' }] };
+      var ins = await docsCol.insertOne(rec);
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, docId: ins.insertedId.toString(), sha256: sha }) };
+    }
+    if (action === 'getDoc') {
+      var { ObjectId: DOID2 } = require('mongodb');
+      var gd = await docsCol.findOne({ _id: new DOID2(String(body.docId)), deleted: { $ne: true } });
+      if (!gd) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Document not found' }) };
+      var crypto2 = require('crypto');
+      var shaNow = crypto2.createHash('sha256').update(Buffer.from(gd.data, 'base64')).digest('hex');
+      try { await docsCol.updateOne({ _id: gd._id }, { $push: { history: { at: new Date(), by: authUser.email, event: 'viewed' } } }); } catch (e) {}
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ fileName: gd.fileName, mimeType: gd.mimeType, data: gd.data, sha256: gd.sha256, integrityOk: shaNow === gd.sha256 }) };
+    }
+    if (action === 'updateDoc') {
+      var { ObjectId: DOID3 } = require('mongodb');
+      var upd = {};
+      if (body.docType && DOC_TYPES.indexOf(String(body.docType)) >= 0) upd.docType = String(body.docType);
+      if (typeof body.note === 'string') upd.note = body.note.slice(0, 300);
+      if (typeof body.signed === 'boolean') upd.signed = body.signed;
+      await docsCol.updateOne({ _id: new DOID3(String(body.docId)) }, { $set: upd, $push: { history: { at: new Date(), by: authUser.email, event: 'updated', changes: Object.keys(upd) } } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true }) };
+    }
+    if (action === 'deleteDoc') {
+      var { ObjectId: DOID4 } = require('mongodb');
+      // soft delete: hidden from everyone, retained for audit (admin+ only)
+      await docsCol.updateOne({ _id: new DOID4(String(body.docId)) }, { $set: { deleted: true, deletedAt: new Date(), deletedBy: authUser.email }, $push: { history: { at: new Date(), by: authUser.email, event: 'deleted' } } });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true }) };
+    }
     // ============ #581 SCREENING RESULTS (per consultant, per skill area; 12-month validity) ============
     if (action === 'addScreening') {
       var { ObjectId: ScOID } = require('mongodb');
