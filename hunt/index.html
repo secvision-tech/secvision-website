@@ -4481,14 +4481,15 @@ function screeningsSection(c){
      +'</div>';
   });
   if(CAP.canStatus){
-    h+='<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;margin-top:.4rem">'
-     +'<input id="scArea" placeholder="Skill area (e.g. Splunk-SPL-SOC)" value="Splunk-SPL-SOC" style="padding:.25rem .4rem;font-size:.64rem;border:1px solid var(--g100);border-radius:4px;width:16ch">'
-     +'<input id="scScore" type="number" placeholder="Score" style="padding:.25rem .4rem;font-size:.64rem;border:1px solid var(--g100);border-radius:4px;width:7ch">'
-     +'<span style="font-size:.64rem;color:var(--g5)">/</span><input id="scMax" type="number" value="100" style="padding:.25rem .4rem;font-size:.64rem;border:1px solid var(--g100);border-radius:4px;width:6ch">'
-     +'<input id="scDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="padding:.25rem .4rem;font-size:.64rem;border:1px solid var(--g100);border-radius:4px">'
-     +'<input id="scNotes" placeholder="Notes (optional)" style="padding:.25rem .4rem;font-size:.64rem;border:1px solid var(--g100);border-radius:4px;width:22ch">'
-     +'<button onclick="addScreening()" style="padding:.25rem .6rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.64rem;cursor:pointer;font-weight:600">＋ Record result</button>'
-     +'<span id="scStatus" style="font-size:.62rem;color:var(--g5)"></span></div>';
+    var I='padding:.35rem .5rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px';
+    h+='<div style="display:grid;grid-template-columns:2fr 1fr 1fr 1.4fr 3fr auto;gap:.45rem;align-items:end;margin-top:.5rem">'
+     +'<label style="font-size:.6rem;color:var(--g5)">Skill area<input id="scArea" value="Splunk-SPL-SOC" placeholder="e.g. Splunk-SPL-SOC" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
+     +'<label style="font-size:.6rem;color:var(--g5)">Score<input id="scScore" type="number" placeholder="e.g. 84" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
+     +'<label style="font-size:.6rem;color:var(--g5)">Out of<input id="scMax" type="number" value="100" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
+     +'<label style="font-size:.6rem;color:var(--g5)">Test date<input id="scDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
+     +'<label style="font-size:.6rem;color:var(--g5)">Notes<input id="scNotes" placeholder="Optional — e.g. strong on SPL, weak on DNS aggregation" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
+     +'<button onclick="addScreening()" style="padding:.4rem .8rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.7rem;cursor:pointer;font-weight:600;white-space:nowrap">＋ Record result</button>'
+     +'</div><div id="scStatus" style="font-size:.64rem;color:var(--g5);margin-top:.25rem"></div>';
   }
   return h+'</div>';
 }
