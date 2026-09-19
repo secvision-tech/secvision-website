@@ -4493,7 +4493,7 @@ function screeningsSection(c){
      +'</div>'
      +'<div style="display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:end;margin-top:.45rem">'
      +'<label style="'+L+'">Notes<input id="scNotes" placeholder="Optional — e.g. strong on SPL, weak on DNS aggregation" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
-     +'<button onclick="addScreening()" style="padding:.42rem 1rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;white-space:nowrap">＋ Record result</button>'
+     +'<button onclick="addScreening()" style="padding:.38rem .9rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600;white-space:nowrap">＋ Record result</button>'
      +'</div><div id="scStatus" style="font-size:.64rem;color:var(--g5);margin-top:.3rem"></div>';
   }
   return h+'</div>';
@@ -4755,7 +4755,7 @@ async function loadConsultantDocs(){
         +'<label style="font-size:.64rem" title="Date on the document itself (e.g. signing date)">Document date <input type="date" id="docDate" style="font-size:.64rem;padding:.2rem"></label>'
         +'<label style="font-size:.64rem"><input type="checkbox" id="docSigned"> Signed copy</label>'
         +'<input id="docNote" placeholder="Note (optional)" style="font-size:.66rem;padding:.25rem .4rem;border:1px solid var(--g100);border-radius:4px;width:18ch">'
-        +'<button onclick="uploadConsultantDoc()" id="docUpBtn" style="padding:.28rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.66rem;cursor:pointer;font-weight:600">⬆️ Upload</button>'
+        +'<button onclick="uploadConsultantDoc()" id="docUpBtn" style="padding:.38rem .9rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">⬆️ Upload</button>'
         +'<span id="docUpSt" style="font-size:.64rem;color:var(--g5)"></span></div>';
     }
     if(!(d.docs||[]).length){h+='<div style="font-size:.7rem;color:var(--g5)">No documents on file.</div>';box.innerHTML=h;return}
@@ -4796,9 +4796,9 @@ function docRowsHtml(docs,canDel){
         +'<td style="'+C+'">'+esc(fmtDate(x.uploadedAt))+'</td><td style="'+C+'" title="'+esc(x.uploadedBy||'')+'">'+esc((x.uploadedBy||'').split('@')[0])+'</td>'
         +'<td style="'+C+';color:var(--g4)" title="'+esc(x.note||'')+'">'+esc(x.note||'')+'</td>'
         +'<td style="padding:.42rem .5rem;text-align:center;white-space:nowrap">'
-        +'<button class="vb" onclick="openConsultantDoc(\''+x._id+'\',false)" style="font-size:.6rem">👁 View</button> '
-        +'<button class="vb" onclick="openConsultantDoc(\''+x._id+'\',true)" style="font-size:.6rem">⬇ Download</button> '
-        +(canDel?'<button class="vb" onclick="toggleDocSigned(\''+x._id+'\','+(x.signed?'false':'true')+')" style="font-size:.6rem" title="Mark signed / unsigned">✍</button> <button class="vb" onclick="deleteConsultantDoc(\''+x._id+'\',\''+esc(x.fileName||'')+'\')" style="font-size:.6rem;color:#B91C1C">🗑</button>':'')
+        +'<button class="vb" onclick="openConsultantDoc(\''+x._id+'\',false)" style="padding:.2rem .55rem;font-size:.62rem">👁 View</button> '
+        +'<button class="vb" onclick="openConsultantDoc(\''+x._id+'\',true)" style="padding:.2rem .55rem;font-size:.62rem">⬇ Download</button> '
+        +(canDel?'<button class="vb" onclick="toggleDocSigned(\''+x._id+'\','+(x.signed?'false':'true')+')" style="padding:.2rem .55rem;font-size:.62rem" title="Mark signed / unsigned">✍</button> <button class="vb" onclick="deleteConsultantDoc(\''+x._id+'\',\''+esc(x.fileName||'')+'\')" style="padding:.2rem .55rem;font-size:.62rem;color:#B91C1C">🗑</button>':'')
         +'</td></tr>';
     });
   return h;
@@ -4897,7 +4897,7 @@ function renderManageProfile(){
   hMatch+='<div class="mp-section"><div class="mp-section-title">🎯 Score against a specific job</div>'
     +'<div style="font-size:.7rem;color:var(--g5);margin-bottom:.45rem">Paste a Job ID to see how this consultant scores for that requirement. The full breakdown is shown even below 60%.</div>'
     +'<div style="display:flex;gap:.45rem;align-items:center;flex-wrap:wrap"><input id="mpProbeJobId" placeholder="Job ID (e.g. 69f8b231f1c8e21d6a11b1cf)" style="flex:1;min-width:26ch;max-width:420px;padding:.4rem .55rem;font-size:.76rem;border:1px solid var(--g100);border-radius:4px">'
-    +'<button onclick="scoreVsJob()" id="mpProbeBtn" style="padding:.4rem .9rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Score vs Job</button></div>'
+    +'<button onclick="scoreVsJob()" id="mpProbeBtn" style="padding:.38rem .9rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Score vs Job</button></div>'
     +'<div id="mpProbeResult" style="margin-top:.5rem"></div>'
     +'</div>';
   hMatch+='<div class="mp-section"><div class="mp-section-title">🔎 Find matching jobs</div>'
@@ -4907,7 +4907,7 @@ function renderManageProfile(){
     +'<option value="1d">Last 1 day</option><option value="3d">Last 3 days</option>'
     +'<option value="1w" selected>Last 1 week</option><option value="2w">Last 2 weeks</option>'
     +'<option value="1m">Last 1 month</option></select>'
-    +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.4rem .9rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
+    +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.38rem .9rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
     +'</div>'
     +'<div id="mjStatus" style="font-size:.76rem;color:var(--g5);margin-top:.45rem"></div>'
     +'<div id="mjResults" style="margin-top:.4rem"></div>'
@@ -4951,9 +4951,9 @@ function renderManageProfile(){
     h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">Location <span style="font-weight:400;color:var(--g4)">(scraped values may be localized — correct if needed)</span></label><input id="mpLocation" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.location||'')+'" placeholder="New York, United States"></div>';
     // #373: LinkedIn URL editable (sometimes incorrect from scraping; enrichment needs it accurate)
     h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">LinkedIn URL</label><input id="mpLinkedin" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.linkedinUrl||'')+'" placeholder="https://www.linkedin.com/in/..."></div>';
-    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem;align-items:center"><span id="mpStatusSaveSt" style="font-size:.66rem;color:var(--g5);order:2"></span><button onclick="saveProfileStatus()" style="padding:.35rem .95rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Save Status</button>';
-    if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.35rem .95rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Claim</button>';
-    else h+='<button onclick="releaseProfile()" style="padding:.35rem .95rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Release Claim</button>';
+    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem;align-items:center"><span id="mpStatusSaveSt" style="font-size:.66rem;color:var(--g5);order:2"></span><button onclick="saveProfileStatus()" style="padding:.38rem .9rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Save Status</button>';
+    if(c.claimedBy===null||c.claimedBy===undefined)h+='<button onclick="claimProfile()" style="padding:.38rem .9rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Claim</button>';
+    else h+='<button onclick="releaseProfile()" style="padding:.38rem .9rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Release Claim</button>';
     h+='</div></div>';
   }
 
@@ -4963,8 +4963,8 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.68rem;color:var(--g4)">Email</label><input id="mpEmail" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.email||'')+'"></div>';
     h+='<div><label style="font-size:.68rem;color:var(--g4)">Phone</label><input id="mpPhone" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.phone||'')+'"></div>';
     h+='</div>';
-    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem"><button onclick="saveProfileContact()" style="padding:.35rem .95rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">Save Contact</button>';
-    h+='<button onclick="enrichProfile()" id="mpEnrichBtn" style="padding:.35rem .95rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">🔍 Enrich (Apollo)</button></div>';
+    h+='<div style="display:flex;gap:.4rem;margin-top:.62rem"><button onclick="saveProfileContact()" style="padding:.38rem .9rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Save Contact</button>';
+    h+='<button onclick="enrichProfile()" id="mpEnrichBtn" style="padding:.38rem .9rem;background:#0891B2;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">🔍 Enrich (Apollo)</button></div>';
   }else{
     h+=fld('Email',esc(c.email))+fld('Phone',esc(c.phone));
   }
@@ -4974,11 +4974,11 @@ function renderManageProfile(){
   h+='<div class="mp-section"><div class="mp-section-title">Resume / CV</div>';
   if(c.hasResume){
     h+='<div style="display:flex;align-items:center;gap:.62rem;flex-wrap:wrap"><span style="font-size:.72rem;color:var(--g5)">📄 '+esc(c.resumeFileName||'resume')+'</span>'
-      +'<button onclick="viewResume()" style="padding:.25rem .72rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">View</button>';
-    if(canContact)h+='<button onclick="enrichFromResume()" style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;font-weight:600;margin-right:.4rem" title="AI-parse the stored resume and fill missing fields">📄 Enrich (Resume)</button><span id="mpEnrichStatus" style="font-size:.72rem;margin:0 .45rem;color:var(--pri)"></span><button onclick="removeResume()" style="padding:.25rem .72rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer">Remove</button>';
+      +'<button onclick="viewResume()" style="padding:.38rem .9rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer">View</button>';
+    if(canContact)h+='<button onclick="enrichFromResume()" style="padding:.38rem .9rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600;margin-right:.4rem" title="AI-parse the stored resume and fill missing fields">📄 Enrich (Resume)</button><span id="mpEnrichStatus" style="font-size:.72rem;margin:0 .45rem;color:var(--pri)"></span><button onclick="removeResume()" style="padding:.38rem .9rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer">Remove</button>';
     h+='</div>';
   }else{
-    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem" onchange="var b=document.getElementById(\'mpEnrichResumeBtn\');if(b){b.disabled=!this.files.length;b.style.opacity=this.files.length?\'1\':\'.5\'}"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.25rem .72rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.84rem;cursor:pointer;margin-left:.3rem">Upload</button><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" disabled style="padding:.25rem .72rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600;margin-left:.4rem;opacity:.5" title="AI-parse the selected file (or the stored resume) and fill missing fields; skills/certs/compliance merged">📄 Enrich (Resume)</button><span id="mpEnrichStatus" style="font-size:.72rem;margin:0 .45rem;color:var(--pri)"></span><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
+    if(canContact)h+='<div><input type="file" id="mpResumeFile" accept=".pdf,.docx,.doc" style="font-size:.84rem" onchange="var b=document.getElementById(\'mpEnrichResumeBtn\');if(b){b.disabled=!this.files.length;b.style.opacity=this.files.length?\'1\':\'.5\'}"><button onclick="uploadResume()" id="mpResumeUploadBtn" style="padding:.38rem .9rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;margin-left:.3rem">Upload</button><button onclick="enrichFromResume()" id="mpEnrichResumeBtn" disabled style="padding:.38rem .9rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600;margin-left:.4rem;opacity:.5" title="AI-parse the selected file (or the stored resume) and fill missing fields; skills/certs/compliance merged">📄 Enrich (Resume)</button><span id="mpEnrichStatus" style="font-size:.72rem;margin:0 .45rem;color:var(--pri)"></span><div style="font-size:.78rem;color:var(--g4);margin-top:.2rem">PDF or Word (.docx), max ~6MB</div></div>';
     else h+='<span style="font-size:.72rem;color:var(--g3)">No resume on file.</span>';
   }
   h+='</div>';
@@ -4994,8 +4994,8 @@ function renderManageProfile(){
     hPlace+='<div><label style="font-size:.68rem;color:var(--g4)">Start Date *</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
     hPlace+='<div><label style="font-size:.68rem;color:var(--g4)">End Date (optional)</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
     hPlace+='<div style="grid-column:1/3"><label style="font-size:.68rem;color:var(--g4)">Rate Agreed *</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
-    hPlace+='</div><button onclick="savePlacement()" style="padding:.35rem .95rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600;margin-top:.62rem">'+(isPlaced?'Update Placement':'Mark as Placed')+'</button>'
-      +(isPlaced?' <button onclick="newPlacementForm()" style="padding:.35rem .95rem;background:#fff;color:#4338CA;border:1px solid #4338CA;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600;margin-top:.62rem;margin-left:.4rem">＋ New placement</button><div style="font-size:.66rem;color:var(--g4);margin-top:.35rem">Saving with the same Client, Role and Start Date updates the current placement. Use <b>＋ New placement</b> to record an additional engagement — the current one moves to history below.</div>':'');
+    hPlace+='</div><button onclick="savePlacement()" style="padding:.38rem .9rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600;margin-top:.62rem">'+(isPlaced?'Update Placement':'Mark as Placed')+'</button>'
+      +(isPlaced?' <button onclick="newPlacementForm()" style="padding:.38rem .9rem;background:#fff;color:#4338CA;border:1px solid #4338CA;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600;margin-top:.62rem;margin-left:.4rem">＋ New placement</button><div style="font-size:.66rem;color:var(--g4);margin-top:.35rem">Saving with the same Client, Role and Start Date updates the current placement. Use <b>＋ New placement</b> to record an additional engagement — the current one moves to history below.</div>':'');
     hPlace+=placementHistoryHtml(c);
     hPlace+='</div>';
   }else if(isPlaced){
@@ -5020,9 +5020,9 @@ function renderManageProfile(){
 
   if(!hPlace)hPlace='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div><div style="font-size:.7rem;color:var(--g5)">No placement recorded for this consultant.</div></div>';
   if(curUserRole==='admin'||curUserRole==='super_admin'){
-    h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;display:flex;justify-content:space-between;align-items:center"><button onclick="saveProfileEdits()" style="padding:.3rem .84rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">💾 Save Profile</button><span id="mpSaveStatus" style="font-size:.68rem;margin-left:.5rem;color:var(--g5)"></span><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
+    h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;display:flex;justify-content:space-between;align-items:center"><button onclick="saveProfileEdits()" style="padding:.38rem .9rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">💾 Save Profile</button><span id="mpSaveStatus" style="font-size:.68rem;margin-left:.5rem;color:var(--g5)"></span><button onclick="deleteProfile()" style="padding:.38rem .9rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer">Delete Profile</button></div>';
   }
-  var tb=function(id,key,label,on){return '<button id="'+id+'" onclick="mpShowTab(\''+key+'\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid '+(on?'var(--pri)':'transparent')+';background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:'+(on?'var(--pri)':'var(--g5)')+'">'+label+'</button>'};
+  var tb=function(id,key,label,on){return '<button id="'+id+'" onclick="mpShowTab(\''+key+'\')" style="padding:.38rem .9rem;border:none;border-bottom:3px solid '+(on?'var(--pri)':'transparent')+';background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:'+(on?'var(--pri)':'var(--g5)')+'">'+label+'</button>'};
   var tabs='<div style="display:flex;gap:.3rem;border-bottom:2px solid var(--g2);margin-bottom:.7rem;flex-wrap:wrap">'
     +tb('mpTabBtnProfile','profile','Profile',true)
     +tb('mpTabBtnMatch','match','Matching',false)
@@ -5161,7 +5161,7 @@ function placementHistoryHtml(c,noTitle){
     if(canEditEnd){endCell='<input type="date" id="mpHistEnd'+i+'" value="'+(p.endDate?new Date(p.endDate).toISOString().slice(0,10):'')+'" style="font-size:.52rem;padding:.1rem;border:1px solid var(--g3);border-radius:3px" onchange="updatePlacementEndDate('+i+')">'}
     else{endCell=p.endDate?fmtDate(p.endDate):'—'}
     h+='<tr style="border-bottom:1px solid var(--g1)"><td style="padding:.2rem .3rem">'+esc(p.client||'—')+'</td><td style="padding:.2rem .3rem">'+esc(p.role||'—')+'</td><td style="padding:.2rem .3rem">'+(p.startDate?fmtDate(p.startDate):'—')+'</td><td style="padding:.2rem .3rem">'+endCell+'</td><td style="padding:.2rem .3rem">'+esc(p.rateAgreed||'—')+'</td>'
-      +(isAdminRole?'<td style="padding:.2rem .3rem;text-align:center"><button onclick="deletePlacementHistory('+i+')" title="Delete this placement record" style="background:none;border:none;color:#DC2626;cursor:pointer;font-size:.6rem">✕</button></td>':'')
+      +(isAdminRole?'<td style="padding:.2rem .3rem;text-align:center"><button onclick="deletePlacementHistory('+i+')" title="Delete this placement record" style="padding:.2rem .55rem;background:none;border:none;color:#DC2626;cursor:pointer;font-size:.62rem">✕</button></td>':'')
       +'</tr>';
   });
   h+='</tbody></table></div></div>';
