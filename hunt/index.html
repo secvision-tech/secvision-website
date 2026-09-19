@@ -4421,6 +4421,7 @@ async function openManageProfile(id){
   }catch(e){document.getElementById('mpBody').innerHTML='<div style="padding:2rem;color:#DC2626">Error: '+esc(e.message)+'</div>'}
 }
 function closeManageProfile(){
+  window._mpActiveTab='profile';
   if(window._mpChanged){window._mpChanged=false;try{loadConsultants(true)}catch(e){}}
   try{if(document.getElementById('candTable'))loadJobCandidates()}catch(e){}
   var p=document.getElementById('manageProfilePopup');if(p)p.style.display='none';
@@ -4467,8 +4468,9 @@ var mjState={consultantId:null,page:0,evalCap:50};
 function screeningsSection(c){
   var arr=Array.isArray(c.screenings)?c.screenings.slice().sort(function(a,b){return new Date(b.date||0)-new Date(a.date||0)}):[];
   var cutoff=Date.now()-365*24*3600*1000;
-  var h='<div style="border-top:1px solid var(--g2);margin-top:.7rem;padding-top:.55rem">'
-   +'<div style="font-size:.72rem;font-weight:700;color:var(--pri);margin-bottom:.3rem">🧪 SecVision Screenings <span style="font-weight:400;color:var(--g5);font-size:.6rem">(verified skill evidence · 12-month validity · feeds the match score)</span></div>';
+  var h='<div>'
+   +'<div class="mp-section-title">🧪 SecVision Screenings</div>'
+   +'<div style="font-size:.7rem;color:var(--g5);margin-bottom:.45rem">Verified skill evidence from SecVision tests. Valid for 12 months and feeds the match score for any job in the same skill area.</div>';
   if(!arr.length)h+='<div style="font-size:.66rem;color:var(--g5)">No screening results recorded.</div>';
   arr.forEach(function(s){
     var fresh=new Date(s.date||0).getTime()>cutoff;
@@ -4506,13 +4508,13 @@ async function addScreening(){
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
     var d=await r.json();
     if(d.error){st.textContent='⚠️ '+d.error;st.style.color='#B91C1C';return}
-    window._mpChanged=true;window._mpAfterMsg={t:'✅ Screening recorded — '+d.screening.pct+'% '+d.screening.skillArea+'. Re-evaluate against jobs to apply it.',c:'#047857'};
+    window._mpChanged=true;window._mpActiveTab='match';window._mpAfterMsg={t:'✅ Screening recorded — '+d.screening.pct+'% '+d.screening.skillArea+'. Re-evaluate against jobs to apply it.',c:'#047857'};
     openManageProfile(cm._id);
   }catch(e){st.textContent='⚠️ '+e.message;st.style.color='#B91C1C'}
 }
 async function deleteScreening(id){
   var cm=manageProfileData;if(!cm||!confirm('Remove this screening result?'))return;
-  try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deleteScreening',id:String(cm._id),screeningId:id})});window._mpChanged=true;openManageProfile(cm._id)}catch(e){alert(e.message)}
+  try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deleteScreening',id:String(cm._id),screeningId:id})});window._mpChanged=true;window._mpActiveTab='match';openManageProfile(cm._id)}catch(e){alert(e.message)}
 }
 async function scoreVsJob(force){
   window._probeForce=!!force;
@@ -4722,13 +4724,21 @@ function mjDeleteJob(jobId){
 
 // ===== #583 Consultant document vault (tab) =====
 function mpShowTab(t){
+  var TABS={profile:['mpTabProfile','mpTabBtnProfile'],match:['mpTabMatch','mpTabBtnMatch'],place:['mpTabPlace','mpTabBtnPlace'],docs:['mpTabDocs','mpTabBtnDocs']};
+  if(!TABS[t])t='profile';
   window._mpActiveTab=t;
-  var p=document.getElementById('mpTabProfile'),d=document.getElementById('mpTabDocs');
-  var bp=document.getElementById('mpTabBtnProfile'),bd=document.getElementById('mpTabBtnDocs');
-  if(!p||!d)return;
-  p.style.display=t==='docs'?'none':'';d.style.display=t==='docs'?'':'none';
-  [[bp,t!=='docs'],[bd,t==='docs']].forEach(function(x){x[0].style.borderBottomColor=x[1]?'var(--pri)':'transparent';x[0].style.color=x[1]?'var(--pri)':'var(--g5)'});
+  Object.keys(TABS).forEach(function(k){
+    var pane=document.getElementById(TABS[k][0]),btn=document.getElementById(TABS[k][1]);
+    if(pane)pane.style.display=(k===t)?'':'none';
+    if(btn){btn.style.borderBottomColor=(k===t)?'var(--pri)':'transparent';btn.style.color=(k===t)?'var(--pri)':'var(--g5)'}
+  });
   if(t==='docs')loadConsultantDocs();
+}
+function newPlacementForm(){
+  ['mpPlaceClient','mpPlaceRole','mpPlaceRate'].forEach(function(id){var e=document.getElementById(id);if(e)e.value=''});
+  ['mpPlaceStart','mpPlaceEnd'].forEach(function(id){var e=document.getElementById(id);if(e)e.value=''});
+  var cl=document.getElementById('mpPlaceClient');if(cl)cl.focus();
+  mpMsg('New placement — fill Client, Role, Start Date and Rate, then press Save. The current placement will be kept in history.','#B45309');
 }
 async function loadConsultantDocs(){
   var cm=manageProfileData,box=document.getElementById('mpTabDocs');if(!cm||!box)return;
@@ -4882,23 +4892,27 @@ function renderManageProfile(){
   h+=fld('Experience',(c.yearsExperience||0)+' yrs'+(c.yearsManual?' <span title="Manually set — recalc will not overwrite" style="font-size:.62rem;color:#6C3FBF">✎ manual</span>':'')+' <a href="#" onclick="editConsYears(\''+c._id+'\','+(c.yearsExperience||0)+');return false" title="Correct the experience years (scraped histories are sometimes incomplete)" style="text-decoration:none;font-size:.65rem">✏️</a>');
   h+=fld('Source',esc((c.source||'').replace('apify-linkedin','LinkedIn').replace('manual','Manual'))+(c.upwork&&c.upwork.profileUrl?' <a href="'+esc(c.upwork.profileUrl)+'" target="_blank" style="color:#14A800;font-size:.68rem">Upwork ↗</a>':'')+(c.linkedinUrl?' <a href="'+esc(normUrl(c.linkedinUrl))+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>':''));
   h+='</div>';
-  // Stage 3: reverse matching — which open roles does this consultant fit?
-  h+='<div style="border:1px solid #DDD6FE;background:#FAF5FF;border-radius:6px;padding:.62rem .72rem;margin-bottom:.84rem">'
-    +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem">'
-    +'<span style="font-size:.78rem;font-weight:700;color:#6C3FBF">🎯 Match Jobs — open contract roles this consultant fits</span>'
-    +'<span style="display:flex;gap:.3rem;align-items:center">'
-    +'<select id="mjPeriod" style="font-size:.84rem;padding:.15rem .3rem;border:1px solid #C4B5FD;border-radius:4px">'
+  // Matching tab (#584): three clearly separated cards
+  var hMatch='';
+  hMatch+='<div class="mp-section"><div class="mp-section-title">🎯 Score against a specific job</div>'
+    +'<div style="font-size:.7rem;color:var(--g5);margin-bottom:.45rem">Paste a Job ID to see how this consultant scores for that requirement. The full breakdown is shown even below 60%.</div>'
+    +'<div style="display:flex;gap:.45rem;align-items:center;flex-wrap:wrap"><input id="mpProbeJobId" placeholder="Job ID (e.g. 69f8b231f1c8e21d6a11b1cf)" style="flex:1;min-width:26ch;max-width:420px;padding:.4rem .55rem;font-size:.76rem;border:1px solid var(--g100);border-radius:4px">'
+    +'<button onclick="scoreVsJob()" id="mpProbeBtn" style="padding:.4rem .9rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Score vs Job</button></div>'
+    +'<div id="mpProbeResult" style="margin-top:.5rem"></div>'
+    +'</div>';
+  hMatch+='<div class="mp-section"><div class="mp-section-title">🔎 Find matching jobs</div>'
+    +'<div style="font-size:.7rem;color:var(--g5);margin-bottom:.45rem">Open contract roles this consultant fits, from jobs posted in the selected period. Saved matches appear immediately; press the button to refresh.</div>'
+    +'<div style="display:flex;gap:.45rem;align-items:center;flex-wrap:wrap">'
+    +'<select id="mjPeriod" style="font-size:.76rem;padding:.35rem .4rem;border:1px solid var(--g100);border-radius:4px">'
     +'<option value="1d">Last 1 day</option><option value="3d">Last 3 days</option>'
     +'<option value="1w" selected>Last 1 week</option><option value="2w">Last 2 weeks</option>'
     +'<option value="1m">Last 1 month</option></select>'
-    +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.2rem .72rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
-    +'</span></div>'
-    +screeningsSection(c)
-    +'<div style="margin-top:.45rem;display:flex;gap:.4rem;align-items:center"><input id="mpProbeJobId" placeholder="Job ID (e.g. 69f8b231f1c8e21d6a11b1cf)" style="flex:1;max-width:340px;padding:.3rem .45rem;font-size:.7rem;border:1px solid var(--g100);border-radius:4px"><button onclick="scoreVsJob()" id="mpProbeBtn" style="padding:.3rem .7rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.7rem;cursor:pointer;font-weight:600" title="Score this consultant against one specific job — result shown even below 60%">🎯 Score vs Job</button></div>'
-    +'<div id="mpProbeResult" style="margin-top:.4rem"></div>'
-    +'<div id="mjStatus" style="font-size:.84rem;color:var(--g5);margin-top:.35rem"></div>'
+    +'<button onclick="runMatchJobs(0)" id="mjBtn" style="padding:.4rem .9rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">Find matching jobs</button>'
+    +'</div>'
+    +'<div id="mjStatus" style="font-size:.76rem;color:var(--g5);margin-top:.45rem"></div>'
     +'<div id="mjResults" style="margin-top:.4rem"></div>'
     +'</div>';
+  hMatch+='<div class="mp-section">'+screeningsSection(c)+'</div>';
   // #398: when opened from a job's candidate table, highlight skills/certs that match that job
   var reqToks=jobRequirementTokens(_matchJobContext);
   if(reqToks){
@@ -4969,49 +4983,58 @@ function renderManageProfile(){
   }
   h+='</div>';
 
+  var hPlace='';
   // Placement section: editable for manager+ (not frozen); read-only view for analyst when placed
   if(canEdit){
     var pi=c.placementInfo||{};
-    h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.62rem">';
-    h+='<div><label style="font-size:.68rem;color:var(--g4)">Client *</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.client||'')+'"></div>';
-    h+='<div><label style="font-size:.68rem;color:var(--g4)">Role *</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.role||'')+'"></div>';
-    h+='<div><label style="font-size:.68rem;color:var(--g4)">Start Date *</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
-    h+='<div><label style="font-size:.68rem;color:var(--g4)">End Date (optional)</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
-    h+='<div style="grid-column:1/3"><label style="font-size:.68rem;color:var(--g4)">Rate Agreed *</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
-    h+='</div><button onclick="savePlacement()" style="padding:.35rem .95rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600;margin-top:.62rem">'+(isPlaced?'Update Placement':'Mark as Placed')+'</button>'
-      +(isPlaced?'<div style="font-size:.62rem;color:var(--g4);margin-top:.2rem">Editing the fields above updates the current placement. To start a NEW placement, change the Client/Role/Start Date.</div>':'');
-    h+=placementHistoryHtml(c);
-    h+='</div>';
+    hPlace+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
+    hPlace+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.62rem">';
+    hPlace+='<div><label style="font-size:.68rem;color:var(--g4)">Client *</label><input id="mpPlaceClient" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.client||'')+'"></div>';
+    hPlace+='<div><label style="font-size:.68rem;color:var(--g4)">Role *</label><input id="mpPlaceRole" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.role||'')+'"></div>';
+    hPlace+='<div><label style="font-size:.68rem;color:var(--g4)">Start Date *</label><input type="date" id="mpPlaceStart" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.startDate?new Date(pi.startDate).toISOString().slice(0,10):'')+'"></div>';
+    hPlace+='<div><label style="font-size:.68rem;color:var(--g4)">End Date (optional)</label><input type="date" id="mpPlaceEnd" class="set-input" style="width:100%;font-size:.76rem" value="'+(pi.endDate?new Date(pi.endDate).toISOString().slice(0,10):'')+'"></div>';
+    hPlace+='<div style="grid-column:1/3"><label style="font-size:.68rem;color:var(--g4)">Rate Agreed *</label><input id="mpPlaceRate" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(pi.rateAgreed||'')+'" placeholder="$95/hr, £450/day"></div>';
+    hPlace+='</div><button onclick="savePlacement()" style="padding:.35rem .95rem;background:#4338CA;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600;margin-top:.62rem">'+(isPlaced?'Update Placement':'Mark as Placed')+'</button>'
+      +(isPlaced?' <button onclick="newPlacementForm()" style="padding:.35rem .95rem;background:#fff;color:#4338CA;border:1px solid #4338CA;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600;margin-top:.62rem;margin-left:.4rem">＋ New placement</button><div style="font-size:.66rem;color:var(--g4);margin-top:.35rem">Saving with the same Client, Role and Start Date updates the current placement. Use <b>＋ New placement</b> to record an additional engagement — the current one moves to history below.</div>':'');
+    hPlace+=placementHistoryHtml(c);
+    hPlace+='</div>';
   }else if(isPlaced){
     var pir=c.placementInfo||{};
-    h+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem">';
-    h+=fld('Client',esc(pir.client));
-    h+=fld('Role',esc(pir.role));
-    h+=fld('Start',pir.startDate?fmtDate(pir.startDate):'—');
-    h+=fld('End',pir.endDate?fmtDate(pir.endDate):'—');
-    h+=fld('Rate',esc(pir.rateAgreed));
-    h+='</div>';
-    h+=placementHistoryHtml(c);
-    h+='</div>';
+    hPlace+='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div>';
+    hPlace+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem">';
+    hPlace+=fld('Client',esc(pir.client));
+    hPlace+=fld('Role',esc(pir.role));
+    hPlace+=fld('Start',pir.startDate?fmtDate(pir.startDate):'—');
+    hPlace+=fld('End',pir.endDate?fmtDate(pir.endDate):'—');
+    hPlace+=fld('Rate',esc(pir.rateAgreed));
+    hPlace+='</div>';
+    hPlace+=placementHistoryHtml(c);
+    hPlace+='</div>';
   }else if(canStatus&&(c.placementHistory||[]).length){
     // #386: analyst+ can see past placement history even when the consultant is currently available
-    h+='<div class="mp-section"><div class="mp-section-title">Placement History</div>';
-    h+='<div style="font-size:.68rem;color:var(--g5);margin-bottom:.3rem">Currently available. Past placements:</div>';
-    h+=placementHistoryHtml(c,true);
-    h+='</div>';
+    hPlace+='<div class="mp-section"><div class="mp-section-title">Placement History</div>';
+    hPlace+='<div style="font-size:.68rem;color:var(--g5);margin-bottom:.3rem">Currently available. Past placements:</div>';
+    hPlace+=placementHistoryHtml(c,true);
+    hPlace+='</div>';
   }
 
+  if(!hPlace)hPlace='<div class="mp-section"><div class="mp-section-title">Placement (via SecVision)</div><div style="font-size:.7rem;color:var(--g5)">No placement recorded for this consultant.</div></div>';
   if(curUserRole==='admin'||curUserRole==='super_admin'){
     h+='<div style="border-top:1px solid var(--g2);padding-top:.72rem;margin-top:.84rem;display:flex;justify-content:space-between;align-items:center"><button onclick="saveProfileEdits()" style="padding:.3rem .84rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">💾 Save Profile</button><span id="mpSaveStatus" style="font-size:.68rem;margin-left:.5rem;color:var(--g5)"></span><button onclick="deleteProfile()" style="padding:.3rem .84rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer">Delete Profile</button></div>';
   }
-  var tabs='<div style="display:flex;gap:.3rem;border-bottom:2px solid var(--g2);margin-bottom:.7rem">'
-    +'<button id="mpTabBtnProfile" onclick="mpShowTab(\'profile\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid var(--pri);background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:var(--pri)">Profile</button>'
-    +'<button id="mpTabBtnDocs" onclick="mpShowTab(\'docs\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid transparent;background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:var(--g5)">Document Vault</button>'
+  var tb=function(id,key,label,on){return '<button id="'+id+'" onclick="mpShowTab(\''+key+'\')" style="padding:.35rem .9rem;border:none;border-bottom:3px solid '+(on?'var(--pri)':'transparent')+';background:none;font-weight:700;font-size:.74rem;cursor:pointer;color:'+(on?'var(--pri)':'var(--g5)')+'">'+label+'</button>'};
+  var tabs='<div style="display:flex;gap:.3rem;border-bottom:2px solid var(--g2);margin-bottom:.7rem;flex-wrap:wrap">'
+    +tb('mpTabBtnProfile','profile','Profile',true)
+    +tb('mpTabBtnMatch','match','Matching',false)
+    +tb('mpTabBtnPlace','place','Placements',false)
+    +tb('mpTabBtnDocs','docs','Document Vault',false)
     +'</div>';
-  document.getElementById('mpBody').innerHTML=tabs+'<div id="mpTabProfile">'+h+'</div><div id="mpTabDocs" style="display:none"></div>';
-  if(window._mpActiveTab==='docs')mpShowTab('docs');
+  document.getElementById('mpBody').innerHTML=tabs
+    +'<div id="mpTabProfile">'+h+'</div>'
+    +'<div id="mpTabMatch" style="display:none">'+hMatch+'</div>'
+    +'<div id="mpTabPlace" style="display:none">'+hPlace+'</div>'
+    +'<div id="mpTabDocs" style="display:none"></div>';
+  if(window._mpActiveTab&&window._mpActiveTab!=='profile')mpShowTab(window._mpActiveTab);
   // #419: show any previously-saved matched jobs immediately (no scoring, free).
   loadSavedMatchJobs();
 }
@@ -5164,6 +5187,7 @@ async function updatePlacementEndDate(idx){
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
 async function savePlacement(){
+  window._mpActiveTab='place';
   var pi={client:document.getElementById('mpPlaceClient').value.trim(),role:document.getElementById('mpPlaceRole').value.trim(),startDate:document.getElementById('mpPlaceStart').value||null,endDate:document.getElementById('mpPlaceEnd').value||null,rateAgreed:document.getElementById('mpPlaceRate')?document.getElementById('mpPlaceRate').value.trim():''};
   if(!pi.client){mpMsg('Client name is required to place.','#B45309');return}
   if(!pi.role){mpMsg('Role is required to place.','#B45309');return}
