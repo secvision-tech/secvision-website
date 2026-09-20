@@ -4750,13 +4750,13 @@ async function loadConsultantDocs(){
     var h='<div style="font-size:.66rem;color:var(--g5);margin-bottom:.5rem">Consultant documents — NDA, agreements, identity and verification records. Files are stored encrypted and each download is integrity-checked.</div>';
     if(canUp){
       h+='<div style="display:flex;gap:.35rem;flex-wrap:wrap;align-items:center;background:#F8FAFC;border:1px solid var(--g2);border-radius:6px;padding:.5rem;margin-bottom:.6rem">'
-        +'<select id="docType" style="font-size:.66rem;padding:.25rem">'+(d.types||[]).map(function(t){return '<option>'+esc(t)+'</option>'}).join('')+'</select>'
-        +'<input type="file" id="docFile" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" style="font-size:.66rem">'
-        +'<label style="font-size:.64rem" title="Date on the document itself (e.g. signing date)">Document date <input type="date" id="docDate" style="font-size:.64rem;padding:.2rem"></label>'
-        +'<label style="font-size:.64rem"><input type="checkbox" id="docSigned"> Signed copy</label>'
-        +'<input id="docNote" placeholder="Note (optional)" style="font-size:.66rem;padding:.25rem .4rem;border:1px solid var(--g100);border-radius:4px;width:18ch">'
+        +'<select id="docType" style="font-size:.7rem;padding:.25rem;font-family:inherit">'+(d.types||[]).map(function(t){return '<option>'+esc(t)+'</option>'}).join('')+'</select>'
+        +'<input type="file" id="docFile" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.jpg,.jpeg,.png" style="font-size:.7rem;font-family:inherit">'
+        +'<label style="font-size:.7rem" title="Date on the document itself (e.g. signing date)">Document date <input type="date" id="docDate" style="font-size:.7rem;padding:.2rem;font-family:inherit"></label>'
+        +'<label style="font-size:.7rem"><input type="checkbox" id="docSigned"> Signed copy</label>'
+        +'<input id="docNote" placeholder="Note (optional)" style="font-size:.7rem;padding:.25rem .4rem;font-family:inherit;border:1px solid var(--g100);border-radius:4px;width:18ch">'
         +'<button onclick="uploadConsultantDoc()" id="docUpBtn" style="padding:.38rem .9rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.74rem;cursor:pointer;font-weight:600">⬆️ Upload</button>'
-        +'<span id="docUpSt" style="font-size:.64rem;color:var(--g5)"></span></div>';
+        +'<span id="docUpSt" style="font-size:.7rem;color:var(--g5)"></span></div>';
     }
     if(!(d.docs||[]).length){h+='<div style="font-size:.7rem;color:var(--g5)">No documents on file.</div>';box.innerHTML=h;return}
     window._docList=d.docs;window._docCanDel=canDel;
@@ -4788,7 +4788,7 @@ function docRowsHtml(docs,canDel){
   var h='';
     docs.forEach(function(x){
       var kb=Math.max(1,Math.round((x.size||0)/1024));
-      var C='padding:.42rem .5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+      var C='padding:.42rem .5rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.74rem;font-family:inherit';
       h+='<tr data-did="'+esc(x._id)+'"'+(window._selectedDocs&&window._selectedDocs[x._id]?' class="row-hl"':'')+' style="border-bottom:1px solid var(--g2);cursor:pointer"><td style="'+C+';font-weight:700;color:var(--pri)" title="'+esc(x.docType||'')+'">'+esc(x.docType||'')+'</td>'
         +'<td style="'+C+'" title="'+esc(x.fileName||'')+' · SHA-256: '+esc(x.sha256||'')+'">'+esc(x.fileName||'')+' <span style="color:var(--g5)">('+kb+' KB)</span></td>'
         +'<td style="'+C+'">'+(x.docDate?esc(fmtDate(x.docDate)):'—')+'</td>'
@@ -5737,7 +5737,7 @@ function rvRender(){
   var th=function(l,k){return '<th style="padding:.3rem .4rem;cursor:pointer;color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'" onclick="if(!_rvResizing)rvSortBy(\''+k+'\')">'+l+(_rvSort===k?' ▼':'')+'</th>'};
   var rows=list.map(function(p){var u=p.upwork||{};var tier=u.topRated==='top_rated_plus'?'⭐⭐':(u.topRated==='top_rated'?'⭐':'');
     return '<tr style="border-bottom:1px solid var(--g100)"><td style="padding:.3rem .4rem"><input type="checkbox" class="rvSel" value="'+p._id+'"></td>'
-    +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(p.name||'—')+'</td><td style="padding:.3rem .4rem" title="'+esc(p.currentRole||'')+'">'+esc((p.currentRole||'').slice(0,34)||'—')+'</td>'
+    +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(p.name||'—')+(p.linkedinUrl?' <a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" title="Open LinkedIn profile" style="text-decoration:none;color:#0A66C2">🔗</a>':(u.profileUrl?' <a href="'+esc(u.profileUrl)+'" target="_blank" rel="noopener" title="Open Upwork profile" style="text-decoration:none;color:#14A800">🔗</a>':''))+'</td><td style="padding:.3rem .4rem" title="'+esc(p.currentRole||'')+'">'+esc((p.currentRole||'').slice(0,34)||'—')+'</td>'
     +'<td style="padding:.3rem .4rem">'+(p.securityFit==null?'—':('<span style="font-weight:700;color:'+(p.securityFit>=70?'#15803D':(p.securityFit>=40?'#B45309':'#B91C1C'))+'">'+p.securityFit+'%</span>'))+'</td><td style="padding:.3rem .4rem;font-weight:700">'+esc(p.rateExpectation||'—')+'</td><td style="padding:.3rem .4rem">'+(u.jss?'100%':'—')+' '+tier+'</td>'
     +'<td style="padding:.3rem .4rem">'+(u.earnings!=null?('$'+Math.round(u.earnings).toLocaleString()):(u.earningsHidden?'hidden':'—'))+'</td>'
     +'<td style="padding:.3rem .4rem;color:var(--g5)">'+esc(p.location||'')+'</td><td style="padding:.3rem .4rem;color:var(--g5)">'+esc(p.source||'')+'</td>'
@@ -5791,13 +5791,13 @@ function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!
   var old=document.getElementById('rvViewOverlay');if(old)old.remove();
   var ov=document.createElement('div');ov.id='rvViewOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.6);z-index:1600;display:flex;align-items:center;justify-content:center';
   ov.innerHTML='<div style="background:#fff;border-radius:10px;width:860px;max-width:94%;max-height:86vh;overflow:auto;padding:1.1rem">'
-   +'<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:1.05rem;font-weight:700;color:var(--pri)">'+esc(p.name||'')+'</div><div style="font-size:.8rem;color:var(--g5)">'+esc(p.currentRole||'')+' · '+esc([p.location,p.country].filter(Boolean).join(', '))+'</div></div><button onclick="document.getElementById(\'rvViewOverlay\').remove()" style="background:none;border:none;font-size:1.1rem;cursor:pointer">×</button></div>'
+   +'<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:1.05rem;font-weight:700;color:var(--pri)">'+esc(p.name||'')+'</div><div style="font-size:.8rem;color:var(--g5)">'+esc(p.currentRole||'')+' · '+esc([p.location,p.country].filter(Boolean).join(', '))+'</div>'+(p.linkedinUrl?'<div style="margin-top:.2rem"><a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" style="font-size:.76rem;color:#0A66C2;font-weight:600;text-decoration:none">🔗 LinkedIn profile ↗</a> <span style="font-size:.66rem;color:var(--g5)">'+esc(normUrl(p.linkedinUrl))+'</span></div>':'')+'</div><button onclick="document.getElementById(\'rvViewOverlay\').remove()" style="background:none;border:none;font-size:1.1rem;cursor:pointer">×</button></div>'
    +'<div style="display:flex;gap:.5rem;margin:.72rem 0;flex-wrap:wrap">'+metric('Rate',esc(p.rateExpectation||'—'))+metric('Earnings',u.earnings!=null?'$'+Math.round(u.earnings).toLocaleString():(u.earningsHidden?'hidden':'—'))+metric('Hours',u.hours?Math.round(u.hours).toLocaleString():'—')+metric('Jobs',((u.jobs&&(u.jobs.hourly||0)+(u.jobs.fixed||0))||0))+metric('JSS',u.jss?'100%':'—')+metric('Tier',u.topRated==='top_rated_plus'?'Top Rated Plus':(u.topRated==='top_rated'?'Top Rated':'—'))+(p.yearsExperience?metric('Experience',p.yearsExperience+' yrs'):'')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Skills</div><div>'+chips(p.skills,'#E0F2FE')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Certifications</div><div>'+chips(p.certifications,'#DCFCE7')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Compliance / Standards</div><div>'+chips(p.compliance,'#FEF3C7')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.5rem">Profile summary <a href="#" onclick="aiFmtSummary(\'rvSum\',this);return false" style="font-size:.66rem;font-weight:400;color:#7C3AED;text-decoration:none">✨ Format with AI</a></div><div style="font-size:.76rem;line-height:1.55;color:#1F2937;max-height:34vh;overflow:auto;border:1px solid var(--g100);border-radius:6px;padding:.55rem .65rem" id="rvSum" data-raw="'+esc(p.summary||'').replace(/"/g,'&quot;')+'">'+rvFmtSummary(p.summary||'')+'</div>'
-   +(u.profileUrl?'<div style="margin-top:.5rem"><a href="'+esc(u.profileUrl)+'" target="_blank" style="font-size:.76rem">Open Upwork profile ↗</a></div>':'')+'</div>';
+   +((u.profileUrl||p.linkedinUrl)?'<div style="margin-top:.5rem;display:flex;gap:1rem">'+(u.profileUrl?'<a href="'+esc(u.profileUrl)+'" target="_blank" rel="noopener" style="font-size:.76rem">Open Upwork profile ↗</a>':'')+(p.linkedinUrl?'<a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" style="font-size:.76rem;color:#0A66C2">Open LinkedIn profile ↗</a>':'')+'</div>':'')+'</div>';
   document.body.appendChild(ov)}
 async function rvReject(id){if(!confirm('Delete this profile? It will never be re-fetched.'))return;
   var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'rejectPending',id:id})});var d=await r.json();

@@ -350,7 +350,12 @@ exports.handler = async function (event) {
     // ============ #583 CONSULTANT DOCUMENT VAULT (NDA, agreements, BGV docs) ============
     // Files live in their own collection (not on the consultant doc) so the 16MB doc limit is never approached.
     // Every file is hashed (SHA-256) at upload; the hash is re-checked on download -> tamper-evident.
-    var DOC_TYPES = ['NDA', 'Engagement Agreement', 'Aadhaar', 'PAN', 'Passport', 'Address Proof', 'Experience Letter', 'Education', 'Certification', 'Resume', 'Timesheet', 'Invoice', 'Other'];
+    // #582: country-neutral type names (Aadhaar -> Government ID, PAN -> Government Tax ID, etc.) so the same
+    // vault works for consultants in India, USA, UK, Canada... The country-specific document name goes in Note.
+    var DOC_TYPES = ['NDA', 'Engagement Agreement', 'Statement of Work', 'Government ID', 'Government Tax ID', 'Passport', 'Address Proof', 'Work Authorization',
+                     'Employment Letter', 'Experience Letter', 'Education Certificate', 'Professional Certification', 'Resume', 'Background Check Report', 'Bank Details', 'Timesheet', 'Invoice', 'Other'];
+    // Legacy labels stored before #582 -> displayed under the new generic name (no data migration needed)
+    var DOC_TYPE_ALIAS = { 'Aadhaar': 'Government ID', 'PAN': 'Government Tax ID', 'Education': 'Education Certificate', 'Certification': 'Professional Certification' };
     var DOC_MIME_OK = /^(application\/pdf|application\/msword|application\/vnd\.openxmlformats-officedocument\.(wordprocessingml\.document|spreadsheetml\.sheet|presentationml\.presentation)|application\/vnd\.ms-(excel|powerpoint)|image\/(jpeg|png))$/i;
     var docsCol = db.collection('consultant_docs');
     // AES-256-GCM at rest: key from DOC_ENC_KEY (64 hex chars). Only the application can decrypt.
@@ -361,7 +366,7 @@ exports.handler = async function (event) {
     if (action === 'listDocs') {
       var lq = { consultantId: String(body.id), deleted: { $ne: true } };
       var docs = await docsCol.find(lq, { projection: { data: 0 } }).sort({ uploadedAt: -1 }).toArray();
-      docs.forEach(function (d) { d._id = d._id.toString(); });
+      docs.forEach(function (d) { d._id = d._id.toString(); if (DOC_TYPE_ALIAS[d.docType]) d.docType = DOC_TYPE_ALIAS[d.docType]; });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ docs: docs, types: DOC_TYPES }) };
     }
     if (action === 'uploadDoc') {
