@@ -1,4 +1,5 @@
 const { getDb } = require('./db');
+const { classifyEngagement } = require('./engagement');   // #592
 
 // JWT decode (base64url → JSON, no signature verification — token comes from MSAL via HTTPS)
 function decodeJwt(token) {
@@ -109,6 +110,7 @@ exports.handler = async (event) => {
       dashboard: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
       getJob: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
       getRecentContracts: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
+      classifyEngagementBackfill: ['super_admin', 'admin', 'manager'],   // #592
       getEnrichmentStatus: ['super_admin', 'admin', 'manager', 'analyst'],
       // Pie chart searches: all
       searchDashPie: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
@@ -227,7 +229,7 @@ exports.handler = async (event) => {
     // Define RBAC rules per action
     var ACTION_ROLES = {
       'search': ALL_ACTIVE, 'getDashboard': ALL_ACTIVE, 'getJob': ALL_ACTIVE, 'deleteJob': ['super_admin', 'admin', 'manager'],
-      'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE,
+      'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE, 'classifyEngagementBackfill': ['super_admin', 'admin', 'manager'],   // #592
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       // #336: company/job field edits are manager+ ; status is analyst+
       'updateField': MANAGER_UP, 'updateCompanyInfo': MANAGER_UP, 'updateCompanyName': MANAGER_UP,
@@ -289,6 +291,7 @@ exports.handler = async (event) => {
       }
       if (body.companyType && body.companyType !== 'all') filter.companyType = body.companyType;
       if (body.jobType && body.jobType !== 'all') filter.jobType = body.jobType;
+      if (body.c2cOnly) filter.engagementModel = { $in: ['C2C', 'C2C-likely'] };   // #592: 'C2C only' checkbox
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
       if (body.detectedCountry && body.detectedCountry !== 'all') filter.detectedCountry = body.detectedCountry;
       if (body.location) {
@@ -1756,12 +1759,23 @@ exports.handler = async (event) => {
     }
 
     // Get latest 100 contract jobs
+    // ---- #592: classify engagement model (C2C / W2 / direct-hire) for jobs saved before the classifier existed ----
+    if (action === 'classifyEngagementBackfill') {
+      var bfQ = body.force ? {} : { engagementModel: { $exists: false } };
+      var bfJobs = await col.find(bfQ).project({ title: 1, description: 1, jobType: 1, salary: 1, eligibility: 1, contractDuration: 1, source: 1, companyType: 1, detectedCountry: 1, location: 1 }).limit(400).toArray();
+      var bfOps = bfJobs.map(function (j) { var e = classifyEngagement(j); return { updateOne: { filter: { _id: j._id }, update: { $set: { engagementModel: e.model, offshoreOk: e.offshoreOk, engagementEvidence: e.evidence } } } }; });
+      if (bfOps.length) await col.bulkWrite(bfOps, { ordered: false });
+      var bfLeft = body.force ? 0 : await col.countDocuments({ engagementModel: { $exists: false } });
+      var bfTally = {}; bfJobs.forEach(function (j) { var m = classifyEngagement(j).model; bfTally[m] = (bfTally[m] || 0) + 1; });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ classified: bfOps.length, remaining: bfLeft, tally: bfTally }) };
+    }
+
     if (action === 'getRecentContracts') {
       var oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       var contracts = await col.find(applyScope({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] }))
         .sort({ datePosted: -1, dateScanned: -1 })
-        .project({ title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1, candidateProfiles: 1 })
+        .project({ engagementModel: 1, offshoreOk: 1, engagementEvidence: 1, title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1, candidateProfiles: 1 })
         .toArray();
       // #395: expose matched-consultant count, drop the heavy array
       contracts.forEach(function (c) {

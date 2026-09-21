@@ -949,7 +949,8 @@ exports.handler = async function(event) {
                 applyLink: jobDoc.applyLink, jobUrl: jobDoc.jobUrl,
                 experienceLevel: jobDoc.experienceLevel, sector: jobDoc.sector,
                 benefits: jobDoc.benefits, applicationsCount: jobDoc.applicationsCount,
-                detectedCountry: jobDoc.detectedCountry, dateScanned: jobDoc.dateScanned, fpKey: fpKey
+                detectedCountry: jobDoc.detectedCountry, dateScanned: jobDoc.dateScanned, fpKey: fpKey,
+                engagementModel: (function(){var e=require('./engagement').classifyEngagement(jobDoc);jobDoc._eng=e;return e.model})(), offshoreOk: jobDoc._eng.offshoreOk, engagementEvidence: jobDoc._eng.evidence   // #592
               },
               $setOnInsert: {
                 status: 'new', companyType: '', notes: '',

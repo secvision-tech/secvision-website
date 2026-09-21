@@ -1037,6 +1037,7 @@ exports.handler = async (event) => {
             filter: { jobId: j.id },
             update: { $set: {
               jobId: j.id, datePosted: j.dateRaw ? new Date(j.dateRaw) : null, dateScanned: new Date(),
+              engagementModel: (function(){var e=require('./engagement').classifyEngagement(j);j._eng=e;return e.model})(), offshoreOk: j._eng.offshoreOk, engagementEvidence: j._eng.evidence,   // #592
               title: j.title, titleClean: j.titleClean, company: j.company, companyUrl: j.companyUrl,
               location: j.location, detectedCountry: j.detectedCountry, experience: j.experience,
               skills: j.skills, certifications: j.certifications, compliance: j.compliance,

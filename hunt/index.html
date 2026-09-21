@@ -278,6 +278,9 @@ body.role-viewer .edit-btn{display:none!important}
           <div class="sg"><label>Country</label><select id="dbCountry"><option value="all">All Countries</option></select></div>
           <button class="sbtn" onclick="searchDb()" style="align-self:end">Search DB</button>
         </div>
+        <div style="display:flex;gap:1rem;align-items:center;margin-top:.35rem">
+          <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem;cursor:pointer" title="Only jobs classified as Corp-to-Corp / vendor-friendly (explicit C2C wording, or contract roles posted by staffing firms / C2C boards)"><input type="checkbox" id="dbC2cOnly" onchange="searchDb()" style="cursor:pointer"> 🤝 C2C / vendor-friendly only</label>
+        </div>
         <div id="dbCustomDates" style="display:none;gap:.6rem;margin-top:.4rem;align-items:end">
           <div class="sg"><label>From</label><input type="date" id="dbDateFrom"></div>
           <div class="sg"><label>To</label><input type="date" id="dbDateTo"></div>
@@ -932,7 +935,8 @@ async function searchDb(){
   document.getElementById('loadState').style.display='block';document.getElementById('loadState').textContent='Searching database...';
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
-    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo};
+    var c2cOnly=!!(document.getElementById('dbC2cOnly')&&document.getElementById('dbC2cOnly').checked);   // #592
+    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly};
     loadedBlocks=1;
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(Object.assign({},lastSearchParams,{limit:BLOCK_SIZE,page:1}))});
@@ -951,6 +955,13 @@ async function searchDb(){
     document.getElementById('emptyState').style.display='block';document.getElementById('emptyState').innerHTML='<h3>Database Error</h3><p>'+err.message+'</p>'}
 }
 
+// #592: engagement-model chip (C2C / C2C-likely / W2-contract / Direct-hire); evidence on hover
+function engChip(j){
+  var m=j.engagementModel;if(!m||m==='Unknown')return '';
+  var C={'C2C':['#DCFCE7','#166534','C2C'],'C2C-likely':['#ECFDF5','#047857','C2C?'],'W2-contract':['#FEF3C7','#92400E','W2'],'Direct-hire':['#F3F4F6','#4B5563','Direct']}[m]||['#F3F4F6','#4B5563',m];
+  var off=j.offshoreOk==='yes'?' 🌏':(j.offshoreOk==='no'?' 🚫':'');
+  return ' <span title="'+esc(m+(j.engagementEvidence?' — '+j.engagementEvidence:'')+(j.offshoreOk&&j.offshoreOk!=='unknown'?' · offshore '+j.offshoreOk:''))+'" style="font-size:.5rem;background:'+C[0]+';color:'+C[1]+';padding:.05rem .3rem;border-radius:3px;font-weight:700;white-space:nowrap">'+C[2]+off+'</span>';
+}
 function statusBadge(status){
   var cls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
   return '<span class="status-badge '+(cls[status]||'status-new')+'" title="Click to change status: new \u2192 reviewed \u2192 contacted \u2192 archived">'+(status||'new')+'</span>';
@@ -1511,7 +1522,7 @@ function renderTable(){
     var ji=allJobs.indexOf(j);
     // #387: indicator when this job already has matched consultants saved
     var matchInd=(j.candidateCount>0)?' <span title="'+j.candidateCount+' matched consultant'+(j.candidateCount>1?'s':'')+' saved" style="font-size:.5rem;background:#EDE9FE;color:#6C3FBF;padding:.05rem .3rem;border-radius:3px;font-weight:700;white-space:nowrap">🎯 '+j.candidateCount+'</span>':'';
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+matchInd+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">'+(CAP.canStatus?'Manage':'View')+'</button> '+companyBtn(j.company,ji)+'</td>';
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+matchInd+engChip(j)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">'+(CAP.canStatus?'Manage':'View')+'</button> '+companyBtn(j.company,ji)+'</td>';
     tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.classList.contains('status-badge')||e.target.classList.contains('ctype-badge'))return;this.classList.toggle('row-hl')};
     // Bind status badge click
     var sBadge=tr.querySelector('.status-badge');
@@ -3338,6 +3349,7 @@ var CJ_COLS=[
   {key:'title',label:'Title',ch:26},
   {key:'company',label:'Company',ch:20},
   {key:'companyType',label:'Type',ch:11},
+  {key:'engagementModel',label:'Engagement',ch:10},   // #592
   {key:'location',label:'Job Location',ch:18},
   {key:'detectedCountry',label:'Country',ch:10},
   {key:'salary',label:'Salary/Rate',ch:13},
@@ -3372,9 +3384,39 @@ function cjHeaderClick(colKey,e){
   cjPage=1;renderContractJobs();
 }
 
+// #593: per-column filters for the Latest Contract Jobs table (applied before sort/pagination)
+var _cjFlt={},_cjC2cOnly=false;
+var CJ_FVAL={idx:null,action:null,date:function(j){return j.date||''},engagementModel:function(j){return (j.engagementModel||'')+' '+(j.offshoreOk==='yes'?'offshore':'')}};
+function cjFilterInput(el){
+  var k=el.getAttribute('data-f');_cjFlt[k]=el.value.trim().toLowerCase();cjPage=1;
+  var pos=el.selectionStart;renderContractJobs();
+  var again=document.querySelector('.cjFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}
+}
+function cjToggleC2c(el){_cjC2cOnly=!!el.checked;cjPage=1;renderContractJobs()}
+function cjClearFilters(){_cjFlt={};_cjC2cOnly=false;cjPage=1;renderContractJobs()}
+function cjRowPasses(j){
+  if(_cjC2cOnly&&!/^C2C/.test(j.engagementModel||''))return false;
+  for(var k in _cjFlt){var v=_cjFlt[k];if(!v)continue;var fn=CJ_FVAL[k];var val=fn?fn(j):(j[k]==null?'':String(j[k]));if(String(val).toLowerCase().indexOf(v)<0)return false}
+  return true;
+}
+async function cjClassifyEngagement(btn){
+  btn.disabled=true;var done=0,tally={};
+  try{
+    for(var i=0;i<25;i++){
+      btn.textContent='Classifying... '+done;
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'classifyEngagementBackfill'})});
+      var d=await r.json();if(d.error){alert(d.error);break}
+      done+=d.classified||0;Object.keys(d.tally||{}).forEach(function(k){tally[k]=(tally[k]||0)+d.tally[k]});
+      if(!d.remaining||!d.classified)break;
+    }
+    alert('Engagement classification: '+done+' jobs classified.\n'+Object.keys(tally).map(function(k){return k+': '+tally[k]}).join('\n')+(done?'\n\nRefreshing the table.':''));
+    if(done){contractLoaded=false;await loadContractPipeline();contractLoaded=true}
+  }catch(e){alert('Failed: '+e.message)}
+  btn.disabled=false;btn.textContent='🏷️ Classify engagement';
+}
 function renderContractJobs(){
   var el=document.getElementById('contractJobsList');if(!el||!cjData.length)return;
-  var sorted=cjData.slice();
+  var sorted=cjData.filter(cjRowPasses);
   if(cjSortCol){
     sorted.sort(function(a,b){
       var va=(a[cjSortCol]||''),vb=(b[cjSortCol]||'');
@@ -3390,7 +3432,12 @@ function renderContractJobs(){
 
   // table-layout:fixed makes the declared widths authoritative. width:max-content lets the
   // table grow past the container so the wrapper's overflow-x scrolls instead of squeezing.
-  var html='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:'+CJ_COLS.reduce(function(s,c){return s+c.ch},0)+'ch"><thead><tr>';
+  var html='<div style="display:flex;gap:.8rem;align-items:center;margin-bottom:.3rem;flex-wrap:wrap">'
+    +'<label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem;cursor:pointer"><input type="checkbox" onchange="cjToggleC2c(this)"'+(_cjC2cOnly?' checked':'')+' style="cursor:pointer"> 🤝 C2C / vendor-friendly only</label>'
+    +'<span style="font-size:.56rem;color:var(--g5)">'+total+' of '+cjData.length+' shown</span>'
+    +(CAP.canEditFields?'<button onclick="cjClassifyEngagement(this)" title="Classify engagement model (C2C / W2 / direct-hire) for jobs saved before this feature existed" style="margin-left:auto;padding:.15rem .5rem;background:#fff;border:1px solid var(--g2);border-radius:4px;font-size:.56rem;cursor:pointer">🏷️ Classify engagement</button>':'')
+    +'</div>';
+  html+='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:'+CJ_COLS.reduce(function(s,c){return s+c.ch},0)+'ch"><thead><tr>';
   CJ_COLS.forEach(function(c){
     var arrow=cjSortCol===c.key?(cjSortDir===1?' ▲':' ▼'):'';
     var wid='width:'+c.ch+'ch;';
@@ -3399,6 +3446,15 @@ function renderContractJobs(){
     }else{
       html+='<th style="white-space:nowrap;padding:.3rem .4rem;'+wid+'">'+c.label+'</th>';
     }
+  });
+  html+='</tr>';
+  // #593: filter row
+  var FI='width:100%;box-sizing:border-box;font-size:.56rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)';
+  html+='<tr style="background:#FAFAFA">';
+  CJ_COLS.forEach(function(c){
+    if(c.key==='idx')html+='<th style="padding:.1rem .2rem"></th>';
+    else if(c.key==='action')html+='<th style="padding:.1rem .2rem;text-align:center"><button onclick="cjClearFilters()" title="Clear all filters" style="padding:.05rem .3rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.5rem;cursor:pointer">✕</button></th>';
+    else html+='<th style="padding:.1rem .2rem"><input class="cjFlt" data-f="'+c.key+'" placeholder="filter" value="'+esc(_cjFlt[c.key]||'')+'" oninput="cjFilterInput(this)" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="'+FI+'"></th>';
   });
   html+='</tr></thead><tbody>';
   pageData.forEach(function(j,i){
@@ -3420,6 +3476,7 @@ function renderContractJobs(){
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+titleText.replace(/"/g,'&quot;')+'">'+titleHtml+cjMatchInd+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.company||'')+'">'+j.company+'</td>';
     html+='<td>'+typeBadge+'</td>';
+    html+='<td style="white-space:nowrap;overflow:hidden">'+(engChip(j)||'<span style="color:var(--g3);font-size:.55rem">—</span>')+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.location||'')+'">'+(j.location||'')+'</td>';
     html+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+(j.detectedCountry||'')+'">'+(j.detectedCountry||'')+'</td>';
     html+='<td style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="'+(j.salary||'N/A')+'">'+(j.salary||'N/A')+'</td>';
@@ -4749,7 +4806,7 @@ function renderMatchJobs(d){
   });
   h+='<th style="padding:.3rem .4rem;text-align:center;width:13ch">Action</th></tr>';
   // #587: filter row (in-place filtering; see mjApplyFilters)
-  var fi=function(key,ph,type){var FI='width:100%;box-sizing:border-box;font-size:.58rem;padding:.12rem .25rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit';return '<th style="padding:.15rem .25rem"><input class="mjFlt" data-f="'+key+'" type="'+(type||'text')+'" placeholder="'+ph+'" value="'+esc(_mjFlt[key]||'')+'" oninput="mjFilterInput(this)" onclick="event.stopPropagation()" style="'+FI+'"></th>'};
+  var fi=function(key,ph,type){var FI='width:100%;box-sizing:border-box;font-size:.58rem;padding:.12rem .25rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)';return '<th style="padding:.15rem .25rem"><input class="mjFlt" data-f="'+key+'" type="'+(type||'text')+'" placeholder="'+ph+'" value="'+esc(_mjFlt[key]||'')+'" oninput="mjFilterInput(this)" onclick="event.stopPropagation()" style="'+FI+'"></th>'};
   h+='<tr style="background:#FAFAFA"><th></th>'+fi('min','≥ %','number')+'<th></th>'+fi('title','filter role')+fi('company','filter company')+fi('location','filter location')+'<th></th>'+fi('tech','e.g. splunk sentinel')
     +'<th style="padding:.15rem .25rem;text-align:center;white-space:nowrap"><span id="mjFltCount" style="font-size:.52rem;color:var(--g5)"></span> <button onclick="mjClearFilters()" title="Clear filters" style="padding:.1rem .35rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.52rem;cursor:pointer">✕</button></th></tr></thead><tbody>';
   list.forEach(function(m,ri){
