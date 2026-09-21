@@ -836,8 +836,10 @@ exports.handler = async (event) => {
       var params = new URLSearchParams({ query: query, page: String(page), num_pages: '1', country: ctry, date_posted: body.datePosted || 'all' });
       if (useEmpType && body.employmentTypes) params.set('employment_types', body.employmentTypes);
       try {
+        // #585: hard 12s cap per JSearch call so one slow upstream call cannot push the function past Netlify's gateway limit
         var r = await fetch('https://jsearch.p.rapidapi.com/search?' + params, {
-          headers: { 'x-rapidapi-host': 'jsearch.p.rapidapi.com', 'x-rapidapi-key': apiKey }
+          headers: { 'x-rapidapi-host': 'jsearch.p.rapidapi.com', 'x-rapidapi-key': apiKey },
+          signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(12000) : undefined
         });
         totalApiCalls++;
         if (!r.ok) return []; var d = await r.json(); return d.data || [];
