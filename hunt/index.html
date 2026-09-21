@@ -4565,7 +4565,7 @@ function runMatchJobs(page,noScore){
   if(btn){btn.disabled=true;btn.style.opacity='.5'}
   st.textContent=noScore?'📦 Loading already-scored matches...':'🔍 Scoring recent jobs against this consultant...';
   authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({
-    action:'matchJobs',consultantId:cid,period:period,page:page,evalCap:noScore?0:mjState.evalCap,noScore:!!noScore
+    action:'matchJobs',consultantId:cid,period:period,page:page,evalCap:noScore?0:mjState.evalCap,noScore:!!noScore,forceScore:!!mjState.force
   })}).then(function(r){return r.json()}).then(function(d){
     if(btn){btn.disabled=false;btn.style.opacity='1'}
     if(d&&typeof d.evaluated==='number'&&d.evaluated>(mjState.evalCap||0)){mjState.evalCap=d.evaluated}  // sync cap with server
@@ -4576,14 +4576,16 @@ function runMatchJobs(page,noScore){
       setTimeout(function(){runMatchJobs(page)},400);
       return;
     }
+    mjState.force=false;  // #586: explicit Score-more run finished (cap reached or nothing left)
     renderMatchJobs(d);
   }).catch(function(e){
+    mjState.force=false;
     if(btn){btn.disabled=false;btn.style.opacity='1'}
     st.textContent='⚠️ '+e.message;
   });
 }
 function mjNextPage(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page+1)}
-function mjScoreMore(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page||0)}
+function mjScoreMore(){mjState.evalCap=(mjState.evalCap||50)+50;mjState.force=true;runMatchJobs(mjState.page||0)}  // #586: force past page-full stop
 var mjSortCol='overall',mjSortDir=-1,mjMouseX=0,mjLastData=null;
 var _mjSelected={};   // #422: jobId -> true for selected rows
 function mjToggleOne(jobId,on){ if(on)_mjSelected[jobId]=true; else delete _mjSelected[jobId]; if(mjLastData)renderMatchJobs(mjLastData); }

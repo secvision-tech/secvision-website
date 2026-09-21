@@ -1673,7 +1673,9 @@ exports.handler = async function (event) {
       var haveNow = preScored.filter(function (m) { return m.overall >= MATCH_THRESHOLD; }).length;
       var moreToScore = false, scoreError = null, newlyScored = [];
 
-      if (haveNow >= NEED) {
+      // #586: an explicit Score-more click (forceScore) overrides the page-full stop — same as #537 on the job side.
+      // Without it, once >=10 matches exist every Score-more click was a silent no-op (evaluated stuck, unscoredLeft unchanged).
+      if (haveNow >= NEED && !body.forceScore) {
         toScore = [];
       } else if (evaluated >= EVAL_CAP) {
         moreToScore = toScore.length > 0; toScore = [];
@@ -1709,7 +1711,7 @@ exports.handler = async function (event) {
       var pageIsFull = all.length >= (page + 1) * PAGE;
       var evaluatedTotal = preScored.length + newlyScored.length;
       var unscoredLeft = candidateJobs.length - evaluatedTotal;
-      var keepScoring = moreToScore && !pageIsFull && evaluatedTotal < EVAL_CAP && !scoreError;
+      var keepScoring = moreToScore && (!pageIsFull || !!body.forceScore) && evaluatedTotal < EVAL_CAP && !scoreError;
 
       // #419: Persist the matches so the list survives closing the popup. We merge into a
       // `matchedJobs` array on the consultant (dedup by jobId, keep the latest score).
