@@ -1736,6 +1736,7 @@ exports.handler = async function (event) {
           contractDuration: m.job.contractDuration || '',
           applyLink: m.job.applyLink || m.job.jobUrl || '',
           source: m.job.source || '',
+          skills: m.job.skills || '', tools: m.job.tools || '',   // #587: technology column / export
           overall: m.overall, reason: m.reason,
           locationFit: m.locationFit,
           matchedAt: new Date()
@@ -1784,6 +1785,7 @@ exports.handler = async function (event) {
             contractDuration: m.job.contractDuration || '',
             applyLink: m.job.applyLink || m.job.jobUrl || '',
             source: m.job.source || '',
+            skills: m.job.skills || '', tools: m.job.tools || '',   // #587
             overall: m.overall, dimensions: m.dimensions, reason: m.reason,
             locationFit: m.locationFit
           };
@@ -1834,7 +1836,7 @@ exports.handler = async function (event) {
           lcKeys.forEach(function (k) { try { lcOids.push(new LOID(k)); } catch (e) {} });
           var lcJobs = await db.collection('jobs').find({
             $or: [{ _id: { $in: lcOids } }, { jobId: { $in: lcKeys } }]
-          }).project({ title: 1, titleClean: 1, company: 1, location: 1, datePosted: 1, contractDuration: 1, jobId: 1, applyLink: 1, jobUrl: 1 }).toArray();
+          }).project({ title: 1, titleClean: 1, company: 1, location: 1, datePosted: 1, contractDuration: 1, jobId: 1, applyLink: 1, jobUrl: 1, skills: 1, tools: 1 }).toArray();
           lcDbg.jobsFetched = lcJobs.length;
           lcJobs.forEach(function (j) {
             var e = lcCache[String(j._id)] || (j.jobId ? lcCache[String(j.jobId)] : null);
@@ -1843,12 +1845,25 @@ exports.handler = async function (event) {
             if (lcHave[jid]) return;
             saved.push({ jobId: jid, title: j.titleClean || j.title || '', company: j.company || '',
               location: j.location || '', datePosted: j.datePosted || null, duration: j.contractDuration || '',
-              applyLink: j.applyLink || j.jobUrl || '', overall: e.overall, dimensions: e.dimensions,
-              reason: e.reason, fromJobSide: true });
+              applyLink: j.applyLink || j.jobUrl || '', skills: j.skills || '', tools: j.tools || '',
+              overall: e.overall, dimensions: e.dimensions, reason: e.reason, fromJobSide: true });
             lcHave[jid] = 1; lcDbg.merged++;
           });
         }
       } catch (e) { lcDbg.err = String(e && e.message || e); }
+      // #587: backfill skills/tools for rows saved before the technology column existed (one query, best-effort)
+      try {
+        var bfKeys = saved.filter(function (m) { return m.jobId && m.skills === undefined; }).map(function (m) { return String(m.jobId); });
+        if (bfKeys.length) {
+          var BOID = require('mongodb').ObjectId, bfOids = [];
+          bfKeys.forEach(function (k) { try { bfOids.push(new BOID(k)); } catch (e) {} });
+          var bfJobs = await db.collection('jobs').find({ $or: [{ _id: { $in: bfOids } }, { jobId: { $in: bfKeys } }] })
+            .project({ jobId: 1, skills: 1, tools: 1 }).toArray();
+          var bfMap = {};
+          bfJobs.forEach(function (j) { bfMap[String(j._id)] = j; if (j.jobId) bfMap[String(j.jobId)] = j; });
+          saved.forEach(function (m) { var j = bfMap[String(m.jobId)]; if (j) { m.skills = j.skills || ''; m.tools = j.tools || ''; } });
+        }
+      } catch (e) { /* column stays blank for those rows */ }
       saved.sort(function (a, b) { return b.overall - a.overall; });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         matches: saved, totalMatches: saved.length, consultantCountry: profileCountry(lcCons), saved: true, mergeDebug: lcDbg

@@ -4634,7 +4634,88 @@ function mjSortValue(m,col){
   if(col==='overall')return m.overall||0;
   if(col==='datePosted')return m.datePosted?new Date(m.datePosted).getTime():0;
   if(col==='duration')return m.contractDuration||'';
+  if(col==='tech')return mjTech(m).toLowerCase();
   return (m[col]||'').toString().toLowerCase();
+}
+// #587: technology column = job's extracted skills + tools (strings or arrays), de-duplicated
+function mjTech(m){
+  var out=[],seen={};
+  [m.skills,m.tools].forEach(function(v){
+    (Array.isArray(v)?v:String(v||'').split(/[,;|\n]+/)).forEach(function(t){t=String(t||'').trim();if(!t||t==='See details')return;var k=t.toLowerCase();if(!seen[k]){seen[k]=1;out.push(t)}});
+  });
+  return out.join(', ');
+}
+// #587: column filters — applied in place (rows hidden/shown) so typing never rebuilds the table or loses focus
+var _mjFlt={title:'',company:'',location:'',tech:'',min:''};
+function mjFilterInput(el){_mjFlt[el.getAttribute('data-f')]=el.value.trim().toLowerCase();mjApplyFilters()}
+function mjRowPasses(m){
+  var f=_mjFlt;
+  if(f.min&&!((m.overall||0)>=parseFloat(f.min)))return false;
+  if(f.title&&String(m.title||'').toLowerCase().indexOf(f.title)<0)return false;
+  if(f.company&&String(m.company||'').toLowerCase().indexOf(f.company)<0)return false;
+  if(f.location&&String((m.location||m.country||'')).toLowerCase().indexOf(f.location)<0)return false;
+  if(f.tech){var t=mjTech(m).toLowerCase();if(!f.tech.split(/\s+/).every(function(w){return t.indexOf(w)>=0}))return false}
+  return true;
+}
+function mjApplyFilters(){
+  var byId={};((mjLastData&&mjLastData.matches)||[]).forEach(function(m){byId[m.jobId]=m});
+  var shown=0,n=0;
+  document.querySelectorAll('#mjTable tbody tr[data-mjrow]').forEach(function(tr){var m=byId[tr.getAttribute('data-mjrow')];var ok=!m||mjRowPasses(m);tr.style.display=ok?'':'none';if(ok){shown++;tr.cells[0].textContent=shown}});
+  var c=document.getElementById('mjFltCount');if(c){var tot=document.querySelectorAll('#mjTable tbody tr[data-mjrow]').length;c.textContent=shown===tot?'':(shown+' of '+tot+' shown')}
+}
+function mjClearFilters(){_mjFlt={title:'',company:'',location:'',tech:'',min:''};document.querySelectorAll('.mjFlt').forEach(function(i){i.value=''});mjApplyFilters()}
+// #587: export the visible (filtered + sorted) matching jobs — CSV / Excel / PDF / Word
+function mjExportRows(){
+  var list=((mjLastData&&mjLastData.matches)||[]).slice().sort(function(a,b){var va=mjSortValue(a,mjSortCol),vb=mjSortValue(b,mjSortCol);if(va<vb)return -1*mjSortDir;if(va>vb)return 1*mjSortDir;return 0}).filter(mjRowPasses);
+  return list.map(function(m,i){return {'#':i+1,'Match %':m.overall,'Posted':m.datePosted?fmtDate(m.datePosted):'','Role':m.title||'','Company':m.company||'','Location':m.location||m.country||'','Duration':m.contractDuration||(/contract/i.test(m.jobType||'')?'Contract':''),'Skills / Technology':mjTech(m),'Rate / Salary':m.salary||'','Source':m.source||'','Reason':m.reason||'','Apply Link':m.applyLink||''}});
+}
+function mjExportName(ext){var c=manageProfileData||{};return 'SecVision_MatchingJobs_'+String(c.name||'consultant').replace(/[^\w]+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.'+ext}
+function mjExportTitle(){var c=manageProfileData||{};return 'Matching jobs — '+(c.name||'')+(c.currentRole?' · '+c.currentRole:'')}
+function mjExport(kind){
+  var d=mjExportRows();if(!d.length){alert('No matching jobs to export (check the filters).');return}
+  var keys=Object.keys(d[0]);
+  if(kind==='csv'){
+    var csv=keys.join(',')+'\n';d.forEach(function(r){csv+=keys.map(function(k){var v=String(r[k]==null?'':r[k]).replace(/"/g,'""');return '"'+v+'"'}).join(',')+'\n'});
+    downloadFile('\ufeff'+csv,mjExportName('csv'),'text/csv');return;
+  }
+  if(kind==='xlsx'){
+    var ws=XLSX.utils.json_to_sheet(d),wb=XLSX.utils.book_new();
+    ws['!cols']=[{wch:4},{wch:8},{wch:12},{wch:34},{wch:24},{wch:20},{wch:12},{wch:40},{wch:16},{wch:12},{wch:40},{wch:40}];
+    XLSX.utils.book_append_sheet(wb,ws,'Matching jobs');XLSX.writeFile(wb,mjExportName('xlsx'));return;
+  }
+  if(kind==='pdf'){
+    var doc=new jspdf.jsPDF({orientation:'landscape',unit:'pt',format:'a4'});
+    doc.setFontSize(13);doc.text(mjExportTitle(),40,32);
+    doc.setFontSize(8);doc.text(d.length+' jobs · SecVision Business Hunt · '+fmtDate(new Date()),40,46);
+    var cols=keys.filter(function(k){return k!=='Apply Link'&&k!=='Reason'});
+    var rows=d.map(function(r){return cols.map(function(k){return String(r[k]==null?'':r[k])})});
+    doc.autoTable({head:[cols],body:rows,startY:56,styles:{fontSize:6.5,cellPadding:2.5,overflow:'linebreak'},headStyles:{fillColor:[108,63,191],fontSize:7},columnStyles:{0:{cellWidth:18},1:{cellWidth:36},2:{cellWidth:52},3:{cellWidth:150},4:{cellWidth:100},5:{cellWidth:90},6:{cellWidth:50},7:{cellWidth:170},8:{cellWidth:60},9:{cellWidth:48}},margin:{left:30,right:30}});
+    doc.save(mjExportName('pdf'));return;
+  }
+  if(kind==='docx'){mjExportDocx(d,keys)}
+}
+function mjLoadDocxLib(){
+  if(window.docx&&window.docx.Document)return Promise.resolve();
+  return new Promise(function(res,rej){var sc=document.createElement('script');sc.src='https://cdn.jsdelivr.net/npm/docx@9.6.1/dist/index.iife.js';sc.onload=function(){res()};sc.onerror=function(){rej(new Error('Could not load the Word export library (network blocked?)'))};document.head.appendChild(sc)});
+}
+async function mjExportDocx(d,keys){
+  try{
+    await mjLoadDocxLib();
+    var D=window.docx;
+    var cols=keys.filter(function(k){return k!=='Apply Link'&&k!=='Reason'});
+    var widths={'#':500,'Match %':800,'Posted':1100,'Role':2800,'Company':2000,'Location':1800,'Duration':1000,'Skills / Technology':3200,'Rate / Salary':1300,'Source':1000};
+    var cell=function(txt,opts){opts=opts||{};return new D.TableCell({width:{size:opts.w||1500,type:D.WidthType.DXA},shading:opts.head?{fill:'6C3FBF'}:undefined,margins:{top:60,bottom:60,left:80,right:80},children:[new D.Paragraph({children:[new D.TextRun({text:String(txt==null?'':txt),bold:!!opts.head,color:opts.head?'FFFFFF':undefined,size:opts.head?15:14})]})]})};
+    var rows=[new D.TableRow({tableHeader:true,children:cols.map(function(k){return cell(k,{head:true,w:widths[k]})})})];
+    d.forEach(function(r){rows.push(new D.TableRow({children:cols.map(function(k){return cell(r[k],{w:widths[k]})})}))});
+    var docObj=new D.Document({sections:[{properties:{page:{size:{orientation:D.PageOrientation.LANDSCAPE},margin:{top:720,bottom:720,left:600,right:600}}},children:[
+      new D.Paragraph({children:[new D.TextRun({text:mjExportTitle(),bold:true,size:28,color:'0E7490'})]}),
+      new D.Paragraph({children:[new D.TextRun({text:d.length+' matching contract jobs · SecVision Business Hunt · '+fmtDate(new Date()),size:18,color:'6B7280'})],spacing:{after:200}}),
+      new D.Table({width:{size:100,type:D.WidthType.PERCENTAGE},rows:rows}),
+      new D.Paragraph({children:[new D.TextRun({text:'Match % is the AI fit score of this consultant against each job requirement (≥60 = match). Apply links are included in the Excel/CSV export.',size:16,color:'6B7280',italics:true})],spacing:{before:200}})
+    ]}]});
+    var blob=await D.Packer.toBlob(docObj);
+    var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=mjExportName('docx');document.body.appendChild(a);a.click();a.remove();
+  }catch(e){alert('Word export failed: '+e.message)}
 }
 var _mjRenderSig='';
 function renderMatchJobs(d){
@@ -4658,15 +4739,19 @@ function renderMatchJobs(d){
   if(sig===_mjRenderSig&&document.getElementById('mjTable'))return;   // #438: no identical rebuilds
   _mjRenderSig=sig;
   var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
-  var cols=[['overall','Match',6],['datePosted','Posted',9],['title','Role',24],['company','Company',17],['location','Location',15],['duration','Duration',9]];
-  var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:108ch"><thead><tr style="background:var(--g1)">';
+  var cols=[['overall','Match',6],['datePosted','Posted',9],['title','Role',22],['company','Company',15],['location','Location',13],['duration','Duration',8],['tech','Skills / Tech',24]];   // #587: technology column
+  var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:132ch"><thead><tr style="background:var(--g1)">';
   // #441: checkbox column removed — selection is row-click, shown by row highlight.
   // #420: rank column
   h+='<th style="padding:.3rem .3rem;text-align:right;width:4ch">#</th>';
   cols.forEach(function(c){
     h+='<th onmousedown="mjHeaderDown(event)" onclick="mjHeaderClick(\''+c[0]+'\',event)" style="padding:.3rem .4rem;text-align:left;cursor:pointer;white-space:nowrap;overflow:hidden;width:'+c[2]+'ch">'+c[1]+'<span style="color:var(--ac);font-size:.5rem">'+arrow(c[0])+'</span></th>';
   });
-  h+='<th style="padding:.3rem .4rem;text-align:center;width:13ch">Action</th></tr></thead><tbody>';
+  h+='<th style="padding:.3rem .4rem;text-align:center;width:13ch">Action</th></tr>';
+  // #587: filter row (in-place filtering; see mjApplyFilters)
+  var fi=function(key,ph,type){var FI='width:100%;box-sizing:border-box;font-size:.58rem;padding:.12rem .25rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit';return '<th style="padding:.15rem .25rem"><input class="mjFlt" data-f="'+key+'" type="'+(type||'text')+'" placeholder="'+ph+'" value="'+esc(_mjFlt[key]||'')+'" oninput="mjFilterInput(this)" onclick="event.stopPropagation()" style="'+FI+'"></th>'};
+  h+='<tr style="background:#FAFAFA"><th></th>'+fi('min','≥ %','number')+'<th></th>'+fi('title','filter role')+fi('company','filter company')+fi('location','filter location')+'<th></th>'+fi('tech','e.g. splunk sentinel')
+    +'<th style="padding:.15rem .25rem;text-align:center;white-space:nowrap"><span id="mjFltCount" style="font-size:.52rem;color:var(--g5)"></span> <button onclick="mjClearFilters()" title="Clear filters" style="padding:.1rem .35rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.52rem;cursor:pointer">✕</button></th></tr></thead><tbody>';
   list.forEach(function(m,ri){
     var scoreColor=m.overall>=80?'#047857':(m.overall>=70?'#6C3FBF':'#B45309');
     var loc=m.location||m.country||'—';
@@ -4683,6 +4768,7 @@ function renderMatchJobs(d){
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.company||'')+'">'+esc(m.company||'—')+'</td>'
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(loc)+'">'+esc(loc)+'</td>'
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+dur+'</td>'
+      +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(mjTech(m))+'">'+(mjTech(m)?esc(mjTech(m)):'<span style="color:var(--g3)">—</span>')+'</td>'
       +'<td style="padding:.3rem .4rem;text-align:center;white-space:nowrap">'
         +'<button onclick="event.stopPropagation();mjManageJob(\''+esc(m.jobId)+'\')" title="View job details" style="padding:.15rem .4rem;background:var(--ac);color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;margin-right:.2rem">View</button>'
         +'<button onclick="event.stopPropagation();mjDeleteJob(\''+esc(m.jobId)+'\')" title="Remove from this consultant\'s matches" style="padding:.15rem .4rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer">✕</button>'
@@ -4702,9 +4788,17 @@ function renderMatchJobs(d){
   if(d.page>0)h+='<button onclick="runMatchJobs('+(d.page-1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>';
   if(typeof d.page==='number')h+='<span style="font-size:.55rem;color:var(--g5)">Page '+(d.page+1)+'</span>';
   if(d.hasMore||d.canScoreMore)h+='<button onclick="mjNextPage()" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Next 10 ›</button>';
+  // #587: export the visible list
+  var EB='padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600;color:var(--pri)';
+  h+='<span style="margin-left:auto;font-size:.55rem;color:var(--g5)">Export:</span>'
+    +'<button onclick="mjExport(\'csv\')" style="'+EB+'" title="Comma-separated values">CSV</button>'
+    +'<button onclick="mjExport(\'xlsx\')" style="'+EB+'" title="Microsoft Excel">Excel</button>'
+    +'<button onclick="mjExport(\'docx\')" style="'+EB+'" title="Microsoft Word">Word</button>'
+    +'<button onclick="mjExport(\'pdf\')" style="'+EB+'" title="PDF document">PDF</button>';
   h+='</div>';
   box.innerHTML=h;
   attachColResizers('mjTable');   // #417: JS drag-resize, sort-safe (see #408)
+  mjApplyFilters();   // #587: re-apply any active column filters after a rebuild
 }
 var mjFromConsultant=false,_mjPending=false;
 function mjManageJob(jobId){
