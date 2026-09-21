@@ -6274,9 +6274,9 @@ async function runMatch(page,navOnly,force){
       }
       // If nothing in this job's own country matched, say so plainly — the fix is to source locally.
       if(d.inCountryMatches===0&&(d.totalMatches||0)>0&&d.jobCountry){
-        ci.innerHTML=esc(txt)+' <span style="color:#B45309">None are based in '+esc(d.jobCountry)+' — use “Fetch More from LinkedIn” to source locally.</span>'+extra;
+        ci.innerHTML=txt+' <span style="color:#B45309">None are based in '+esc(d.jobCountry)+' — use “Fetch More from LinkedIn” to source locally.</span>'+extra;   // #589: txt is already HTML (dynamic parts escaped)
       }else{
-        ci.innerHTML=esc(txt)+extra;
+        ci.innerHTML=txt+extra;   // #589
       }
     }
   }catch(e){st.textContent='⚠️ Error: '+e.message}
