@@ -71,7 +71,35 @@ function buildPrompt(desc) {
     + '\n---END JOB DESCRIPTION---';
 }
 
+// #590: long descriptions are split at paragraph/sentence boundaries and formatted in PARALLEL —
+// a single 10k-char rewrite (~3k output tokens) regularly ran past the 20s abort and Netlify's
+// gateway limit ("This operation was aborted"). Chunks of ~3.5k chars finish in a few seconds each.
+var CHUNK_CHARS = 3500;
+function splitDesc(desc) {
+  desc = desc.slice(0, MAX_CHARS);
+  if (desc.length <= CHUNK_CHARS + 800) return [desc];
+  var parts = [], rest = desc;
+  while (rest.length > CHUNK_CHARS + 800) {
+    var win = rest.slice(0, CHUNK_CHARS);
+    var cut = Math.max(win.lastIndexOf('\n\n'), win.lastIndexOf('\n'));
+    if (cut < CHUNK_CHARS * 0.5) cut = Math.max(win.lastIndexOf('. '), win.lastIndexOf('; '));
+    if (cut < CHUNK_CHARS * 0.5) cut = win.lastIndexOf(' ');
+    if (cut <= 0) cut = CHUNK_CHARS;
+    parts.push(rest.slice(0, cut + 1).trim());
+    rest = rest.slice(cut + 1);
+  }
+  if (rest.trim()) parts.push(rest.trim());
+  return parts;
+}
 async function formatOne(desc) {
+  var parts = splitDesc(desc);
+  if (parts.length > 1) {
+    var outs = await Promise.all(parts.map(function (p) { return formatChunk(p); }));
+    return outs.map(function (o) { return (o || '').trim(); }).filter(Boolean).join('\n\n');
+  }
+  return formatChunk(parts[0]);
+}
+async function formatChunk(desc) {
   var ctrl = new AbortController();
   var tmo = setTimeout(function () { ctrl.abort(); }, 20000);
   try {
@@ -99,6 +127,9 @@ async function formatOne(desc) {
     // strip accidental code fences
     out = out.replace(/^```(?:markdown)?\s*/i, '').replace(/```\s*$/, '').trim();
     return out;
+  } catch (e) {
+    if (e && (e.name === 'AbortError' || /aborted/i.test(String(e.message)))) throw new Error('Formatting timed out (description too long for one pass) — please try again.');
+    throw e;
   } finally { clearTimeout(tmo); }
 }
 
