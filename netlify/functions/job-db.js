@@ -1762,7 +1762,7 @@ exports.handler = async (event) => {
     // ---- #592: classify engagement model (C2C / W2 / direct-hire) for jobs saved before the classifier existed ----
     if (action === 'classifyEngagementBackfill') {
       var bfQ = body.force ? {} : { engagementModel: { $exists: false } };
-      var bfJobs = await col.find(bfQ).project({ title: 1, description: 1, jobType: 1, salary: 1, eligibility: 1, contractDuration: 1, source: 1, companyType: 1, detectedCountry: 1, location: 1 }).limit(400).toArray();
+      var bfJobs = await col.find(bfQ).sort({ _id: 1 }).skip(body.force ? (parseInt(body.skip) || 0) : 0).project({ title: 1, description: 1, jobType: 1, salary: 1, eligibility: 1, contractDuration: 1, source: 1, companyType: 1, detectedCountry: 1, location: 1 }).limit(400).toArray();
       var bfOps = bfJobs.map(function (j) { var e = classifyEngagement(j); return { updateOne: { filter: { _id: j._id }, update: { $set: { engagementModel: e.model, offshoreOk: e.offshoreOk, engagementEvidence: e.evidence } } } }; });
       if (bfOps.length) await col.bulkWrite(bfOps, { ordered: false });
       var bfLeft = body.force ? 0 : await col.countDocuments({ engagementModel: { $exists: false } });

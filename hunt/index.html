@@ -3401,14 +3401,16 @@ function cjRowPasses(j){
   return true;
 }
 async function cjClassifyEngagement(btn){
-  btn.disabled=true;var done=0,tally={};
+  // #596: OK = re-classify ALL jobs with the current rules (after a classifier update); Cancel = only unclassified jobs
+  var force=confirm('Re-classify ALL jobs with the latest rules?\n\nOK = all jobs (use after a classifier update)\nCancel = only jobs not yet classified');
+  btn.disabled=true;var done=0,tally={},skip=0;
   try{
-    for(var i=0;i<25;i++){
+    for(var i=0;i<60;i++){
       btn.textContent='Classifying... '+done;
-      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'classifyEngagementBackfill'})});
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'classifyEngagementBackfill',force:force,skip:skip})});
       var d=await r.json();if(d.error){alert(d.error);break}
-      done+=d.classified||0;Object.keys(d.tally||{}).forEach(function(k){tally[k]=(tally[k]||0)+d.tally[k]});
-      if(!d.remaining||!d.classified)break;
+      done+=d.classified||0;skip+=d.classified||0;Object.keys(d.tally||{}).forEach(function(k){tally[k]=(tally[k]||0)+d.tally[k]});
+      if(!d.classified||(!force&&!d.remaining)||(force&&d.classified<400))break;
     }
     alert('Engagement classification: '+done+' jobs classified.\n'+Object.keys(tally).map(function(k){return k+': '+tally[k]}).join('\n')+(done?'\n\nRefreshing the table.':''));
     if(done){contractLoaded=false;await loadContractPipeline();contractLoaded=true}
