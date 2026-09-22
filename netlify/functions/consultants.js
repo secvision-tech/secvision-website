@@ -69,6 +69,7 @@ var ACTION_ROLES = {
   'removeResume': STATUS_ROLES,
   'promoteAllCached': ADMIN_UP,          // one-time cached -> managed transfer
   'listPending': VIEW_ROLES,             // #497 review popup: all pending (managed:false) profiles, any source
+  'translateProfiles': VIEW_ROLES,       // #595b: English rendering of non-Latin role/headline/location (cached on the profile)
   'rejectPending': STATUS_ROLES,         // #497 delete from review -> permanent sourcing reject (anti-resurrection)
   'promoteSelected': STATUS_ROLES        // #497 import selected pending ids -> managed
 };
@@ -625,6 +626,57 @@ exports.handler = async function (event) {
     // ---- #435: AI resume parsing — extract structured fields from raw resume text ----
     // The old client-side regex only found email/phone/linkedin; name, location, country,
     // company, years and summary need real understanding. Haiku costs a fraction of a cent.
+    // ---- #595b: translate non-English role / headline / location to English, cache as *En on the profile ----
+    if (action === 'translateProfiles') {
+      var tIds = (body.ids || []).slice(0, 40).map(function (x) { try { return new ObjectId(String(x)); } catch (e) { return null; } }).filter(Boolean);
+      if (!tIds.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ translated: {} }) };
+      var NONLATIN = /[^\u0000-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2100-\u214F\u2190-\u21FF\u2600-\u27BF]/;
+      var tDocs = await col.find({ _id: { $in: tIds } }).project({ currentRole: 1, headline: 1, location: 1, currentRoleEn: 1, headlineEn: 1, locationEn: 1 }).toArray();
+      var tNeed = [], tOut = {};
+      tDocs.forEach(function (d) {
+        var item = { id: String(d._id) };
+        ['currentRole', 'headline', 'location'].forEach(function (f) {
+          var v = String(d[f] || '');
+          if (d[f + 'En']) tOut[item.id] = tOut[item.id] || {}, tOut[item.id][f + 'En'] = d[f + 'En'];
+          else if (v && NONLATIN.test(v)) item[f] = v.slice(0, 300);
+        });
+        if (Object.keys(item).length > 1) tNeed.push(item);
+      });
+      if (tNeed.length) {
+        var TKEY = process.env.ANTHROPIC_API_KEY;
+        if (!TKEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ translated: tOut, error: 'ANTHROPIC_API_KEY not configured' }) };
+        var tPrompt = 'Translate the following profile fields into concise professional English. Keep proper nouns, product names and certifications as-is; '
+          + 'for locations give the English place name (e.g. "Bengaluru, Karnataka, India"). Respond with ONLY a JSON array of objects with the same "id" and the same field names, values in English. No prose, no code fences.\n\n' + JSON.stringify(tNeed);
+        try {
+          var tctrl = new AbortController(); var ttmo = setTimeout(function () { tctrl.abort(); }, 18000);
+          var tresp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST', signal: tctrl.signal,
+            headers: { 'Content-Type': 'application/json', 'x-api-key': TKEY, 'anthropic-version': '2023-06-01' },
+            body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2500, messages: [{ role: 'user', content: tPrompt }] })
+          });
+          clearTimeout(ttmo);
+          if (!tresp.ok) throw new Error('Anthropic ' + tresp.status);
+          var tdata = await tresp.json();
+          var ttxt = (tdata.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim().replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+          var tm = ttxt.match(/\[[\s\S]*\]/); var tArr = JSON.parse(tm ? tm[0] : ttxt);
+          var tOps = [];
+          (tArr || []).forEach(function (r) {
+            if (!r || !r.id) return;
+            var setv = {};
+            ['currentRole', 'headline', 'location'].forEach(function (f) { if (r[f] && typeof r[f] === 'string') setv[f + 'En'] = r[f].slice(0, 300); });
+            if (!Object.keys(setv).length) return;
+            setv.translatedAt = new Date();
+            tOut[r.id] = Object.assign(tOut[r.id] || {}, setv);
+            try { tOps.push({ updateOne: { filter: { _id: new ObjectId(r.id) }, update: { $set: setv } } }); } catch (e) {}
+          });
+          if (tOps.length) await col.bulkWrite(tOps, { ordered: false });
+        } catch (e) {
+          return { statusCode: 200, headers: hdrs, body: JSON.stringify({ translated: tOut, error: 'Translate failed: ' + e.message }) };
+        }
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ translated: tOut }) };
+    }
+
     if (action === 'parseResumeText') {
       var rtext = String(body.text || '').slice(0, 15000);
       if (!rtext.trim()) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'No resume text provided' }) };

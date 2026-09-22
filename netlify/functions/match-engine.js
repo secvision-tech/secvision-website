@@ -1036,6 +1036,13 @@ exports.handler = async function (event) {
           mcSeen[k] = 1; cached.push(p);
         });
       });
+      // #595a: an explicit From:<country> is a FILTER, not just a priority — only profiles located in that
+      // country are listed and scored. (Blank = job's country = old behaviour: priority order, all countries.)
+      if (mcPrefer) {
+        var mcOnly = canonCountry(mcPrefer);
+        cached = cached.filter(function (p) { return profileCountry(p) === mcOnly; });
+        mcDbg.strictCountry = mcOnly; mcDbg.poolAfterCountryFilter = cached.length;
+      }
       // Scoring order: same-country first, and within each country group the bench
       // (managed) before scraped prospects.
       try {
@@ -1190,7 +1197,7 @@ exports.handler = async function (event) {
       var pageIsFull = all.length >= (page + 1) * PAGE_SIZE;
       var unscoredLeft = cached.length - (preScored.length + newlyScored.length);
       var budgetUsed = (preScored.length + newlyScored.length) >= EVAL_CAP;
-      var keepScoring = moreToScore && !pageIsFull && !budgetUsed && !scoreError;
+      var keepScoring = moreToScore && (!pageIsFull || !!body.forceScore) && !budgetUsed && !scoreError;   // #595c: Score-more runs to its cap
       var canScoreMore = (unscoredLeft > 0) && !keepScoring;
 
       return {
@@ -1520,6 +1527,7 @@ exports.handler = async function (event) {
           screening: best ? { pct: best.pct, skillArea: best.skillArea, date: String(best.date || '').slice(0, 10) } : null,
           stale: !!(mc && reqL && mc.reqHash && mc.reqHash !== reqL.reqHash),
           name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',
+          currentRoleEn: p.currentRoleEn || p.headlineEn || '', locationEn: p.locationEn || '',   // #595b
           yearsExperience: (p.yearsExperience === undefined || p.yearsExperience === null) ? null : p.yearsExperience,
           currentCompany: p.currentCompany || '', location: p.location || '', country: p.country || '',
           engagementType: p.engagementType || (p.contractorSignal && p.contractorSignal.likely ? 'Contractor' : 'Unknown'),
@@ -1940,6 +1948,8 @@ function formatMatch(m) {
     location: m.profile.location,
     linkedinUrl: m.profile.linkedinUrl,
     currentRole: m.profile.currentRole,
+    currentRoleEn: m.profile.currentRoleEn || '', headlineEn: m.profile.headlineEn || '', locationEn: m.profile.locationEn || '',   // #595b
+    _id: m.profile._id ? String(m.profile._id) : (m.profile.id || ''),
     currentCompany: m.profile.currentCompany,
     yearsExperience: m.profile.yearsExperience,
     skills: (m.profile.skills || []).slice(0, 15),

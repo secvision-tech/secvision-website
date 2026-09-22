@@ -4124,7 +4124,7 @@ function fmtDate(date){return formatDateWithSettings(date)}
 loadSettings();
 
 var scopeDialogHtml='<div id="scopeDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1100;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div id="scopeDialogBody"></div></div></div>';
-var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchActions" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap"><button id="fetchMoreBtn" onclick="topUpProfiles()" style="padding:.3rem .7rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button><select id="fetchCountry" title="Where to source consultants from" style="font-size:.58rem;padding:.25rem .3rem;border:1px solid #C4B5FD;border-radius:4px;color:var(--pri)"><option value="">From: job&#39;s country</option><option value="India">From: India</option><option value="United States">From: United States</option><option value="United Kingdom">From: United Kingdom</option><option value="Canada">From: Canada</option></select><span id="cacheInfo" style="font-size:.56rem;color:var(--g5)"></span></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
+var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchActions" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap"><button id="fetchMoreBtn" onclick="topUpProfiles()" style="padding:.3rem .7rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button><select id="fetchCountry" title="Where to source consultants from" style="font-size:.58rem;padding:.25rem .3rem;border:1px solid #C4B5FD;border-radius:4px;color:var(--pri)"><option value="">From: job&#39;s country (all, priority order)</option><option value="India">From: India only</option><option value="United States">From: United States only</option><option value="United Kingdom">From: United Kingdom only</option><option value="Canada">From: Canada only</option></select><span id="cacheInfo" style="font-size:.56rem;color:var(--g5)"></span></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
 document.addEventListener("DOMContentLoaded",function(){document.body.insertAdjacentHTML("beforeend",contactPopupHtml);document.body.insertAdjacentHTML("beforeend",scopeDialogHtml);document.body.insertAdjacentHTML("beforeend",matchPopupHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
@@ -6267,12 +6267,15 @@ async function safeMatchJson(r){
 }
 
 async function runMatch(page,navOnly,force){
+  if(force)matchState.force=true;            // #595c: an explicit Score-more keeps forcing until the run ends
+  force=force||!!matchState.force;
   matchState.page=page;
   if(page===0&&!navOnly)_matchRenderSig='';   // #464: fresh open must render even if results are identical
   matchState._navOnly=!!navOnly;   // #456: pure navigation — never score
   if(page===0)mjResetScoredFeed();   // #432: fresh run clears the live feed
   var st=document.getElementById('matchStatus');
   st.textContent='⏳ Scoring cached consultant profiles...';
+  if(force){var ci0=document.getElementById('cacheInfo');if(ci0)ci0.innerHTML='<span style="color:#6C3FBF;font-weight:600">⏳ Scoring more… target '+(matchState.evalCap||50)+' evaluated</span>';}   // #595c
   // #438: don't blank the results here — clearing on every polling tick made the popup
   // flash. The table is replaced only when new data actually renders (see renderMatches).
   try{
@@ -6291,7 +6294,7 @@ async function runMatch(page,navOnly,force){
         setTimeout(function(){runMatch(page)},600);
         return;
       }
-      matchState._retries=0;
+      matchState._retries=0;matchState.force=false;
       st.innerHTML='⚠️ '+esc(d.error)+(d.retry?' <button onclick="matchState._retries=0;runMatch('+page+')" style="padding:.1rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Retry</button>':'');return;
     }
     matchState._retries=0;
@@ -6301,10 +6304,12 @@ async function runMatch(page,navOnly,force){
     if(d.moreToScore){
       mjPushScoredFeed(d.justScored);
       st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)'+mjScoredFeedHtml();
+      var ciP=document.getElementById('cacheInfo');if(ciP)ciP.innerHTML='<span style="color:#6C3FBF;font-weight:600">⏳ Evaluated '+(d.evaluated||0)+' of '+(d.cachedCount||0)+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60% — scoring continues'+(force?' (target '+(matchState.evalCap||50)+')':'')+'…</span>';   // #595c
       if(d.matches&&d.matches.length)renderMatches(d);
-      setTimeout(function(){runMatch(page)},400);
+      setTimeout(function(){runMatch(page,false,force)},400);
       return;
     }
+    matchState.force=false;   // #595c: run finished (cap reached, nothing left, page filled without force)
     if((!d.matches||!d.matches.length)&&d.needsTopUp){
       st.innerHTML='🔍 No cached matches. Fetching fresh consultant profiles from LinkedIn (this can take 30–60s)...';
       await topUpProfiles();
@@ -6422,6 +6427,7 @@ function renderMatches(d){
   var h='';
   d.matches.forEach(function(m,i){h+=matchCard(m,d.page*10+i+1)});
   el.innerHTML=h;
+  autoTranslateProfiles(d.matches,function(){_matchRenderSig='';renderMatches(d)});   // #595b
   var pager=document.getElementById('matchPager');
   pager.style.display='flex';
   document.getElementById('matchPrevBtn').style.visibility=d.page>0?'visible':'hidden';
@@ -6496,6 +6502,22 @@ function candFilterInput(v){
   clearTimeout(_candFilterTimer);
   _candFilterTimer=setTimeout(function(){var b=document.getElementById('candFilterBox');var pos=b?b.selectionStart:0;loadJobCandidates();setTimeout(function(){var nb=document.getElementById('candFilterBox');if(nb){nb.focus();nb.setSelectionRange(pos,pos)}},120)},350);
 }
+// #595b: profiles harvested in other languages — show the English rendering when we have it, and ask the
+// server to translate (Haiku, cached on the profile) the ones that still contain non-Latin script.
+var NONLATIN_RE=/[^\u0000-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2100-\u214F\u2190-\u21FF\u2600-\u27BF]/;
+function enRole(c){return c.currentRoleEn||c.headlineEn||c.currentRole||c.headline||''}
+function enLoc(c){return c.locationEn||c.location||c.country||''}
+var _translating={};
+function autoTranslateProfiles(list,onDone){
+  var ids=list.filter(function(c){return c._id&&!_translating[c._id]&&((!c.currentRoleEn&&NONLATIN_RE.test(c.currentRole||c.headline||''))||(!c.locationEn&&NONLATIN_RE.test(c.location||'')))}).map(function(c){return c._id});
+  if(!ids.length)return;
+  ids.forEach(function(id){_translating[id]=1});
+  authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'translateProfiles',ids:ids})}).then(function(r){return r.json()}).then(function(d){
+    var t=d.translated||{};var n=0;
+    list.forEach(function(c){var x=t[c._id];if(x){Object.assign(c,x);n++}});
+    if(n&&onDone)onDone();
+  }).catch(function(){});
+}
 async function loadJobCandidates(){
   var wrap=document.getElementById('jobCandidates');if(!wrap||!jobCandidatesJobId)return;
   wrap.innerHTML='<div style="font-size:.62rem;color:var(--g5)">Loading matched candidates...</div>';
@@ -6506,7 +6528,7 @@ async function loadJobCandidates(){
     // #573: client-side filter + sort (raw list kept; resize never sorts — grips stop propagation)
     if(window._candFilterVal){
       var _cf=window._candFilterVal.toLowerCase();
-      list=list.filter(function(cc){return ((cc.name||'')+' '+(cc.currentRole||cc.headline||'')+' '+(cc.location||'')+' '+(cc.country||'')+' '+(cc.engagementType||'')+' '+(cc.pipelineStatus||'')).toLowerCase().indexOf(_cf)>=0});
+      list=list.filter(function(cc){return ((cc.name||'')+' '+enRole(cc)+' '+(cc.currentRole||cc.headline||'')+' '+enLoc(cc)+' '+(cc.location||'')+' '+(cc.country||'')+' '+(cc.engagementType||'')+' '+(cc.pipelineStatus||'')).toLowerCase().indexOf(_cf)>=0});
     }
     var _cs=window._candSort||{key:'overall',dir:-1};
     var _cv=function(cc){switch(_cs.key){case 'overall':return cc.overall||0;case 'name':return (cc.name||'').toLowerCase();case 'role':return (cc.currentRole||cc.headline||'').toLowerCase();case 'exp':return cc.yearsExperience||0;case 'loc':return ((cc.location||cc.country||'')+'').toLowerCase();case 'type':return (cc.engagementType||'').toLowerCase();case 'stage':return (cc.stage||'').toLowerCase();default:return cc.overall||0}};
@@ -6538,15 +6560,15 @@ async function loadJobCandidates(){
       _mcProfiles[c.sourceId]=c;
       var pct=Math.round(c.overall||0);
       var col=pct>=80?'#047857':(pct>=70?'#0891B2':'#B45309');
-      var loc=c.location||c.country||'';
+      var loc=enLoc(c);
       var selCls=_selectedCandidates[c.sourceId]?' class="row-hl"':'';
       h+='<tr'+selCls+' data-sid="'+esc(c.sourceId)+'" style="border-bottom:1px solid var(--g1)">'
         +'<td style="color:var(--g4);font-weight:600;text-align:right">'+(i+1)+'</td>'
         +'<td style="text-align:right"><span style="font-weight:700;color:'+col+'">'+pct+'%</span>'+(c.stale?'<span title="Requirement changed since this score — re-evaluate" style="font-size:.5rem;background:#FEF3C7;color:#92400E;border-radius:3px;padding:0 .2rem;margin-left:.2rem">stale</span>':'')+(c.screening?'<div title="SecVision screening: '+esc(c.screening.skillArea)+' on '+esc(c.screening.date)+'" style="font-size:.52rem;color:#047857;font-weight:700">✓ test '+c.screening.pct+'%</div>':'')+'</td>'
         +'<td style="font-weight:600" title="'+esc(c.name)+'">'+esc(c.name)+(c.linkedinUrl?' <a href="'+normUrl(c.linkedinUrl)+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
-        +'<td style="color:var(--g5)" title="'+esc(c.currentRole||'')+'">'+esc(c.currentRole||'—')+'</td>'
+        +'<td style="color:var(--g5)" title="'+esc((c.currentRoleEn&&c.currentRole&&c.currentRoleEn!==c.currentRole)?c.currentRole+' → '+c.currentRoleEn:enRole(c))+'">'+esc(enRole(c)||'—')+(c.currentRoleEn?' <span title="Translated to English" style="font-size:.5rem;color:var(--g4)">🌐</span>':'')+'</td>'
         +'<td style="color:var(--g5);text-align:right" title="Years of experience">'+(c.yearsExperience?c.yearsExperience+'y':'—')+'</td>'
-        +'<td style="color:var(--g5)" title="'+esc(loc)+'">'+esc(loc||'—')+'</td>'
+        +'<td style="color:var(--g5)" title="'+esc((c.locationEn&&c.location&&c.locationEn!==c.location)?c.location+' → '+c.locationEn:loc)+'">'+esc(loc||'—')+'</td>'
         +'<td>'+typeBadgeCons(c.engagementType)+'</td>'
         +'<td>'+candStageCell(c)+'</td>'
         +'<td style="text-align:center;white-space:nowrap;overflow:visible">'
@@ -6558,6 +6580,7 @@ async function loadJobCandidates(){
     h+='</tbody></table></div></div>';
     wrap.innerHTML=h;
     attachColResizers('candTable');
+    autoTranslateProfiles(list,function(){loadJobCandidates()});   // #595b
     // Bind delete buttons (data attributes avoid inline-quote breakage on names like O'Brien)
     wrap.querySelectorAll('.cand-del').forEach(function(btn){
       btn.onclick=function(e){e.stopPropagation();removeJobCandidate(this.dataset.sid,this.dataset.name)};
@@ -6651,8 +6674,8 @@ function matchCard(m,rank){
   return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
     +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+matchAvailBadge(m)+(m.linkedinUrl?' <a href="'+normUrl(m.linkedinUrl)+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
-    +'<div style="font-size:.6rem;color:var(--g5)">'+esc(m.headline||m.currentRole||'')+'</div>'
-    +'<div style="font-size:.55rem;color:var(--g4)">'+esc(m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
+    +'<div style="font-size:.6rem;color:var(--g5)" title="'+esc(m.headline||m.currentRole||'')+'">'+esc(m.headlineEn||m.currentRoleEn||m.headline||m.currentRole||'')+((m.headlineEn||m.currentRoleEn)?' <span title="Translated to English" style="font-size:.5rem;color:var(--g4)">🌐</span>':'')+'</div>'
+    +'<div style="font-size:.55rem;color:var(--g4)" title="'+esc(m.location||'')+'">'+esc(m.locationEn||m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
     +'<div style="text-align:center;flex-shrink:0"><div style="font-size:1.3rem;font-weight:800;color:'+col+';line-height:1">'+m.overall+'%</div><div style="font-size:.5rem;color:var(--g4)">match</div></div>'
     +'</div>'
     +(m.reason?'<div style="font-size:.58rem;color:var(--g5);font-style:italic;margin:.3rem 0">"'+esc(m.reason)+'"</div>':'')
