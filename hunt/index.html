@@ -5837,10 +5837,14 @@ async function openReviewPending(){
   var d=await r.json();_rvList=d.pending||[];
   var ov=document.getElementById('rvOverlay');if(ov)ov.remove();
   ov=document.createElement('div');ov.id='rvOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1500;display:flex;align-items:center;justify-content:center';
-  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:1200px;max-width:96%;max-height:86vh;overflow:auto;padding:1rem"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><b style="font-size:.95rem;color:var(--pri)">📋 Review pending profiles ('+_rvList.length+')</b><div><button onclick="rvPromoteSelected()" style="padding:.3rem .84rem;background:#16A34A;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">⬆️ Import Selected</button> <button onclick="rvRejectSelected()" style="padding:.3rem .84rem;background:#B91C1C;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">🗑 Delete Selected</button> <button onclick="document.getElementById(\'rvOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div></div><div id="rvTable"></div><div id="rvStatus" style="font-size:.72rem;color:var(--g5);margin-top:.4rem"></div></div>';
+  ov.innerHTML='<div style="background:#fff;border-radius:10px;width:1200px;max-width:96%;max-height:86vh;overflow:auto;padding:1rem"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><b style="font-size:.95rem;color:var(--pri)">📋 Review pending profiles (<span id="rvCount">'+_rvList.length+'</span>)</b><div><button onclick="rvPromoteSelected()" style="padding:.3rem .84rem;background:#16A34A;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">⬆️ Import Selected</button> <button onclick="rvRejectSelected()" style="padding:.3rem .84rem;background:#B91C1C;color:#fff;border:none;border-radius:4px;font-size:.76rem;cursor:pointer;font-weight:600">🗑 Delete Selected</button> <button onclick="document.getElementById(\'rvOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div></div><div id="rvStatus" style="display:none;font-size:.76rem;font-weight:600;margin:.3rem 0 .5rem;padding:.4rem .6rem;border-radius:6px;background:#F0FDF4;color:#166534;border:1px solid #BBF7D0"></div><div id="rvTable"></div></div>';
   document.body.appendChild(ov);rvRender();
 }
 function rvSortBy(k){_rvSort=k;rvRender()}
+// #600: one place to show review-popup feedback — above the table, coloured, auto-hides after a while
+function rvMsg(html,kind){var el=document.getElementById('rvStatus');if(!el)return;var C={ok:['#F0FDF4','#166534','#BBF7D0'],warn:['#FFFBEB','#92400E','#FDE68A'],err:['#FEF2F2','#991B1B','#FECACA'],info:['#EFF6FF','#1E40AF','#BFDBFE']}[kind||'ok'];
+  el.style.background=C[0];el.style.color=C[1];el.style.borderColor=C[2];el.innerHTML=html;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(function(){el.style.display='none'},kind==='err'?15000:8000)}
+function rvLabel(p){return (p.name||'?')+(p.currentRole?' — '+p.currentRole:'')+((p.location||p.country)?' ('+(p.location||p.country)+')':'')}
 function consFilteredData(){
   var certOnly=document.getElementById('consCertified')&&document.getElementById('consCertified').checked;
   var data=certOnly?consultantsData.filter(function(cc){return matchedPriorityCerts(cc.certifications).length>0}):consultantsData.slice();
@@ -5893,6 +5897,7 @@ function rvAttachResizers(){
   });
 }
 function rvRender(){
+  var rc=document.getElementById('rvCount');if(rc)rc.textContent=_rvList.length;   // #600: header count tracks imports/deletes
   var num=function(v){var m=String(v||'').match(/[\d.]+/);return m?parseFloat(m[0]):0};
   var list=_rvList.slice().sort(function(a,b){
     if(_rvSort==='rate')return num(b.rateExpectation)-num(a.rateExpectation);
@@ -5966,19 +5971,24 @@ function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.5rem">Profile summary <a href="#" onclick="aiFmtSummary(\'rvSum\',this);return false" style="font-size:.66rem;font-weight:400;color:#7C3AED;text-decoration:none">✨ Format with AI</a></div><div style="font-size:.76rem;line-height:1.55;color:#1F2937;max-height:34vh;overflow:auto;border:1px solid var(--g100);border-radius:6px;padding:.55rem .65rem" id="rvSum" data-raw="'+esc(p.summary||'').replace(/"/g,'&quot;')+'">'+rvFmtSummary(p.summary||'')+'</div>'
    +((u.profileUrl||p.linkedinUrl)?'<div style="margin-top:.5rem;display:flex;gap:1rem">'+(u.profileUrl?'<a href="'+esc(u.profileUrl)+'" target="_blank" rel="noopener" style="font-size:.76rem">Open Upwork profile ↗</a>':'')+(p.linkedinUrl?'<a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" style="font-size:.76rem;color:#0A66C2">Open LinkedIn profile ↗</a>':'')+'</div>':'')+'</div>';
   document.body.appendChild(ov)}
-async function rvReject(id){if(!confirm('Delete this profile? It will never be re-fetched.'))return;
+async function rvReject(id){var rp=_rvList.filter(function(x){return x._id===id})[0]||{};if(!confirm('Delete this profile? It will never be re-fetched.\n\n'+rvLabel(rp)))return;
   var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'rejectPending',id:id})});var d=await r.json();
-  if(d.error){alert(d.error);return}_rvList=_rvList.filter(function(x){return x._id!==id});rvRender();document.getElementById('rvStatus').textContent='Rejected — will not be fetched again.'}
+  if(d.error){rvMsg('⚠️ '+esc(d.error),'err');return}_rvList=_rvList.filter(function(x){return x._id!==id});rvRender();rvMsg('🗑 Rejected <b>'+esc(rvLabel(rp))+'</b> — will not be fetched again. '+_rvList.length+' pending left.','warn')}
 async function rvRejectSelected(){var ids=Array.prototype.map.call(document.querySelectorAll('.rvSel:checked'),function(x){return x.value});
-  if(!ids.length){document.getElementById('rvStatus').textContent='Select profiles first.';return}
-  if(!confirm('Delete '+ids.length+' profile(s)? They will never be re-fetched.'))return;
+  if(!ids.length){rvMsg('Select profiles first (tick the boxes on the left).','info');return}
+  var rps=_rvList.filter(function(x){return ids.indexOf(x._id)>=0});
+  var rlist=rps.slice(0,12).map(function(p){return '• '+rvLabel(p)}).join('\n')+(rps.length>12?'\n• … and '+(rps.length-12)+' more':'');
+  if(!confirm('Delete '+ids.length+' profile'+(ids.length>1?'s':'')+'? They will never be re-fetched.\n\n'+rlist))return;
   var done=0;for(var i=0;i<ids.length;i++){try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'rejectPending',id:ids[i]})});var d=await r.json();if(!d.error)done++}catch(e){}}
-  _rvList=_rvList.filter(function(x){return ids.indexOf(x._id)<0});rvRender();document.getElementById('rvStatus').textContent='🗑 Rejected '+done+' — will not be fetched again.'}
+  _rvList=_rvList.filter(function(x){return ids.indexOf(x._id)<0});rvRender();rvMsg('🗑 Rejected '+done+' of '+ids.length+': <b>'+esc(rps.slice(0,5).map(function(p){return p.name||'?'}).join(', '))+(rps.length>5?' +'+(rps.length-5)+' more':'')+'</b> — will not be fetched again. '+_rvList.length+' pending left.','warn')}
 async function rvPromoteSelected(){var ids=Array.prototype.map.call(document.querySelectorAll('.rvSel:checked'),function(x){return x.value});
-  if(!ids.length){document.getElementById('rvStatus').textContent='Select profiles first.';return}
+  if(!ids.length){rvMsg('Select profiles first (tick the boxes on the left).','info');return}
+  var pps=_rvList.filter(function(x){return ids.indexOf(x._id)>=0});
+  rvMsg('⏳ Importing '+ids.length+' profile'+(ids.length>1?'s':'')+' into Consultants…','info');
   var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'promoteSelected',ids:ids})});var d=await r.json();
-  if(d.error){alert(d.error);return}
-  document.getElementById('rvStatus').textContent='✅ Imported '+d.promoted+(d.duplicates&&d.duplicates.length?' · skipped duplicates: '+d.duplicates.join(', '):'');
+  if(d.error){rvMsg('⚠️ '+esc(d.error),'err');return}
+  var names=pps.slice(0,6).map(function(p){return p.name||'?'}).join(', ')+(pps.length>6?' +'+(pps.length-6)+' more':'');
+  rvMsg('✅ Imported '+(d.promoted||0)+' of '+ids.length+' into Consultants: <b>'+esc(names)+'</b>'+(d.duplicates&&d.duplicates.length?'<br>↩ Skipped '+d.duplicates.length+' duplicate'+(d.duplicates.length>1?'s':'')+' (already in Consultants): '+esc(d.duplicates.join(', ')):'')+'<br><span style="font-weight:400">They now appear in the Consultants table — open Manage to enrich, set rate and availability.</span>','ok');
   _rvList=_rvList.filter(function(x){return ids.indexOf(x._id)<0});rvRender();try{loadConsultants(true)}catch(e){}}
 var _liAttempt=0;
 async function acFetchLinkedIn(){
