@@ -182,6 +182,8 @@ exports.handler = async function(event) {
         };
       });
 
+      // #594: classify engagement model so the live-search table shows it before the DB round-trip
+      try { var _ce2 = require('./engagement').classifyEngagement; jobs.forEach(function (j) { var e = _ce2({ title: j.title, description: j.description, jobType: j.jobType, salary: j.salary, source: 'LinkedIn', location: j.location }); j.engagementModel = e.model; j.offshoreOk = e.offshoreOk; j.engagementEvidence = e.evidence; }); } catch (e) {}
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, total: jobs.length, rawTotal: rawJobs.length, filtered: rawJobs.length - jobs.length }) };
     }
 

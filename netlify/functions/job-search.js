@@ -1037,7 +1037,7 @@ exports.handler = async (event) => {
             filter: { jobId: j.id },
             update: { $set: {
               jobId: j.id, datePosted: j.dateRaw ? new Date(j.dateRaw) : null, dateScanned: new Date(),
-              engagementModel: (function(){var e=require('./engagement').classifyEngagement(j);j._eng=e;return e.model})(), offshoreOk: j._eng.offshoreOk, engagementEvidence: j._eng.evidence,   // #592
+              engagementModel: (function(){var e=require('./engagement').classifyEngagement(j);j.engagementModel=e.model;j.offshoreOk=e.offshoreOk;j.engagementEvidence=e.evidence;return e.model})(), offshoreOk: j.offshoreOk, engagementEvidence: j.engagementEvidence,   // #592/#594 (also returned to the live-search table)
               title: j.title, titleClean: j.titleClean, company: j.company, companyUrl: j.companyUrl,
               location: j.location, detectedCountry: j.detectedCountry, experience: j.experience,
               skills: j.skills, certifications: j.certifications, compliance: j.compliance,
@@ -1091,6 +1091,8 @@ exports.handler = async (event) => {
       // Don't fail the response if DB save fails
     }
 
+    // #594: make sure every returned job carries its engagement classification even when the DB save was skipped
+    try { var _ce = require('./engagement').classifyEngagement; jobs.forEach(function (j) { if (!j.engagementModel) { var e = _ce(j); j.engagementModel = e.model; j.offshoreOk = e.offshoreOk; j.engagementEvidence = e.evidence; } }); } catch (e) {}
     return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, apiCalls: totalApiCalls, rolesSearched: roles, savedToDb: savedCount }) };
   } catch (err) {
     console.error('Error:', err);

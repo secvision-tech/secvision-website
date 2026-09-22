@@ -520,6 +520,7 @@ var COLS=[
   {key:'contact',label:'Contact',w:100},
   {key:'eligibility',label:'Eligibility',w:70},
   {key:'jobType',label:'Type',w:60},
+  {key:'engagementModel',label:'Engagement',w:78},   // #594: C2C / W2 / direct-hire (see engChip)
   {key:'salary',label:'Salary/Rate',w:85},
   {key:'source',label:'Source',w:62},
   {key:'status',label:'Status',w:58},
@@ -851,7 +852,7 @@ function sortTable(key){
 
 function applyFilters(){
   filtered=allJobs.filter(function(job){
-    for(var k in colFilters){if(!colFilters[k])continue;var val=k==='title'?String((job.titleClean||job.title)||''):String(job[k]||'');if(val.toLowerCase().indexOf(colFilters[k])===-1)return false}return true;
+    for(var k in colFilters){if(!colFilters[k])continue;var val=k==='title'?String((job.titleClean||job.title)||''):(k==='engagementModel'?String(job.engagementModel||'')+' '+(job.offshoreOk==='yes'?'offshore':''):String(job[k]||''));if(val.toLowerCase().indexOf(colFilters[k])===-1)return false}return true;
   });
   if(sortCol){
     var colDef=COLS.find(function(c){return c.key===sortCol});
@@ -1301,7 +1302,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
         var merged={idx:allJobs.length+newCount+1,title:aj.title,titleClean:aj.title,company:aj.company,
           companyUrl:aj.companyUrl,location:aj.location,salary:aj.salary||'Not disclosed',
           date:aj.datePosted?fmtDate(aj.datePosted):'',dateRaw:aj.datePosted,datePosted:aj.datePosted,source:'LinkedIn',sourceApi:'apify-bebity',
-          applyLink:aj.applyLink,jobUrl:aj.jobUrl,status:'new',companyType:'',
+          applyLink:aj.applyLink,jobUrl:aj.jobUrl,status:'new',companyType:'',engagementModel:aj.engagementModel||'',offshoreOk:aj.offshoreOk||'',engagementEvidence:aj.engagementEvidence||'',
           experience:aj.experienceLevel||'',skills:'See details',certifications:'See details',
           compliance:'See details',tools:'See details',contact:aj.posterFullName||'',
           eligibility:'Open',jobType:aj.contractType||'Full-time',remote:'',
@@ -1522,7 +1523,7 @@ function renderTable(){
     var ji=allJobs.indexOf(j);
     // #387: indicator when this job already has matched consultants saved
     var matchInd=(j.candidateCount>0)?' <span title="'+j.candidateCount+' matched consultant'+(j.candidateCount>1?'s':'')+' saved" style="font-size:.5rem;background:#EDE9FE;color:#6C3FBF;padding:.05rem .3rem;border-radius:3px;font-weight:700;white-space:nowrap">🎯 '+j.candidateCount+'</span>':'';
-    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+matchInd+engChip(j)+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">'+(CAP.canStatus?'Manage':'View')+'</button> '+companyBtn(j.company,ji)+'</td>';
+    tr.innerHTML='<td>'+j.idx+'</td><td>'+j.date+'</td><td class="td-t" title="'+esc(j.title)+'">'+(j.titleClean||j.title)+matchInd+'</td><td class="td-c">'+companyCell+'</td><td>'+companyTypeBadge(j.companyType)+'</td><td>'+(j.companySize?typeof j.companySize==='number'?j.companySize.toLocaleString():j.companySize:'-')+'</td><td title="'+esc(j.location)+'">'+j.location+'</td><td title="'+esc(j.experience)+'">'+j.experience+'</td><td title="'+esc(j.skills)+'">'+j.skills+'</td><td title="'+esc(j.certifications)+'">'+j.certifications+'</td><td title="'+esc(j.compliance)+'">'+j.compliance+'</td><td title="'+esc(j.tools)+'">'+j.tools+'</td><td>'+contactCell(j)+'</td><td>'+j.eligibility+'</td><td>'+j.jobType+'</td><td style="white-space:nowrap">'+(engChip(j)||'<span style="color:var(--g3)">—</span>')+'</td><td>'+j.salary+'</td><td class="td-src">'+sourceCell+'</td><td>'+statusBadge(j.status)+'</td><td><button class="vb" onclick="viewDet('+ji+')">'+(CAP.canStatus?'Manage':'View')+'</button> '+companyBtn(j.company,ji)+'</td>';
     tr.onclick=function(e){if(e.target.tagName==='A'||e.target.tagName==='BUTTON'||e.target.classList.contains('status-badge')||e.target.classList.contains('ctype-badge'))return;this.classList.toggle('row-hl')};
     // Bind status badge click
     var sBadge=tr.querySelector('.status-badge');
@@ -7125,7 +7126,7 @@ function getExportData(){
   var data=filtered.map(function(j){return{
     '#':j.idx,Date:j.date,Title:j.titleClean||j.title,'Full Title':j.title,Company:j.company,'Company Type':j.companyType||'','Company Size':j.companySize||'',Location:j.location,Country:j.detectedCountry||'Unknown',Experience:j.experience,
     'Key Skills':j.skills,Certifications:j.certifications,'Compliance/Framework':j.compliance,'Technologies/Tools':j.tools,
-    Contact:j.contact,Eligibility:j.eligibility,Type:j.jobType,Salary:j.salary,Source:j.source,Status:j.status||'new',
+    Contact:j.contact,Eligibility:j.eligibility,Type:j.jobType,Engagement:j.engagementModel||'',Offshore:j.offshoreOk||'','Engagement Evidence':j.engagementEvidence||'',Salary:j.salary,Source:j.source,Status:j.status||'new',
     'Apply Link':j.applyLink
   }});return data;
 }
