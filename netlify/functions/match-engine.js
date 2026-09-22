@@ -889,6 +889,11 @@ function detectEngagementType(profile) {
 // Analyst" wins over "Security Analyst", and "Cloud Security Architect" over "Security Architect".
 const CANONICAL_ROLES = [
   'Security Operations Center Analyst', 'Security Operations Engineer', 'Security Operations Analyst',
+  // #598: technology-qualified and cloud roles so "AWS Security Architect" / "Splunk Engineer" are kept whole
+  'AWS Security Architect', 'Azure Security Architect', 'GCP Security Architect', 'AWS Security Engineer', 'Azure Security Engineer',
+  'Cloud Security Consultant', 'Security Solutions Architect', 'Enterprise Security Architect', 'Zero Trust Architect',
+  'Cloud Solutions Architect', 'Cloud Architect', 'Cloud Engineer', 'Splunk Architect', 'Splunk Engineer', 'Splunk Administrator',
+  'SIEM Architect', 'SIEM Engineer', 'Microsoft Sentinel Engineer', 'Sentinel Engineer', 'SOAR Engineer', 'EDR Engineer',
   'Cloud Security Architect', 'Cloud Security Engineer', 'Application Security Engineer',
   'Information Security Analyst', 'Information Security Engineer', 'Information Security Manager',
   'Cyber Security Architect', 'Cyber Security Engineer', 'Cyber Security Analyst', 'Cyber Security Consultant',
@@ -941,14 +946,45 @@ function buildSearchRole(req) {
   return words.slice(0, 4).join(' ');
 }
 
+// #598: a title like "Cloud Architect | AWS Security Architect" names TWO roles. Split on | / , "or" "&"
+// and build a search role for each alternative (max 3, de-duplicated) instead of collapsing to one.
+var TECH_QUAL = /\b(aws|azure|gcp|google cloud|splunk|sentinel|microsoft sentinel|qradar|crowdstrike|palo alto|okta|sailpoint|cyberark|zscaler|oci|kubernetes|k8s|devsecops|zero trust|sap|servicenow)\b/i;
+function buildSearchRoles(req) {
+  var raw = String(req.role || '').trim();
+  var parts = raw.split(/\s*(?:\||\/|,|;|\bor\b|&|\band\b)\s*/i).map(function (p) { return p.trim(); }).filter(Boolean);
+  if (parts.length < 2) parts = [raw];
+  var out = [], seen = {};
+  var canonSet = {}; CANONICAL_ROLES.forEach(function (c) { canonSet[c.toLowerCase()] = 1; });
+  parts.forEach(function (p) {
+    var r = buildSearchRole({ role: p });
+    // drop alternatives that were pure noise ("Contract", "Remote") or collapsed to a lone generic word ("Risk")
+    if (parts.length > 1) {
+      if (r === 'Cybersecurity Engineer' && !/engineer/i.test(p)) return;
+      if (r.split(' ').length < 2 && !canonSet[r.toLowerCase()]) return;
+    }
+    // keep a technology qualifier that directly precedes the canonical role ("AWS Security Architect")
+    var m = p.match(TECH_QUAL);
+    if (m && r.toLowerCase().indexOf(m[0].toLowerCase()) < 0 && new RegExp(m[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+' + r.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(p)) r = m[0] + ' ' + r;
+    var k = r.toLowerCase();
+    if (!seen[k] && out.length < 3) { seen[k] = 1; out.push(r); }
+  });
+  return out.length ? out : [buildSearchRole(req)];
+}
 // Build the per-variant search targets, e.g.
 //   [{ keyword: 'Security Architect Consultant', limit: 35 }, { keyword: '... Contractor', limit: 15 }]
 // NOTE: the Apify actor applies `limit` PER KEYWORD, so each variant is fetched separately.
+// With several roles the per-keyword limits are divided so the total fetch (and Apify cost) stays the same.
 function buildSearchTargets(req, sourcing) {
-  var role = buildSearchRole(req);
-  return (sourcing.variants || DEFAULT_SOURCING.variants).map(function (v) {
-    return { keyword: (role + ' ' + v.suffix).trim(), limit: v.limit };
+  var roles = buildSearchRoles(req);
+  var variants = (sourcing.variants || DEFAULT_SOURCING.variants);
+  var out = [];
+  roles.forEach(function (role) {
+    variants.forEach(function (v) {
+      var lim = Math.max(5, Math.ceil(v.limit / roles.length));
+      out.push({ keyword: (role + ' ' + v.suffix).trim(), limit: lim });
+    });
   });
+  return out;
 }
 
 // ---------------------------------------------------------------------------
