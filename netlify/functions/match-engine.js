@@ -1409,6 +1409,16 @@ exports.handler = async function (event) {
           };
         });
         try { await cacheCol.bulkWrite(ops, { ordered: false }); } catch (e) {}
+        // #603: LinkedIn localises city names/headlines to the scraping session's language — translate now,
+        // so the profile is stored in English (location replaced, original kept in locationOrig).
+        try {
+          var tf = require('./translate-fields');
+          var sids = deduped.filter(function (np) { return tf.hasNonLatin(np.location) || tf.hasNonLatin(np.headline) || tf.hasNonLatin(np.currentRole); }).map(function (np) { return np.sourceId; });
+          if (sids.length) {
+            var tdocs = await cacheCol.find({ sourceId: { $in: sids } }).project({ _id: 1 }).toArray();
+            await tf.translateAfterHarvest(cacheCol, tdocs.map(function (d) { return d._id; }));
+          }
+        } catch (e) {}
         return deduped.length;
       }
 

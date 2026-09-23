@@ -535,9 +535,12 @@ exports.handler = async function(event) {
           contractorSignal: { likely: !!((ai && ai.contractor) || /freelance|self-employed|contract/.test(et0)) },
           fetchedAt: new Date()
         };
-        if (lex) { await lcol.updateOne({ _id: lex._id }, { $set: ldoc }); lstats.updated++; }
-        else { ldoc.createdAt = new Date(); await lcol.insertOne(ldoc); lstats.inserted++; }
+        var lNeedsT = false; try { var tf2 = require('./translate-fields'); lNeedsT = tf2.hasNonLatin(ldoc.location) || tf2.hasNonLatin(ldoc.currentRole) || tf2.hasNonLatin(hl); ldoc.headline = hl; } catch (e) {}
+        if (lex) { await lcol.updateOne({ _id: lex._id }, { $set: ldoc }); lstats.updated++; if (lNeedsT) (lstats._tIds = lstats._tIds || []).push(lex._id); }
+        else { ldoc.createdAt = new Date(); var lins = await lcol.insertOne(ldoc); lstats.inserted++; if (lNeedsT) (lstats._tIds = lstats._tIds || []).push(lins.insertedId); }
       }
+      // #603: translate non-English headline/location to English right after harvest (one Haiku call per 40)
+      if (lstats._tIds && lstats._tIds.length) { try { lstats.translated = await require('./translate-fields').translateAfterHarvest(lcol, lstats._tIds); } catch (e) {} delete lstats._tIds; }
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ status: 'SUCCEEDED', done: true, stats: lstats }) };
     }
     // ============ #497 UPWORK TALENT HARVEST (bovi~upwork-talent-scraper) ============

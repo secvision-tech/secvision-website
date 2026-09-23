@@ -4301,9 +4301,9 @@ function renderConsultants(){
     h+='<tr onclick="consRowClick(event,this)" style="border-bottom:1px solid var(--g1);cursor:pointer">'
       +'<td style="padding:.4rem .3rem;text-align:right;color:var(--g4);font-weight:600;overflow:hidden">'+rowNum+'</td>'
       +'<td style="padding:.4rem .5rem;font-weight:600;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.name||'')+'">'+esc(c.name||'—')+matchJobsBadge(c)+(c.contractSignal?' <span title="Profile signals contract/freelance intent" style="font-size:.5rem;background:#ECFDF5;color:#047857;border:1px solid #A7F3D0;padding:.02rem .25rem;border-radius:3px;font-weight:700">⚡C2C</span>':'')+(c.linkedinUrl?' <a href="'+normUrl(c.linkedinUrl)+'" target="_blank" style="font-size:.5rem;color:#0A66C2">↗</a>':'')+claim+certMarker(c.certifications)+'</td>'
-      +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(c.currentRole||c.headline||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;overflow:hidden;text-overflow:ellipsis" title="'+esc(c.currentRole||c.headline||'')+'">'+esc(enRole(c)||'—')+(c.currentRoleEn?' <span title="Translated to English" style="font-size:.5rem;color:var(--g4)">🌐</span>':'')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis">'+esc(c.currentCompany||'—')+'</td>'
-      +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.location||'')+'">'+esc(c.location||'—')+'</td>'
+      +'<td style="padding:.4rem .5rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis" title="'+esc(c.locationOrig||c.location||'')+'">'+esc(enLoc(c)||'—')+'</td>'
       +'<td style="padding:.4rem .5rem;color:var(--g5)">'+esc(c.country||'—')+'</td>'
       +'<td style="padding:.4rem .5rem">'+typeBadgeCons(c.engagementType)+'</td>'
       +'<td style="padding:.4rem .5rem">'+availBadge(avail)+availDate+'</td>'
@@ -4316,6 +4316,7 @@ function renderConsultants(){
   });
   tb.innerHTML=h;
   attachColResizers('consTable');
+  autoTranslateProfiles(pageItems,function(){renderConsultants()});   // #603
   // pager
   var pag=document.getElementById('consPag');
   pag.style.display=tp>1?'flex':'none';
@@ -5849,9 +5850,9 @@ function rvRowPasses(p){
   var f=_rvFlt,u=p.upwork||{};
   if(f.fit&&!((p.securityFit||0)>=parseFloat(f.fit)))return false;
   if(f.name&&String(p.name||'').toLowerCase().indexOf(f.name)<0)return false;
-  if(f.role&&String(p.currentRole||'').toLowerCase().indexOf(f.role)<0)return false;
+  if(f.role&&(String(p.currentRole||'')+' '+enRole(p)).toLowerCase().indexOf(f.role)<0)return false;
   if(f.rate&&String(p.rateExpectation||'').toLowerCase().indexOf(f.rate)<0)return false;
-  if(f.location&&(String(p.location||'')+' '+String(p.country||'')).toLowerCase().indexOf(f.location)<0)return false;
+  if(f.location&&(String(p.location||'')+' '+enLoc(p)+' '+String(p.country||'')).toLowerCase().indexOf(f.location)<0)return false;
   if(f.source&&String(p.source||'').toLowerCase().indexOf(f.source)<0)return false;
   if(f.skills&&!f.skills.split(/\s+/).every(function(w){return ((p.skills||[]).join(' ')+' '+(p.certifications||[]).join(' ')+' '+(p.summary||'').slice(0,2000)).toLowerCase().indexOf(w)>=0}))return false;
   return true;
@@ -5929,15 +5930,16 @@ function rvRender(){
     +'<th style="padding:.1rem .2rem;white-space:nowrap"><input class="rvFlt" data-f="skills" placeholder="skills / certs e.g. splunk" value="'+esc(_rvFlt.skills||'')+'" oninput="rvFilterInput(this)" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="'+FI+';width:16ch;display:inline-block"> <button onclick="rvClearFilters()" title="Clear filters" style="padding:.05rem .3rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.6rem;cursor:pointer">✕</button></th></tr>';
   var rows=list.map(function(p){var u=p.upwork||{};var tier=u.topRated==='top_rated_plus'?'⭐⭐':(u.topRated==='top_rated'?'⭐':'');
     return '<tr style="border-bottom:1px solid var(--g100)"><td style="padding:.3rem .4rem"><input type="checkbox" class="rvSel" value="'+p._id+'"></td>'
-    +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(p.name||'—')+(p.linkedinUrl?' <a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" title="Open LinkedIn profile" style="text-decoration:none;color:#0A66C2">🔗</a>':(u.profileUrl?' <a href="'+esc(u.profileUrl)+'" target="_blank" rel="noopener" title="Open Upwork profile" style="text-decoration:none;color:#14A800">🔗</a>':''))+'</td><td style="padding:.3rem .4rem" title="'+esc(p.currentRole||'')+'">'+esc((p.currentRole||'').slice(0,34)||'—')+'</td>'
+    +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(p.name||'—')+(p.linkedinUrl?' <a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" title="Open LinkedIn profile" style="text-decoration:none;color:#0A66C2">🔗</a>':(u.profileUrl?' <a href="'+esc(u.profileUrl)+'" target="_blank" rel="noopener" title="Open Upwork profile" style="text-decoration:none;color:#14A800">🔗</a>':''))+'</td><td style="padding:.3rem .4rem" title="'+esc(p.currentRole||'')+'">'+esc(enRole(p).slice(0,34)||'—')+(p.currentRoleEn?' <span title="Translated to English" style="font-size:.5rem;color:var(--g4)">🌐</span>':'')+'</td>'
     +'<td style="padding:.3rem .4rem">'+(p.securityFit==null?'—':('<span style="font-weight:700;color:'+(p.securityFit>=70?'#15803D':(p.securityFit>=40?'#B45309':'#B91C1C'))+'">'+p.securityFit+'%</span>'))+'</td><td style="padding:.3rem .4rem;font-weight:700">'+esc(p.rateExpectation||'—')+'</td><td style="padding:.3rem .4rem">'+(u.jss?'100%':'—')+' '+tier+'</td>'
     +'<td style="padding:.3rem .4rem">'+(u.earnings!=null?('$'+Math.round(u.earnings).toLocaleString()):(u.earningsHidden?'hidden':'—'))+'</td>'
-    +'<td style="padding:.3rem .4rem;color:var(--g5)">'+esc(p.location||'')+'</td><td style="padding:.3rem .4rem;color:var(--g5)">'+esc(p.source||'')+'</td>'
+    +'<td style="padding:.3rem .4rem;color:var(--g5)" title="'+esc(p.locationOrig||p.location||'')+'">'+esc(enLoc(p))+'</td><td style="padding:.3rem .4rem;color:var(--g5)">'+esc(p.source||'')+'</td>'
     +'<td style="padding:.3rem .4rem;white-space:nowrap"><button onclick="rvView(\''+p._id+'\')" style="font-size:.84rem;padding:.15rem .4rem;cursor:pointer">View</button> '
     +'<a href="https://www.google.com/search?q='+encodeURIComponent('"'+(p.name||'').replace(/\s\w\.$/,'')+'" '+(p.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(p.country||'')+' site:linkedin.com/in')+'" target="_blank" style="font-size:.84rem">🔍 LinkedIn</a> '
     +'<button onclick="rvReject(\''+p._id+'\')" style="font-size:.84rem;padding:.15rem .4rem;cursor:pointer;color:#B91C1C">Delete</button></td></tr>'}).join('');
   document.getElementById('rvTable').innerHTML='<div style="font-size:.84rem;color:var(--g5);margin:.2rem 0 .4rem">'+(list.length!==listAll.length?'<span style="color:var(--pri);font-weight:600;margin-right:.8rem">'+list.length+' of '+listAll.length+' shown</span>':'')+'Sort: '+['new','rate','jss','earn','fit'].map(function(k){var l={new:'Newest',rate:'Rate',jss:'JSS',earn:'Earnings',fit:'Security fit'}[k];return '<a href="#" onclick="rvSortBy(\''+k+'\');return false" style="margin-right:.72rem;text-decoration:none;font-weight:'+(_rvSort===k?'700':'400')+';color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'">'+l+'</a>'}).join('')+'</div><table style="width:100%;border-collapse:collapse;font-size:.76rem"><thead><tr style="text-align:left"><th></th>'+th('Name','name')+'<th style="padding:.3rem .4rem;color:var(--g5)">Title</th>'+th('Fit','fit')+th('Rate','rate')+th('JSS','jss')+th('Earnings','earn')+'<th style="padding:.3rem .4rem;color:var(--g5)">Location</th><th style="padding:.3rem .4rem;color:var(--g5)">Source</th><th></th></tr>'+filterRow+'</thead><tbody>'+(rows||'<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Nothing pending.</td></tr>')+'</tbody></table>';
   rvAttachResizers();
+  autoTranslateProfiles(list,function(){rvRender()});   // #603
 }
 async function aiFmtSummary(elId,link){
   var el=document.getElementById(elId);if(!el)return;
@@ -5983,7 +5985,7 @@ function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!
   var old=document.getElementById('rvViewOverlay');if(old)old.remove();
   var ov=document.createElement('div');ov.id='rvViewOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.6);z-index:1600;display:flex;align-items:center;justify-content:center';
   ov.innerHTML='<div style="background:#fff;border-radius:10px;width:860px;max-width:94%;max-height:86vh;overflow:auto;padding:1.1rem">'
-   +'<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:1.05rem;font-weight:700;color:var(--pri)">'+esc(p.name||'')+'</div><div style="font-size:.8rem;color:var(--g5)">'+esc(p.currentRole||'')+' · '+esc([p.location,p.country].filter(Boolean).join(', '))+'</div>'+(p.linkedinUrl?'<div style="margin-top:.2rem"><a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" style="font-size:.76rem;color:#0A66C2;font-weight:600;text-decoration:none">🔗 LinkedIn profile ↗</a> <span style="font-size:.66rem;color:var(--g5)">'+esc(normUrl(p.linkedinUrl))+'</span></div>':'')+'</div><button onclick="document.getElementById(\'rvViewOverlay\').remove()" style="background:none;border:none;font-size:1.1rem;cursor:pointer">×</button></div>'
+   +'<div style="display:flex;justify-content:space-between;align-items:flex-start"><div><div style="font-size:1.05rem;font-weight:700;color:var(--pri)">'+esc(p.name||'')+'</div><div style="font-size:.8rem;color:var(--g5)">'+esc(enRole(p))+' · '+esc([enLoc(p)||p.location,p.country].filter(Boolean).filter(function(v,i,a){return a.indexOf(v)===i}).join(', '))+'</div>'+(p.linkedinUrl?'<div style="margin-top:.2rem"><a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" style="font-size:.76rem;color:#0A66C2;font-weight:600;text-decoration:none">🔗 LinkedIn profile ↗</a> <span style="font-size:.66rem;color:var(--g5)">'+esc(normUrl(p.linkedinUrl))+'</span></div>':'')+'</div><button onclick="document.getElementById(\'rvViewOverlay\').remove()" style="background:none;border:none;font-size:1.1rem;cursor:pointer">×</button></div>'
    +'<div style="display:flex;gap:.5rem;margin:.72rem 0;flex-wrap:wrap">'+metric('Rate',esc(p.rateExpectation||'—'))+metric('Earnings',u.earnings!=null?'$'+Math.round(u.earnings).toLocaleString():(u.earningsHidden?'hidden':'—'))+metric('Hours',u.hours?Math.round(u.hours).toLocaleString():'—')+metric('Jobs',((u.jobs&&(u.jobs.hourly||0)+(u.jobs.fixed||0))||0))+metric('JSS',u.jss?'100%':'—')+metric('Tier',u.topRated==='top_rated_plus'?'Top Rated Plus':(u.topRated==='top_rated'?'Top Rated':'—'))+(p.yearsExperience?metric('Experience',p.yearsExperience+' yrs'):'')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Skills</div><div>'+chips(p.skills,'#E0F2FE')+'</div>'
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.4rem">Certifications</div><div>'+chips(p.certifications,'#DCFCE7')+'</div>'
