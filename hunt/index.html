@@ -4556,11 +4556,11 @@ function screeningsSection(c){
   if(CAP.canStatus){
     var I='padding:.35rem .5rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px';
     var L='font-size:.62rem;color:var(--g5);display:block';
-    h+='<div style="display:grid;grid-template-columns:3fr 1.2fr 1.2fr 1.6fr;gap:.6rem;align-items:end;margin-top:.5rem">'
-     +'<label style="'+L+'">Skill area<input id="scArea" value="Splunk-SPL-SOC" placeholder="e.g. Splunk-SPL-SOC" style="'+I+';width:100%;min-width:24ch;box-sizing:border-box;display:block"></label>'
-     +'<label style="'+L+'">Score<input id="scScore" type="number" placeholder="e.g. 84" style="'+I+';width:100%;min-width:10ch;box-sizing:border-box;display:block"></label>'
-     +'<label style="'+L+'">Out of<input id="scMax" type="number" value="100" style="'+I+';width:100%;min-width:10ch;box-sizing:border-box;display:block"></label>'
-     +'<label style="'+L+'">Test date<input id="scDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="'+I+';width:100%;min-width:14ch;box-sizing:border-box;display:block"></label>'
+    h+='<div style="display:grid;grid-template-columns:minmax(0,3fr) minmax(8ch,1fr) minmax(8ch,1fr) minmax(17ch,1.5fr);gap:.6rem;align-items:end;margin-top:.5rem">'   // #601: date column keeps its intrinsic width, others shrink
+     +'<label style="'+L+';min-width:0">Skill area<input id="scArea" value="Splunk-SPL-SOC" placeholder="e.g. Splunk-SPL-SOC" style="'+I+';width:100%;min-width:0;box-sizing:border-box;display:block"></label>'
+     +'<label style="'+L+';min-width:0">Score<input id="scScore" type="number" placeholder="e.g. 84" style="'+I+';width:100%;min-width:0;box-sizing:border-box;display:block"></label>'
+     +'<label style="'+L+';min-width:0">Out of<input id="scMax" type="number" value="100" style="'+I+';width:100%;min-width:0;box-sizing:border-box;display:block"></label>'
+     +'<label style="'+L+';min-width:0">Test date<input id="scDate" type="date" value="'+new Date().toISOString().slice(0,10)+'" style="'+I+';width:100%;min-width:0;max-width:100%;box-sizing:border-box;display:block;font-family:inherit"></label>'
      +'</div>'
      +'<div style="display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:end;margin-top:.45rem">'
      +'<label style="'+L+'">Notes<input id="scNotes" placeholder="Optional — e.g. strong on SPL, weak on DNS aggregation" style="'+I+';width:100%;box-sizing:border-box;display:block"></label>'
@@ -5841,6 +5841,21 @@ async function openReviewPending(){
   document.body.appendChild(ov);rvRender();
 }
 function rvSortBy(k){_rvSort=k;rvRender()}
+// #602: column filters on the review-pending table (applied before sort; focus kept while typing)
+var _rvFlt={};
+function rvFilterInput(el){var k=el.getAttribute('data-f');_rvFlt[k]=el.value.trim().toLowerCase();var pos=el.selectionStart;rvRender();var again=document.querySelector('.rvFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}}
+function rvClearFilters(){_rvFlt={};rvRender()}
+function rvRowPasses(p){
+  var f=_rvFlt,u=p.upwork||{};
+  if(f.fit&&!((p.securityFit||0)>=parseFloat(f.fit)))return false;
+  if(f.name&&String(p.name||'').toLowerCase().indexOf(f.name)<0)return false;
+  if(f.role&&String(p.currentRole||'').toLowerCase().indexOf(f.role)<0)return false;
+  if(f.rate&&String(p.rateExpectation||'').toLowerCase().indexOf(f.rate)<0)return false;
+  if(f.location&&(String(p.location||'')+' '+String(p.country||'')).toLowerCase().indexOf(f.location)<0)return false;
+  if(f.source&&String(p.source||'').toLowerCase().indexOf(f.source)<0)return false;
+  if(f.skills&&!f.skills.split(/\s+/).every(function(w){return ((p.skills||[]).join(' ')+' '+(p.certifications||[]).join(' ')+' '+(p.summary||'').slice(0,2000)).toLowerCase().indexOf(w)>=0}))return false;
+  return true;
+}
 // #600: one place to show review-popup feedback — above the table, coloured, auto-hides after a while
 function rvMsg(html,kind){var el=document.getElementById('rvStatus');if(!el)return;var C={ok:['#F0FDF4','#166534','#BBF7D0'],warn:['#FFFBEB','#92400E','#FDE68A'],err:['#FEF2F2','#991B1B','#FECACA'],info:['#EFF6FF','#1E40AF','#BFDBFE']}[kind||'ok'];
   el.style.background=C[0];el.style.color=C[1];el.style.borderColor=C[2];el.innerHTML=html;el.style.display='block';clearTimeout(el._t);el._t=setTimeout(function(){el.style.display='none'},kind==='err'?15000:8000)}
@@ -5879,7 +5894,7 @@ document.addEventListener('input',function(e){if(e.target&&e.target.classList&&e
 var _rvColW={},_rvResizing=false;
 function rvAttachResizers(){
   var tbl=document.querySelector('#rvTable table');if(!tbl)return;
-  tbl.querySelectorAll('thead th').forEach(function(th,i){
+  tbl.querySelectorAll('thead tr:first-child th').forEach(function(th,i){   // #602: header row only, not the filter row
     if(_rvColW[i])th.style.width=_rvColW[i]+'px';
     th.style.position='relative';
     var g=document.createElement('span');
@@ -5907,6 +5922,11 @@ function rvRender(){
     if(_rvSort==='fit')return ((b.securityFit==null?-1:b.securityFit))-((a.securityFit==null?-1:a.securityFit));
     return String(a.name||'').localeCompare(String(b.name||''))});
   var th=function(l,k){return '<th style="padding:.3rem .4rem;cursor:pointer;color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'" onclick="if(!_rvResizing)rvSortBy(\''+k+'\')">'+l+(_rvSort===k?' ▼':'')+'</th>'};
+  var listAll=list;list=list.filter(rvRowPasses);   // #602
+  var FI='width:100%;box-sizing:border-box;font-size:.66rem;padding:.12rem .25rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit;font-weight:400;text-transform:none;letter-spacing:0;color:var(--tx)';
+  var fi=function(k,ph,type){return '<th style="padding:.1rem .2rem"><input class="rvFlt" data-f="'+k+'" type="'+(type||'text')+'" placeholder="'+ph+'" value="'+esc(_rvFlt[k]||'')+'" oninput="rvFilterInput(this)" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="'+FI+'"></th>'};
+  var filterRow='<tr style="background:#FAFAFA"><th></th>'+fi('name','filter name')+fi('role','filter title')+fi('fit','≥ %','number')+fi('rate','rate')+'<th></th><th></th>'+fi('location','location')+fi('source','source')
+    +'<th style="padding:.1rem .2rem;white-space:nowrap"><input class="rvFlt" data-f="skills" placeholder="skills / certs e.g. splunk" value="'+esc(_rvFlt.skills||'')+'" oninput="rvFilterInput(this)" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="'+FI+';width:16ch;display:inline-block"> <button onclick="rvClearFilters()" title="Clear filters" style="padding:.05rem .3rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.6rem;cursor:pointer">✕</button></th></tr>';
   var rows=list.map(function(p){var u=p.upwork||{};var tier=u.topRated==='top_rated_plus'?'⭐⭐':(u.topRated==='top_rated'?'⭐':'');
     return '<tr style="border-bottom:1px solid var(--g100)"><td style="padding:.3rem .4rem"><input type="checkbox" class="rvSel" value="'+p._id+'"></td>'
     +'<td style="padding:.3rem .4rem;font-weight:600">'+esc(p.name||'—')+(p.linkedinUrl?' <a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" title="Open LinkedIn profile" style="text-decoration:none;color:#0A66C2">🔗</a>':(u.profileUrl?' <a href="'+esc(u.profileUrl)+'" target="_blank" rel="noopener" title="Open Upwork profile" style="text-decoration:none;color:#14A800">🔗</a>':''))+'</td><td style="padding:.3rem .4rem" title="'+esc(p.currentRole||'')+'">'+esc((p.currentRole||'').slice(0,34)||'—')+'</td>'
@@ -5916,7 +5936,7 @@ function rvRender(){
     +'<td style="padding:.3rem .4rem;white-space:nowrap"><button onclick="rvView(\''+p._id+'\')" style="font-size:.84rem;padding:.15rem .4rem;cursor:pointer">View</button> '
     +'<a href="https://www.google.com/search?q='+encodeURIComponent('"'+(p.name||'').replace(/\s\w\.$/,'')+'" '+(p.currentRole||'').split(' ').slice(0,2).join(' ')+' '+(p.country||'')+' site:linkedin.com/in')+'" target="_blank" style="font-size:.84rem">🔍 LinkedIn</a> '
     +'<button onclick="rvReject(\''+p._id+'\')" style="font-size:.84rem;padding:.15rem .4rem;cursor:pointer;color:#B91C1C">Delete</button></td></tr>'}).join('');
-  document.getElementById('rvTable').innerHTML='<div style="font-size:.84rem;color:var(--g5);margin:.2rem 0 .4rem">Sort: '+['new','rate','jss','earn','fit'].map(function(k){var l={new:'Newest',rate:'Rate',jss:'JSS',earn:'Earnings',fit:'Security fit'}[k];return '<a href="#" onclick="rvSortBy(\''+k+'\');return false" style="margin-right:.72rem;text-decoration:none;font-weight:'+(_rvSort===k?'700':'400')+';color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'">'+l+'</a>'}).join('')+'</div><table style="width:100%;border-collapse:collapse;font-size:.76rem"><thead><tr style="text-align:left"><th></th>'+th('Name','name')+'<th style="padding:.3rem .4rem;color:var(--g5)">Title</th>'+th('Fit','fit')+th('Rate','rate')+th('JSS','jss')+th('Earnings','earn')+'<th style="padding:.3rem .4rem;color:var(--g5)">Location</th><th style="padding:.3rem .4rem;color:var(--g5)">Source</th><th></th></tr></thead><tbody>'+(rows||'<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Nothing pending.</td></tr>')+'</tbody></table>';
+  document.getElementById('rvTable').innerHTML='<div style="font-size:.84rem;color:var(--g5);margin:.2rem 0 .4rem">'+(list.length!==listAll.length?'<span style="color:var(--pri);font-weight:600;margin-right:.8rem">'+list.length+' of '+listAll.length+' shown</span>':'')+'Sort: '+['new','rate','jss','earn','fit'].map(function(k){var l={new:'Newest',rate:'Rate',jss:'JSS',earn:'Earnings',fit:'Security fit'}[k];return '<a href="#" onclick="rvSortBy(\''+k+'\');return false" style="margin-right:.72rem;text-decoration:none;font-weight:'+(_rvSort===k?'700':'400')+';color:'+(_rvSort===k?'var(--pri)':'var(--g5)')+'">'+l+'</a>'}).join('')+'</div><table style="width:100%;border-collapse:collapse;font-size:.76rem"><thead><tr style="text-align:left"><th></th>'+th('Name','name')+'<th style="padding:.3rem .4rem;color:var(--g5)">Title</th>'+th('Fit','fit')+th('Rate','rate')+th('JSS','jss')+th('Earnings','earn')+'<th style="padding:.3rem .4rem;color:var(--g5)">Location</th><th style="padding:.3rem .4rem;color:var(--g5)">Source</th><th></th></tr>'+filterRow+'</thead><tbody>'+(rows||'<tr><td colspan="10" style="padding:1rem;text-align:center;color:var(--g3)">Nothing pending.</td></tr>')+'</tbody></table>';
   rvAttachResizers();
 }
 async function aiFmtSummary(elId,link){
