@@ -245,6 +245,7 @@ exports.handler = async (event) => {
       'listUsers': ADMIN_UP, 'addUser': ADMIN_UP,
       // #436: job assignment (manager+) and comments (any active role)
       'assignJob': MANAGER_UP, 'unassignJob': MANAGER_UP, 'listAssignees': MANAGER_UP,
+      'myWork': ALL_ACTIVE, 'setNextAction': ['super_admin', 'admin', 'manager', 'analyst'],   // #604
       'addJobComment': ALL_ACTIVE, 'getJobActivity': ALL_ACTIVE,
       'updateUser': ADMIN_UP, 'deleteUser': ADMIN_UP,
       'saveSettings': null, 'getSettings': ALL_ACTIVE,
@@ -382,7 +383,8 @@ exports.handler = async (event) => {
       var { ObjectId } = require('mongodb');
       var result = await col.updateOne(
         { _id: new ObjectId(body.id) },
-        { $set: { status: body.status, statusUpdatedAt: new Date() } }
+        { $set: { status: body.status, statusUpdatedAt: new Date(), lastActivityAt: new Date() },
+          $push: { comments: { text: 'Status → ' + body.status, author: authUser.email, system: true, createdAt: new Date() } } }   // #604 activity
       );
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
     }
@@ -1697,6 +1699,51 @@ exports.handler = async (event) => {
       try { j = await col.findOne({ _id: new OID(jobId) }); } catch (e) {}
       if (!j) { try { j = await col.findOne({ jobId: jobId }); } catch (e) {} }
       return j;
+    }
+    // ---- #604: My Work — jobs assigned to me (admins/super-admins may view any owner or everyone) ----
+    if (action === 'myWork') {
+      var isAdminMW = (authRole === 'super_admin' || authRole === 'admin');
+      var mwOwner = String(body.owner || '').trim();          // '' = me, '*' = everyone (admin only)
+      var mwQ = { status: { $ne: 'archived' } };
+      if (isAdminMW && mwOwner === '*') mwQ['assignedTo.email'] = { $exists: true, $ne: '' };
+      else { var mwEmail = (isAdminMW && mwOwner) ? mwOwner : authUser.email; mwQ['assignedTo.email'] = new RegExp('^' + mwEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i'); }
+      var mwJobs = await col.find(mwQ).project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, jobType: 1, engagementModel: 1, offshoreOk: 1, status: 1, statusUpdatedAt: 1,
+        assignedTo: 1, nextAction: 1, lastActivityAt: 1, datePosted: 1, dateScanned: 1, candidateProfiles: 1, comments: { $slice: -1 }, outreachClient: 1, salary: 1, jobId: 1 }).sort({ 'assignedTo.assignedAt': -1 }).limit(300).toArray();
+      var STAGES = ['Screening', 'Submitted', 'Client Interview', 'Selected', 'Contracted', 'Rejected'];
+      var rows = mwJobs.map(function (j) {
+        var cps = j.candidateProfiles || [], stg = {}; STAGES.forEach(function (s) { stg[s] = 0; });
+        var lastCand = 0;
+        cps.forEach(function (c) { var s = c.stage || 'Screening'; stg[s] = (stg[s] || 0) + 1; var t = new Date(c.stageAt || c.addedAt || 0).getTime(); if (t > lastCand) lastCand = t; });
+        var lastC = (j.comments && j.comments.length) ? new Date(j.comments[j.comments.length - 1].createdAt || 0).getTime() : 0;
+        var cands = [j.lastActivityAt, j.statusUpdatedAt, j.assignedTo && j.assignedTo.assignedAt, j.outreachClient && j.outreachClient.at, lastCand, lastC].map(function (x) { return x ? new Date(x).getTime() : 0; });
+        var last = Math.max.apply(null, cands);
+        return { _id: String(j._id), jobId: j.jobId || '', title: j.titleClean || j.title || '', company: j.company || '', location: j.location || j.detectedCountry || '', jobType: j.jobType || '',
+          engagementModel: j.engagementModel || '', offshoreOk: j.offshoreOk || '', status: j.status || 'new', salary: j.salary || '', datePosted: j.datePosted || j.dateScanned || null,
+          owner: j.assignedTo || null, nextAction: j.nextAction || null, stages: stg, candidates: cps.length, lastActivityAt: last ? new Date(last) : null };
+      });
+      var workload = null;
+      if (isAdminMW) {
+        var wl = {}; var now = Date.now();
+        (await col.find({ status: { $ne: 'archived' }, 'assignedTo.email': { $exists: true, $ne: '' } }).project({ assignedTo: 1, nextAction: 1 }).toArray()).forEach(function (j) {
+          var k = (j.assignedTo.email || '').toLowerCase(); wl[k] = wl[k] || { email: j.assignedTo.email, name: j.assignedTo.name || '', jobs: 0, overdue: 0 }; wl[k].jobs++;
+          if (j.nextAction && j.nextAction.dueAt && new Date(j.nextAction.dueAt).getTime() < now) wl[k].overdue++;
+        });
+        workload = Object.keys(wl).map(function (k) { return wl[k]; }).sort(function (a, b) { return b.jobs - a.jobs; });
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: rows, workload: workload, isAdmin: isAdminMW, me: authUser.email }) };
+    }
+    if (action === 'setNextAction') {
+      var naDoc = await findJobDoc(body.jobId);
+      if (!naDoc) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      var isOwnerNA = naDoc.assignedTo && String(naDoc.assignedTo.email || '').toLowerCase() === String(authUser.email).toLowerCase();
+      if (!isOwnerNA && ['super_admin', 'admin', 'manager'].indexOf(authRole) < 0) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Only the owner or a manager can set the next action' }) };
+      var naText = String(body.text || '').trim().slice(0, 300);
+      var naDue = body.dueAt ? new Date(body.dueAt) : null;
+      var naSet = naText ? { nextAction: { text: naText, dueAt: (naDue && !isNaN(naDue.getTime())) ? naDue : null, setBy: authUser.email, setAt: new Date() }, lastActivityAt: new Date() } : { lastActivityAt: new Date() };
+      var naUpd = naText ? { $set: naSet, $push: { comments: { text: 'Next action: ' + naText + (naSet.nextAction.dueAt ? ' (due ' + naSet.nextAction.dueAt.toISOString().slice(0, 10) + ')' : ''), author: authUser.email, system: true, createdAt: new Date() } } }
+                        : { $set: naSet, $unset: { nextAction: '' }, $push: { comments: { text: 'Next action cleared', author: authUser.email, system: true, createdAt: new Date() } } };
+      await col.updateOne({ _id: naDoc._id }, naUpd);
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, nextAction: naSet.nextAction || null }) };
     }
     if (action === 'listAssignees') {
       var aUsers = await db.collection('users').find({ active: { $ne: false } })

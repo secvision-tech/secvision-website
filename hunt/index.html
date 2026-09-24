@@ -392,6 +392,16 @@ body.role-viewer .edit-btn{display:none!important}
     <div id="contractPanel" class="dash-panel">
       <div class="dash-loading" id="contractLoading">Loading contract pipeline...</div>
       <div id="contractContent" style="display:none">
+        <div id="myWorkPanel" style="margin-bottom:1rem;border:1px solid var(--g2);border-radius:8px;padding:.6rem .8rem;background:#fff">
+          <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap;margin-bottom:.4rem">
+            <div class="dash-chart-title" style="margin:0">📌 My Work</div>
+            <span id="mwSummary" style="font-size:.62rem;color:var(--g5)"></span>
+            <span id="mwOwnerWrap" style="display:none;font-size:.6rem;color:var(--g5);margin-left:auto">Owner: <select id="mwOwner" onchange="loadMyWork()" style="font-size:.6rem;padding:.15rem .3rem;border:1px solid var(--g2);border-radius:4px"></select></span>
+            <button onclick="loadMyWork()" title="Refresh" style="padding:.15rem .5rem;background:#fff;border:1px solid var(--g2);border-radius:4px;font-size:.58rem;cursor:pointer">↻</button>
+          </div>
+          <div id="mwWorkload" style="font-size:.6rem;color:var(--g5);margin-bottom:.4rem"></div>
+          <div id="mwTable" class="dash-table-wrap" style="font-size:.65rem"></div>
+        </div>
         <div style="display:flex;justify-content:flex-end;margin-bottom:.4rem"><button onclick="refreshContract()" style="padding:.25rem .7rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-family:DM Sans,sans-serif;font-weight:600">🔄 Refresh</button></div>
         <div class="dash-summary" style="grid-template-columns:repeat(4,1fr)">
           <div class="dash-card" style="border-left:3px solid #DC2626"><div class="dash-card-num" id="dContract" style="color:#DC2626">0</div><div class="dash-card-label">Contract Jobs</div></div>
@@ -2082,12 +2092,14 @@ async function jaAssign(){
     var d=await r.json();
     if(d.error){alert(d.error);return}
     loadJobActivity(_jaJobId);
+    if(document.getElementById('mwTable')&&_mwData)loadMyWork();   // #604: keep My Work in sync
   }catch(e){alert('Error: '+e.message)}
 }
 async function jaUnassign(){
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'unassignJob',jobId:_jaJobId})});
     loadJobActivity(_jaJobId);
+    if(document.getElementById('mwTable')&&_mwData)loadMyWork();   // #604
   }catch(e){alert('Error: '+e.message)}
 }
 async function jaAddComment(){
@@ -3214,6 +3226,7 @@ async function loadContractPipeline(){
     renderContractTable(d.contractByCompany||[]);
     // Fetch latest 100 contract jobs
     fetchRecentContracts();
+    loadMyWork();   // #604
   }catch(e){
     console.error('Contract pipeline error:',e);
     document.getElementById('contractLoading').textContent='Failed to load: '+e.message;
@@ -3361,6 +3374,76 @@ var CJ_COLS=[
   {key:'action',label:'Action',ch:8}
 ];
 
+// ===== #604 My Work — jobs assigned to me, next action, idle tracking =====
+var _mwData=null,_mwUsersLoaded=false;
+function mwBizDays(from){if(!from)return null;var a=new Date(from),b=new Date(),n=0;a.setHours(0,0,0,0);b.setHours(0,0,0,0);while(a<b){a.setDate(a.getDate()+1);var d=a.getDay();if(d!==0&&d!==6)n++}return n}
+async function loadMyWork(){
+  var box=document.getElementById('mwTable');if(!box)return;
+  var ownerSel=document.getElementById('mwOwner');var owner=ownerSel&&ownerSel.value?ownerSel.value:'';
+  box.innerHTML='<div style="color:var(--g4);padding:.3rem">Loading…</div>';
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'myWork',owner:owner})});
+    var d=await r.json();if(d.error){box.innerHTML='<div style="color:#DC2626;padding:.3rem">'+esc(d.error)+'</div>';return}
+    _mwData=d;
+    var wrap=document.getElementById('mwOwnerWrap');
+    if(d.isAdmin){
+      wrap.style.display='';
+      if(!_mwUsersLoaded){
+        try{var ur=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'listAssignees'})});var ud=await ur.json();
+          ownerSel.innerHTML='<option value="">Me</option><option value="*">Everyone</option>'+(ud.users||[]).filter(function(u){return (u.email||'').toLowerCase()!==(d.me||'').toLowerCase()}).map(function(u){return '<option value="'+esc(u.email)+'">'+esc(u.name||u.email)+'</option>'}).join('');
+          _mwUsersLoaded=true;}catch(e){}
+      }
+      var wl=document.getElementById('mwWorkload');
+      wl.innerHTML=(d.workload&&d.workload.length)?'Workload: '+d.workload.map(function(w){return '<span style="display:inline-block;margin-right:.6rem;padding:.05rem .4rem;background:#F5F3FF;border-radius:3px"><b>'+esc(w.name||w.email.split('@')[0])+'</b> '+w.jobs+(w.overdue?' <span style="color:#B91C1C">('+w.overdue+' overdue)</span>':'')+'</span>'}).join(''):'No jobs assigned to anyone yet — open a job and use Assign to.';
+    }
+    renderMyWork();
+  }catch(e){box.innerHTML='<div style="color:#DC2626;padding:.3rem">'+esc(e.message)+'</div>'}
+}
+function renderMyWork(){
+  var box=document.getElementById('mwTable'),d=_mwData;if(!box||!d)return;
+  var jobs=(d.jobs||[]).slice();var now=Date.now(),today=new Date().toISOString().slice(0,10);
+  var due=0,overdue=0,idle=0;
+  jobs.forEach(function(j){j._idle=mwBizDays(j.lastActivityAt);j._due=j.nextAction&&j.nextAction.dueAt?String(j.nextAction.dueAt).slice(0,10):'';
+    j._overdue=!!(j._due&&j._due<today);j._today=j._due===today;if(j._overdue)overdue++;if(j._today)due++;if((j._idle||0)>=3)idle++});
+  jobs.sort(function(a,b){var ad=a._due||'9999',bd=b._due||'9999';if(ad!==bd)return ad<bd?-1:1;return (b._idle||0)-(a._idle||0)});
+  var sm=document.getElementById('mwSummary');
+  if(sm)sm.innerHTML=jobs.length?jobs.length+' job'+(jobs.length===1?'':'s')+(overdue?' · <span style="color:#B91C1C;font-weight:700">'+overdue+' overdue</span>':'')+(due?' · <span style="color:#B45309;font-weight:700">'+due+' due today</span>':'')+(idle?' · <span style="color:#92400E">'+idle+' idle ≥3 working days</span>':''):'';
+  if(!jobs.length){box.innerHTML='<div style="color:var(--g4);padding:.3rem">No jobs assigned'+(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value?'':' to you')+'. Open a job → <b>Assign to</b> (managers) to put it on a work list.</div>';return}
+  var stCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
+  var h='<div style="overflow-x:auto"><table class="dash-table" id="mwTbl" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:132ch"><thead><tr>'
+    +'<th style="width:26ch">Job</th><th style="width:16ch">Client</th><th style="width:9ch">Engagement</th><th style="width:9ch">Status</th><th style="width:22ch" title="Screening / Submitted / Interview / Selected / Contracted">Candidates S · Sub · Int · Sel · Con</th><th style="width:30ch">Next action</th><th style="width:10ch">Due</th><th style="width:11ch">Last activity</th><th style="width:7ch;text-align:right">Idle</th>'+(d.isAdmin||(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value)?'<th style="width:12ch">Owner</th>':'')+'<th style="width:8ch">Action</th></tr></thead><tbody>';
+  jobs.forEach(function(j){
+    var rowBg=j._overdue?'background:#FEF2F2;':(j._today?'background:#FFFBEB;':((j._idle||0)>=3?'background:#FFF7ED;':''));
+    var stg=j.stages||{};var stgTxt=[stg['Screening']||0,stg['Submitted']||0,stg['Client Interview']||0,stg['Selected']||0,stg['Contracted']||0].join(' · ')+(stg['Rejected']?' <span style="color:var(--g4)">(✕'+stg['Rejected']+')</span>':'');
+    h+='<tr style="'+rowBg+'">'
+      +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.title)+'"><a href="#" onclick="viewContractJob(\''+esc(j._id)+'\');return false" style="color:var(--pri);text-decoration:none;font-weight:600">'+esc(j.title||'—')+'</a></td>'
+      +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.company)+'">'+esc(j.company||'—')+'</td>'
+      +'<td>'+(engChip(j)||'—')+'</td>'
+      +'<td><span class="status-badge '+(stCls[j.status]||'status-new')+'">'+esc(j.status)+'</span></td>'
+      +'<td style="white-space:nowrap">'+(j.candidates?stgTxt:'<span style="color:var(--g4)">none matched</span>')+'</td>'
+      +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to set the next action" onclick="mwEditNext(\''+esc(j._id)+'\')">'+(j.nextAction&&j.nextAction.text?esc(j.nextAction.text):'<span style="color:var(--g4)">＋ set next action</span>')+'</td>'
+      +'<td style="white-space:nowrap;font-weight:'+(j._overdue||j._today?'700':'400')+';color:'+(j._overdue?'#B91C1C':(j._today?'#B45309':'inherit'))+'">'+(j._due?fmtDate(j._due):'—')+'</td>'
+      +'<td style="white-space:nowrap;color:var(--g5)">'+(j.lastActivityAt?fmtDate(j.lastActivityAt):'—')+'</td>'
+      +'<td style="text-align:right;color:'+((j._idle||0)>=3?'#B45309':'var(--g5)')+'">'+(j._idle==null?'—':j._idle+'d')+'</td>'
+      +(d.isAdmin||(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value)?'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(j.owner?(j.owner.name||j.owner.email):'')+'</td>':'')
+      +'<td><button class="vb" onclick="viewContractJob(\''+esc(j._id)+'\')">Open</button></td></tr>';
+  });
+  box.innerHTML=h+'</tbody></table></div>';
+  try{attachColResizers('mwTbl')}catch(e){}
+}
+async function mwEditNext(id){
+  var j=((_mwData&&_mwData.jobs)||[]).filter(function(x){return x._id===id})[0]||{};
+  var cur=j.nextAction||{};
+  var text=prompt('Next action for "'+(j.title||'')+'" — '+(j.company||'')+'\n(leave empty to clear):',cur.text||'');
+  if(text===null)return;
+  var due='';
+  if(text.trim()){due=prompt('Due date (YYYY-MM-DD, optional):',cur.dueAt?String(cur.dueAt).slice(0,10):new Date(Date.now()+2*86400000).toISOString().slice(0,10));if(due===null)return;if(due&&!/^\d{4}-\d{2}-\d{2}$/.test(due.trim())){alert('Use the format YYYY-MM-DD');return}}
+  try{
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'setNextAction',jobId:id,text:text.trim(),dueAt:due?due.trim():''})});
+    var d=await r.json();if(d.error){alert(d.error);return}
+    loadMyWork();
+  }catch(e){alert(e.message)}
+}
 async function fetchRecentContracts(){
   var el=document.getElementById('contractJobsList');if(!el)return;
   el.innerHTML='<div style="color:var(--g4);padding:.3rem">Loading latest contract jobs...</div>';
