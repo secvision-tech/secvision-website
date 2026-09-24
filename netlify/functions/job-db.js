@@ -1710,16 +1710,22 @@ exports.handler = async (event) => {
       var mwJobs = await col.find(mwQ).project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, jobType: 1, engagementModel: 1, offshoreOk: 1, status: 1, statusUpdatedAt: 1,
         assignedTo: 1, nextAction: 1, lastActivityAt: 1, datePosted: 1, dateScanned: 1, candidateProfiles: 1, comments: { $slice: -1 }, outreachClient: 1, salary: 1, jobId: 1 }).sort({ 'assignedTo.assignedAt': -1 }).limit(300).toArray();
       var STAGES = ['Screening', 'Submitted', 'Client Interview', 'Selected', 'Contracted', 'Rejected'];
+      // #606: candidate names for the list view (one lookup for all jobs)
+      var mwSids = {}; mwJobs.forEach(function (j) { (j.candidateProfiles || []).forEach(function (c) { if (c.sourceId) mwSids[String(c.sourceId)] = 1; }); });
+      var mwNames = {};
+      try { (await db.collection('consultant_profiles').find({ sourceId: { $in: Object.keys(mwSids) } }).project({ sourceId: 1, name: 1 }).toArray()).forEach(function (p) { mwNames[String(p.sourceId)] = p.name || ''; }); } catch (e) {}
+      var STAGE_ORDER = { 'Contracted': 0, 'Selected': 1, 'Client Interview': 2, 'Submitted': 3, 'Screening': 4, 'Rejected': 5 };
       var rows = mwJobs.map(function (j) {
         var cps = j.candidateProfiles || [], stg = {}; STAGES.forEach(function (s) { stg[s] = 0; });
-        var lastCand = 0;
-        cps.forEach(function (c) { var s = c.stage || 'Screening'; stg[s] = (stg[s] || 0) + 1; var t = new Date(c.stageAt || c.addedAt || 0).getTime(); if (t > lastCand) lastCand = t; });
+        var lastCand = 0, candList = [];
+        cps.forEach(function (c) { var s = c.stage || 'Screening'; stg[s] = (stg[s] || 0) + 1; var t = new Date(c.stageAt || c.addedAt || 0).getTime(); if (t > lastCand) lastCand = t; candList.push({ name: mwNames[String(c.sourceId)] || String(c.sourceId || ''), stage: s, overall: c.overall || 0 }); });
+        candList.sort(function (a, b) { return (STAGE_ORDER[a.stage] - STAGE_ORDER[b.stage]) || (b.overall - a.overall); });
         var lastC = (j.comments && j.comments.length) ? new Date(j.comments[j.comments.length - 1].createdAt || 0).getTime() : 0;
         var cands = [j.lastActivityAt, j.statusUpdatedAt, j.assignedTo && j.assignedTo.assignedAt, j.outreachClient && j.outreachClient.at, lastCand, lastC].map(function (x) { return x ? new Date(x).getTime() : 0; });
         var last = Math.max.apply(null, cands);
         return { _id: String(j._id), jobId: j.jobId || '', title: j.titleClean || j.title || '', company: j.company || '', location: j.location || j.detectedCountry || '', jobType: j.jobType || '',
           engagementModel: j.engagementModel || '', offshoreOk: j.offshoreOk || '', status: j.status || 'new', salary: j.salary || '', datePosted: j.datePosted || j.dateScanned || null,
-          owner: j.assignedTo || null, nextAction: j.nextAction || null, stages: stg, candidates: cps.length, lastActivityAt: last ? new Date(last) : null };
+          owner: j.assignedTo || null, nextAction: j.nextAction || null, stages: stg, candidates: cps.length, candList: candList, lastActivityAt: last ? new Date(last) : null };
       });
       var workload = null;
       if (isAdminMW) {

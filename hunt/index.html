@@ -814,7 +814,7 @@ var wasResizing=false;
 // (contract jobs, matched candidates). Attach after render via attachColResizers(tableId).
 function attachColResizers(tableId){
   var tbl=document.getElementById(tableId);if(!tbl)return;
-  var ths=tbl.querySelectorAll('thead th');
+  var ths=tbl.querySelectorAll('thead tr:first-child th');   // #605: grips on the header row only, never on a filter row
   ths.forEach(function(th){
     if(th.querySelector('.rh-gen'))return;
     th.style.position='relative';
@@ -3399,37 +3399,71 @@ async function loadMyWork(){
     renderMyWork();
   }catch(e){box.innerHTML='<div style="color:#DC2626;padding:.3rem">'+esc(e.message)+'</div>'}
 }
+var _mwSort={key:'due',dir:1},_mwFlt={},_mwSelected={},_mwMouseX=0;
+var MW_COLS=[
+  {key:'title',label:'Job',ch:28},{key:'company',label:'Client',ch:16},{key:'engagementModel',label:'Engagement',ch:9},{key:'status',label:'Status',ch:9},
+  {key:'cands',label:'Candidates',ch:30},{key:'next',label:'Next action',ch:28},{key:'due',label:'Due',ch:10},{key:'last',label:'Last activity',ch:11},{key:'idle',label:'Idle',ch:6,right:true},
+  {key:'owner',label:'Owner',ch:12,admin:true},{key:'action',label:'Action',ch:8}
+];
+function mwCandText(j){return (j.candList||[]).map(function(c){return c.name+' – '+c.stage}).join(', ')}
+function mwVal(j,k){switch(k){
+  case 'title':return (j.title||'').toLowerCase();case 'company':return (j.company||'').toLowerCase();case 'engagementModel':return (j.engagementModel||'')+' '+(j.offshoreOk==='yes'?'offshore':'');
+  case 'status':return j.status||'';case 'cands':return mwCandText(j).toLowerCase();case 'next':return (j.nextAction&&j.nextAction.text||'').toLowerCase();
+  case 'due':return j._due||'9999';case 'last':return j.lastActivityAt?new Date(j.lastActivityAt).getTime():0;case 'idle':return j._idle==null?-1:j._idle;
+  case 'owner':return (j.owner?(j.owner.name||j.owner.email):'').toLowerCase();default:return ''}}
+function mwHeaderDown(e){_mwMouseX=e.clientX}
+function mwHeaderClick(k,e){if(Math.abs(e.clientX-_mwMouseX)>5||wasResizing)return;if(_mwSort.key===k)_mwSort.dir*=-1;else{_mwSort={key:k,dir:(k==='due'||k==='title'||k==='company'||k==='owner')?1:-1}}renderMyWork()}
+function mwFilterInput(el){var k=el.getAttribute('data-f');_mwFlt[k]=el.value.trim().toLowerCase();var pos=el.selectionStart;renderMyWork();var again=document.querySelector('.mwFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}}
+function mwClearFilters(){_mwFlt={};renderMyWork()}
+function mwRowPasses(j){for(var k in _mwFlt){var v=_mwFlt[k];if(!v)continue;var val=k==='due'?(j._due?fmtDate(j._due):''):(k==='last'?(j.lastActivityAt?fmtDate(j.lastActivityAt):''):(k==='idle'?String(j._idle==null?'':j._idle):String(mwVal(j,k))));if(String(val).toLowerCase().indexOf(v)<0)return false}return true}
 function renderMyWork(){
   var box=document.getElementById('mwTable'),d=_mwData;if(!box||!d)return;
-  var jobs=(d.jobs||[]).slice();var now=Date.now(),today=new Date().toISOString().slice(0,10);
+  var all=(d.jobs||[]).slice();var today=new Date().toISOString().slice(0,10);
   var due=0,overdue=0,idle=0;
-  jobs.forEach(function(j){j._idle=mwBizDays(j.lastActivityAt);j._due=j.nextAction&&j.nextAction.dueAt?String(j.nextAction.dueAt).slice(0,10):'';
+  all.forEach(function(j){j._idle=mwBizDays(j.lastActivityAt);j._due=j.nextAction&&j.nextAction.dueAt?String(j.nextAction.dueAt).slice(0,10):'';
     j._overdue=!!(j._due&&j._due<today);j._today=j._due===today;if(j._overdue)overdue++;if(j._today)due++;if((j._idle||0)>=3)idle++});
-  jobs.sort(function(a,b){var ad=a._due||'9999',bd=b._due||'9999';if(ad!==bd)return ad<bd?-1:1;return (b._idle||0)-(a._idle||0)});
   var sm=document.getElementById('mwSummary');
-  if(sm)sm.innerHTML=jobs.length?jobs.length+' job'+(jobs.length===1?'':'s')+(overdue?' · <span style="color:#B91C1C;font-weight:700">'+overdue+' overdue</span>':'')+(due?' · <span style="color:#B45309;font-weight:700">'+due+' due today</span>':'')+(idle?' · <span style="color:#92400E">'+idle+' idle ≥3 working days</span>':''):'';
-  if(!jobs.length){box.innerHTML='<div style="color:var(--g4);padding:.3rem">No jobs assigned'+(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value?'':' to you')+'. Open a job → <b>Assign to</b> (managers) to put it on a work list.</div>';return}
+  if(sm)sm.innerHTML=all.length?all.length+' job'+(all.length===1?'':'s')+(overdue?' · <span style="color:#B91C1C;font-weight:700">'+overdue+' overdue</span>':'')+(due?' · <span style="color:#B45309;font-weight:700">'+due+' due today</span>':'')+(idle?' · <span style="color:#92400E">'+idle+' idle ≥3 working days</span>':''):'';
+  if(!all.length){box.innerHTML='<div style="color:var(--g4);padding:.3rem">No jobs assigned'+(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value?'':' to you')+'. Open a job → <b>Assign to</b> (managers) to put it on a work list.</div>';return}
+  var jobs=all.filter(mwRowPasses).sort(function(a,b){var va=mwVal(a,_mwSort.key),vb=mwVal(b,_mwSort.key);if(va<vb)return -1*_mwSort.dir;if(va>vb)return 1*_mwSort.dir;return (b._idle||0)-(a._idle||0)});
+  var showOwner=!!(d.isAdmin||(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value));
+  var cols=MW_COLS.filter(function(c){return !c.admin||showOwner});
   var stCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
-  var h='<div style="overflow-x:auto"><table class="dash-table" id="mwTbl" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:132ch"><thead><tr>'
-    +'<th style="width:26ch">Job</th><th style="width:16ch">Client</th><th style="width:9ch">Engagement</th><th style="width:9ch">Status</th><th style="width:22ch" title="Screening / Submitted / Interview / Selected / Contracted">Candidates S · Sub · Int · Sel · Con</th><th style="width:30ch">Next action</th><th style="width:10ch">Due</th><th style="width:11ch">Last activity</th><th style="width:7ch;text-align:right">Idle</th>'+(d.isAdmin||(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value)?'<th style="width:12ch">Owner</th>':'')+'<th style="width:8ch">Action</th></tr></thead><tbody>';
+  var FI='width:100%;box-sizing:border-box;font-size:.56rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)';
+  var h='<div style="overflow-x:auto"><table class="dash-table" id="mwTbl" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:'+cols.reduce(function(a,c){return a+c.ch},0)+'ch"><thead><tr>';
+  cols.forEach(function(c){var arrow=_mwSort.key===c.key?(_mwSort.dir===1?' ▲':' ▼'):'';
+    if(c.key==='action')h+='<th style="width:'+c.ch+'ch;white-space:nowrap;padding:.3rem .4rem">'+c.label+'</th>';
+    else h+='<th onmousedown="mwHeaderDown(event)" onclick="mwHeaderClick(\''+c.key+'\',event)" title="Click to sort" style="width:'+c.ch+'ch;cursor:pointer;white-space:nowrap;padding:.3rem .4rem;overflow:hidden'+(c.right?';text-align:right':'')+'">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>'});
+  h+='</tr><tr style="background:#FAFAFA">';
+  cols.forEach(function(c){
+    if(c.key==='action')h+='<th style="padding:.1rem .2rem;text-align:center"><button onclick="mwClearFilters()" title="Clear filters" style="padding:.05rem .3rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.5rem;cursor:pointer">✕</button></th>';
+    else h+='<th style="padding:.1rem .2rem"><input class="mwFlt" data-f="'+c.key+'" placeholder="filter" value="'+esc(_mwFlt[c.key]||'')+'" oninput="mwFilterInput(this)" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="'+FI+'"></th>'});
+  h+='</tr></thead><tbody>';
+  if(!jobs.length)h+='<tr><td colspan="'+cols.length+'" style="padding:.6rem;text-align:center;color:var(--g4)">No jobs match the filters.</td></tr>';
   jobs.forEach(function(j){
-    var rowBg=j._overdue?'background:#FEF2F2;':(j._today?'background:#FFFBEB;':((j._idle||0)>=3?'background:#FFF7ED;':''));
-    var stg=j.stages||{};var stgTxt=[stg['Screening']||0,stg['Submitted']||0,stg['Client Interview']||0,stg['Selected']||0,stg['Contracted']||0].join(' · ')+(stg['Rejected']?' <span style="color:var(--g4)">(✕'+stg['Rejected']+')</span>':'');
-    h+='<tr style="'+rowBg+'">'
-      +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.title)+'"><a href="#" onclick="viewContractJob(\''+esc(j._id)+'\');return false" style="color:var(--pri);text-decoration:none;font-weight:600">'+esc(j.title||'—')+'</a></td>'
-      +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.company)+'">'+esc(j.company||'—')+'</td>'
-      +'<td>'+(engChip(j)||'—')+'</td>'
-      +'<td><span class="status-badge '+(stCls[j.status]||'status-new')+'">'+esc(j.status)+'</span></td>'
-      +'<td style="white-space:nowrap">'+(j.candidates?stgTxt:'<span style="color:var(--g4)">none matched</span>')+'</td>'
-      +'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="Click to set the next action" onclick="mwEditNext(\''+esc(j._id)+'\')">'+(j.nextAction&&j.nextAction.text?esc(j.nextAction.text):'<span style="color:var(--g4)">＋ set next action</span>')+'</td>'
-      +'<td style="white-space:nowrap;font-weight:'+(j._overdue||j._today?'700':'400')+';color:'+(j._overdue?'#B91C1C':(j._today?'#B45309':'inherit'))+'">'+(j._due?fmtDate(j._due):'—')+'</td>'
-      +'<td style="white-space:nowrap;color:var(--g5)">'+(j.lastActivityAt?fmtDate(j.lastActivityAt):'—')+'</td>'
-      +'<td style="text-align:right;color:'+((j._idle||0)>=3?'#B45309':'var(--g5)')+'">'+(j._idle==null?'—':j._idle+'d')+'</td>'
-      +(d.isAdmin||(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value)?'<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(j.owner?(j.owner.name||j.owner.email):'')+'</td>':'')
-      +'<td><button class="vb" onclick="viewContractJob(\''+esc(j._id)+'\')">Open</button></td></tr>';
+    var rowBg=j._overdue?'#FEF2F2':(j._today?'#FFFBEB':((j._idle||0)>=3?'#FFF7ED':''));
+    var candTxt=mwCandText(j);var cl=j.candList||[];
+    var candShort=cl.slice(0,2).map(function(c){return esc(c.name)+' <span style="color:var(--g4)">– '+esc(c.stage)+'</span>'}).join(', ')+(cl.length>2?' <span style="color:#6C3FBF;font-weight:600">+'+(cl.length-2)+' more</span>':'');
+    var matchInd=j.candidates?' <span title="'+esc(candTxt)+'" style="font-size:.5rem;background:#EDE9FE;color:#6C3FBF;padding:.05rem .28rem;border-radius:3px;font-weight:700;white-space:nowrap">🎯 '+j.candidates+'</span>':'';
+    h+='<tr data-mw="'+esc(j._id)+'"'+(_mwSelected[j._id]?' class="row-hl"':'')+' style="cursor:pointer;'+(rowBg?'background:'+rowBg+';':'')+'">';
+    cols.forEach(function(c){switch(c.key){
+      case 'title':h+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.title)+'"><a href="#" onclick="viewContractJob(\''+esc(j._id)+'\');return false" style="color:var(--pri);text-decoration:none;font-weight:600">'+esc(j.title||'—')+'</a>'+matchInd+'</td>';break;
+      case 'company':h+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.company)+'">'+esc(j.company||'—')+'</td>';break;
+      case 'engagementModel':h+='<td>'+(engChip(j)||'—')+'</td>';break;
+      case 'status':h+='<td><span class="status-badge '+(stCls[j.status]||'status-new')+'">'+esc(j.status)+'</span></td>';break;
+      case 'cands':h+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(candTxt||'No matched candidates yet')+'">'+(cl.length?candShort:'<span style="color:var(--g4)">none matched</span>')+'</td>';break;
+      case 'next':h+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="Click to set the next action" onclick="event.stopPropagation();mwEditNext(\''+esc(j._id)+'\')">'+(j.nextAction&&j.nextAction.text?esc(j.nextAction.text):'<span style="color:var(--g4)">＋ set next action</span>')+'</td>';break;
+      case 'due':h+='<td style="white-space:nowrap;font-weight:'+(j._overdue||j._today?'700':'400')+';color:'+(j._overdue?'#B91C1C':(j._today?'#B45309':'inherit'))+'">'+(j._due?fmtDate(j._due):'—')+'</td>';break;
+      case 'last':h+='<td style="white-space:nowrap;color:var(--g5)">'+(j.lastActivityAt?fmtDate(j.lastActivityAt):'—')+'</td>';break;
+      case 'idle':h+='<td style="text-align:right;color:'+((j._idle||0)>=3?'#B45309':'var(--g5)')+'">'+(j._idle==null?'—':j._idle+'d')+'</td>';break;
+      case 'owner':h+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(j.owner?(j.owner.name||j.owner.email):'')+'</td>';break;
+      case 'action':h+='<td><button class="vb" onclick="event.stopPropagation();viewContractJob(\''+esc(j._id)+'\')">Manage</button></td>';break;}});
+    h+='</tr>';
   });
   box.innerHTML=h+'</tbody></table></div>';
   try{attachColResizers('mwTbl')}catch(e){}
+  // #605: row click toggles selection (links/buttons/filter inputs excluded)
+  box.querySelectorAll('tbody tr[data-mw]').forEach(function(tr){tr.onclick=function(e){if(e.target.closest('a,button,input'))return;var id=this.dataset.mw;this.classList.toggle('row-hl');if(this.classList.contains('row-hl'))_mwSelected[id]=true;else delete _mwSelected[id]}});
 }
 async function mwEditNext(id){
   var j=((_mwData&&_mwData.jobs)||[]).filter(function(x){return x._id===id})[0]||{};
