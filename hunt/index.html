@@ -4840,7 +4840,9 @@ function mjTech(m){
 }
 // #587: column filters — applied in place (rows hidden/shown) so typing never rebuilds the table or loses focus
 var _mjFlt={title:'',company:'',location:'',tech:'',min:''};
-function mjFilterInput(el){_mjFlt[el.getAttribute('data-f')]=el.value.trim().toLowerCase();mjApplyFilters()}
+var _mjLocalPage=1,MJ_PER_PAGE=25;   // #612
+function mjGoLocalPage(p){_mjLocalPage=p;_mjRenderSig='';if(mjLastData)renderMatchJobs(mjLastData)}
+function mjFilterInput(el){var k=el.getAttribute('data-f');_mjFlt[k]=el.value.trim().toLowerCase();_mjLocalPage=1;var pos=el.selectionStart;_mjRenderSig='';if(mjLastData)renderMatchJobs(mjLastData);var again=document.querySelector('.mjFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}}
 function mjRowPasses(m){
   var f=_mjFlt;
   if(f.min&&!((m.overall||0)>=parseFloat(f.min)))return false;
@@ -4856,7 +4858,7 @@ function mjApplyFilters(){
   document.querySelectorAll('#mjTable tbody tr[data-mjrow]').forEach(function(tr){var m=byId[tr.getAttribute('data-mjrow')];var ok=!m||mjRowPasses(m);tr.style.display=ok?'':'none';if(ok){shown++;tr.cells[0].textContent=shown}});
   var c=document.getElementById('mjFltCount');if(c){var tot=document.querySelectorAll('#mjTable tbody tr[data-mjrow]').length;c.textContent=shown===tot?'':(shown+' of '+tot+' shown')}
 }
-function mjClearFilters(){_mjFlt={title:'',company:'',location:'',tech:'',min:''};document.querySelectorAll('.mjFlt').forEach(function(i){i.value=''});mjApplyFilters()}
+function mjClearFilters(){_mjFlt={title:'',company:'',location:'',tech:'',min:''};_mjLocalPage=1;_mjRenderSig='';if(mjLastData)renderMatchJobs(mjLastData)}
 // #587: export the visible (filtered + sorted) matching jobs — CSV / Excel / PDF / Word
 function mjExportRows(){
   var list=((mjLastData&&mjLastData.matches)||[]).slice().sort(function(a,b){var va=mjSortValue(a,mjSortCol),vb=mjSortValue(b,mjSortCol);if(va<vb)return -1*mjSortDir;if(va>vb)return 1*mjSortDir;return 0}).filter(mjRowPasses);
@@ -4928,7 +4930,12 @@ function renderMatchJobs(d){
     box.innerHTML='<div style="font-size:.6rem;color:var(--g5);padding:.4rem 0">No matching jobs saved yet. Pick a period and press “Find matching jobs”.</div>';
     return;
   }
-  var sig=(d.matches||[]).map(function(m){return m.jobId+':'+m.overall+(_mjSelected[m.jobId]?'*':'')}).join('|')+':'+mjSortCol+mjSortDir+':'+(d.page||0);
+  // #612: filter first, then page 25 at a time (client-side; export still covers the whole filtered list)
+  var listAll=list.filter(mjRowPasses);
+  var mjPages=Math.max(1,Math.ceil(listAll.length/MJ_PER_PAGE));if(_mjLocalPage>mjPages)_mjLocalPage=mjPages;
+  var pageStart=(_mjLocalPage-1)*MJ_PER_PAGE;
+  list=listAll.slice(pageStart,pageStart+MJ_PER_PAGE);
+  var sig=(d.matches||[]).map(function(m){return m.jobId+':'+m.overall+(_mjSelected[m.jobId]?'*':'')}).join('|')+':'+mjSortCol+mjSortDir+':'+(d.page||0)+':'+_mjLocalPage+':'+JSON.stringify(_mjFlt);
   if(sig===_mjRenderSig&&document.getElementById('mjTable'))return;   // #438: no identical rebuilds
   _mjRenderSig=sig;
   var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
@@ -4945,7 +4952,7 @@ function renderMatchJobs(d){
   var fi=function(key,ph,type){var FI='width:100%;box-sizing:border-box;font-size:.58rem;padding:.12rem .25rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)';return '<th style="padding:.15rem .25rem"><input class="mjFlt" data-f="'+key+'" type="'+(type||'text')+'" placeholder="'+ph+'" value="'+esc(_mjFlt[key]||'')+'" oninput="mjFilterInput(this)" onclick="event.stopPropagation()" style="'+FI+'"></th>'};
   h+='<tr style="background:#FAFAFA"><th></th>'+fi('min','≥ %','number')+'<th></th>'+fi('title','filter role')+fi('company','filter company')+fi('location','filter location')+'<th></th>'+fi('tech','e.g. splunk sentinel')
     +'<th style="padding:.15rem .25rem;text-align:center;white-space:nowrap"><span id="mjFltCount" style="font-size:.52rem;color:var(--g5)"></span> <button onclick="mjClearFilters()" title="Clear filters" style="padding:.1rem .35rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.52rem;cursor:pointer">✕</button></th></tr></thead><tbody>';
-  list.forEach(function(m,ri){
+  list.forEach(function(m,ri){ri=pageStart+ri;
     var scoreColor=m.overall>=80?'#047857':(m.overall>=70?'#6C3FBF':'#B45309');
     var loc=m.location||m.country||'—';
     var flag=(m.locationFit&&m.locationFit.sameCountry===false)?' <span title="Different country from consultant — score reduced" style="color:#B45309">🌍</span>':'';
@@ -4977,10 +4984,13 @@ function renderMatchJobs(d){
       +'<button onclick="mjClearSelection()" style="padding:.15rem .5rem;background:#fff;color:var(--g5);border:1px solid var(--g2);border-radius:4px;font-size:.56rem;cursor:pointer">Clear</button>'
       +'</div>';
   }
-  h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem">';
-  if(d.page>0)h+='<button onclick="runMatchJobs('+(d.page-1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>';
-  if(typeof d.page==='number')h+='<span style="font-size:.55rem;color:var(--g5)">Page '+(d.page+1)+'</span>';
-  if(d.hasMore||d.canScoreMore)h+='<button onclick="mjNextPage()" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Next 10 ›</button>';
+  h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem;flex-wrap:wrap">';
+  // #612: local paging over the saved/filtered list
+  if(_mjLocalPage>1)h+='<button onclick="mjGoLocalPage('+(_mjLocalPage-1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>';
+  h+='<span style="font-size:.55rem;color:var(--g5)">Page '+_mjLocalPage+' of '+mjPages+' · '+listAll.length+(listAll.length!==(d.matches||[]).length?' of '+(d.matches||[]).length:'')+' jobs</span>';
+  if(_mjLocalPage<mjPages)h+='<button onclick="mjGoLocalPage('+(_mjLocalPage+1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Next ›</button>';
+  // live scoring continuation (server-side pages of scored results)
+  if(!d.saved&&(d.hasMore||d.canScoreMore))h+='<button onclick="mjNextPage()" title="Score the next batch of jobs" style="margin-left:.6rem;padding:.15rem .5rem;border:1px solid #C4B5FD;background:#fff;color:#6C3FBF;border-radius:4px;font-size:.58rem;cursor:pointer">Score next 10 ›</button>';
   // #587: export the visible list
   var EB='padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600;color:var(--pri)';
   h+='<span style="margin-left:auto;font-size:.55rem;color:var(--g5)">Export:</span>'
@@ -4991,7 +5001,7 @@ function renderMatchJobs(d){
   h+='</div>';
   box.innerHTML=h;
   attachColResizers('mjTable');   // #417: JS drag-resize, sort-safe (see #408)
-  mjApplyFilters();   // #587: re-apply any active column filters after a rebuild
+  var mfc=document.getElementById('mjFltCount');if(mfc)mfc.textContent=listAll.length===(d.matches||[]).length?'':(listAll.length+' of '+(d.matches||[]).length+' shown');   // #612
 }
 var mjFromConsultant=false,_mjPending=false;
 function mjManageJob(jobId){
