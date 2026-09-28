@@ -3399,9 +3399,10 @@ async function loadMyWork(){
     renderMyWork();
   }catch(e){box.innerHTML='<div style="color:#DC2626;padding:.3rem">'+esc(e.message)+'</div>'}
 }
-var _mwSort={key:'due',dir:1},_mwFlt={},_mwSelected={},_mwMouseX=0,_mwPage=1,MW_PER_PAGE=25;   // #610
+var _mwSort={key:'posted',dir:-1},_mwFlt={},_mwSelected={},_mwMouseX=0,_mwPage=1,MW_PER_PAGE=25;   // #610 · #611: latest job first by default
 function mwGoPage(p){_mwPage=p;renderMyWork()}
 var MW_COLS=[
+  {key:'idx',label:'#',ch:4,right:true},{key:'posted',label:'Posted',ch:10},   // #611
   {key:'title',label:'Job',ch:28},{key:'company',label:'Client',ch:16},{key:'engagementModel',label:'Engagement',ch:9},{key:'status',label:'Status',ch:9},
   {key:'cands',label:'Candidates',ch:30},{key:'next',label:'Next action',ch:28},{key:'due',label:'Due',ch:10},{key:'last',label:'Last activity',ch:11},{key:'idle',label:'Idle',ch:6,right:true},
   {key:'owner',label:'Owner',ch:12,admin:true},{key:'action',label:'Action',ch:8}
@@ -3411,12 +3412,13 @@ function mwVal(j,k){switch(k){
   case 'title':return (j.title||'').toLowerCase();case 'company':return (j.company||'').toLowerCase();case 'engagementModel':return (j.engagementModel||'')+' '+(j.offshoreOk==='yes'?'offshore':'');
   case 'status':return j.status||'';case 'cands':return mwCandText(j).toLowerCase();case 'next':return (j.nextAction&&j.nextAction.text||'').toLowerCase();
   case 'due':return j._due||'9999';case 'last':return j.lastActivityAt?new Date(j.lastActivityAt).getTime():0;case 'idle':return j._idle==null?-1:j._idle;
+  case 'posted':return j.datePosted?new Date(j.datePosted).getTime():0;case 'idx':return 0;
   case 'owner':return (j.owner?(j.owner.name||j.owner.email):'').toLowerCase();default:return ''}}
 function mwHeaderDown(e){_mwMouseX=e.clientX}
-function mwHeaderClick(k,e){if(Math.abs(e.clientX-_mwMouseX)>5||wasResizing)return;if(_mwSort.key===k)_mwSort.dir*=-1;else{_mwSort={key:k,dir:(k==='due'||k==='title'||k==='company'||k==='owner')?1:-1}}renderMyWork()}
+function mwHeaderClick(k,e){if(k==='idx'||Math.abs(e.clientX-_mwMouseX)>5||wasResizing)return;if(_mwSort.key===k)_mwSort.dir*=-1;else{_mwSort={key:k,dir:(k==='due'||k==='title'||k==='company'||k==='owner')?1:-1}}renderMyWork()}
 function mwFilterInput(el){var k=el.getAttribute('data-f');_mwFlt[k]=el.value.trim().toLowerCase();_mwPage=1;var pos=el.selectionStart;renderMyWork();var again=document.querySelector('.mwFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}}
 function mwClearFilters(){_mwFlt={};renderMyWork()}
-function mwRowPasses(j){for(var k in _mwFlt){var v=_mwFlt[k];if(!v)continue;var val=k==='due'?(j._due?fmtDate(j._due):''):(k==='last'?(j.lastActivityAt?fmtDate(j.lastActivityAt):''):(k==='idle'?String(j._idle==null?'':j._idle):String(mwVal(j,k))));if(String(val).toLowerCase().indexOf(v)<0)return false}return true}
+function mwRowPasses(j){for(var k in _mwFlt){var v=_mwFlt[k];if(!v)continue;var val=k==='due'?(j._due?fmtDate(j._due):''):(k==='posted'?(j.datePosted?fmtDate(j.datePosted):''):(k==='last'?(j.lastActivityAt?fmtDate(j.lastActivityAt):''):(k==='idle'?String(j._idle==null?'':j._idle):String(mwVal(j,k)))));if(String(val).toLowerCase().indexOf(v)<0)return false}return true}
 function renderMyWork(){
   var box=document.getElementById('mwTable'),d=_mwData;if(!box||!d)return;
   var all=(d.jobs||[]).slice();var today=new Date().toISOString().slice(0,10);
@@ -3439,17 +3441,20 @@ function renderMyWork(){
     else h+='<th onmousedown="mwHeaderDown(event)" onclick="mwHeaderClick(\''+c.key+'\',event)" title="Click to sort" style="width:'+c.ch+'ch;cursor:pointer;white-space:nowrap;padding:.3rem .4rem;overflow:hidden'+(c.right?';text-align:right':'')+'">'+c.label+'<span style="color:var(--ac);font-size:.5rem">'+arrow+'</span></th>'});
   h+='</tr><tr style="background:#FAFAFA">';
   cols.forEach(function(c){
-    if(c.key==='action')h+='<th style="padding:.1rem .2rem;text-align:center"><button onclick="mwClearFilters()" title="Clear filters" style="padding:.05rem .3rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.5rem;cursor:pointer">✕</button></th>';
+    if(c.key==='idx')h+='<th style="padding:.1rem .2rem"></th>';
+    else if(c.key==='action')h+='<th style="padding:.1rem .2rem;text-align:center"><button onclick="mwClearFilters()" title="Clear filters" style="padding:.05rem .3rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.5rem;cursor:pointer">✕</button></th>';
     else h+='<th style="padding:.1rem .2rem"><input class="mwFlt" data-f="'+c.key+'" placeholder="filter" value="'+esc(_mwFlt[c.key]||'')+'" oninput="mwFilterInput(this)" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()" style="'+FI+'"></th>'});
   h+='</tr></thead><tbody>';
   if(!jobs.length)h+='<tr><td colspan="'+cols.length+'" style="padding:.6rem;text-align:center;color:var(--g4)">No jobs match the filters.</td></tr>';
-  jobs.forEach(function(j){
+  jobs.forEach(function(j,ri){
     var rowBg=j._overdue?'#FEF2F2':(j._today?'#FFFBEB':((j._idle||0)>=3?'#FFF7ED':''));
     var candTxt=mwCandText(j);var cl=j.candList||[];
     var candShort=cl.slice(0,2).map(function(c){return esc(c.name)+' <span style="color:var(--g4)">– '+esc(c.stage)+'</span>'}).join(', ')+(cl.length>2?' <span style="color:#6C3FBF;font-weight:600">+'+(cl.length-2)+' more</span>':'');
     var matchInd=j.candidates?' <span title="'+esc(candTxt)+'" style="font-size:.5rem;background:#EDE9FE;color:#6C3FBF;padding:.05rem .28rem;border-radius:3px;font-weight:700;white-space:nowrap">🎯 '+j.candidates+'</span>':'';
     h+='<tr data-mw="'+esc(j._id)+'"'+(_mwSelected[j._id]?' class="row-hl"':'')+' style="cursor:pointer;'+(rowBg?'background:'+rowBg+';':'')+'">';
     cols.forEach(function(c){switch(c.key){
+      case 'idx':h+='<td style="text-align:right;color:var(--g4);font-weight:600">'+((_mwPage-1)*MW_PER_PAGE+ri+1)+'</td>';break;
+      case 'posted':h+='<td style="white-space:nowrap;color:var(--g5)">'+(j.datePosted?fmtDate(j.datePosted):'—')+'</td>';break;
       case 'title':h+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.title)+'"><a href="#" onclick="viewContractJob(\''+esc(j._id)+'\');return false" style="color:var(--pri);text-decoration:none;font-weight:600">'+esc(j.title||'—')+'</a>'+matchInd+'</td>';break;
       case 'company':h+='<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(j.company)+'">'+esc(j.company||'—')+'</td>';break;
       case 'engagementModel':h+='<td>'+(engChip(j)||'—')+'</td>';break;
