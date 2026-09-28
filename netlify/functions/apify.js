@@ -559,7 +559,8 @@ exports.handler = async function(event) {
         var key = roles[qi].toLowerCase() + '|' + tCountry;
         var cur = await curCol.findOne({ key: key });
         var page = (cur && cur.lastPage ? cur.lastPage : 0) + 1;
-        var u = 'https://www.upwork.com/nx/search/talent/?loc=' + encodeURIComponent(tCountry) + '&q=' + encodeURIComponent(roles[qi]) + (page > 1 ? '&page=' + page : '');
+        // #607: 'any' = global search (no loc filter) — country is enforced later by the matcher, not at harvest
+        var u = 'https://www.upwork.com/nx/search/talent/?' + (tCountry === 'any' ? '' : 'loc=' + encodeURIComponent(tCountry) + '&') + 'q=' + encodeURIComponent(roles[qi]) + (page > 1 ? '&page=' + page : '');
         queries.push({ role: roles[qi], key: key, page: page }); urls.push(u);
       }
       // #524b: ONE RUN PER ROLE — the actor's maxProfiles is a global sequential budget,
@@ -648,6 +649,17 @@ exports.handler = async function(event) {
       }
       // advance cursors for this run's queries (only if the run actually returned results)
       var runDoc = await cdb.collection('sourcing_runs').findOne({ runId: body.runId });
+      // #607: a run that returns NOTHING on page > 1 means the role's results are exhausted — the cursor had
+      // walked past the last page and every later fetch asked for an empty page. Reset it so the next fetch
+      // starts again from page 1 (refreshing existing profiles and picking up new ones), and tell the UI.
+      var exhausted = [];
+      if (runDoc && !items.length) {
+        for (var qz = 0; qz < (runDoc.queries || []).length; qz++) {
+          var qx = runDoc.queries[qz];
+          if (qx.page > 1) { await cdb.collection('sourcing_cursors').updateOne({ key: qx.key }, { $set: { lastPage: 0, exhaustedAt: new Date(), lastEmptyPage: qx.page } }, { upsert: true }); exhausted.push({ role: qx.role, page: qx.page }); }
+        }
+        stats.exhausted = exhausted;
+      }
       if (runDoc && items.length) {
         for (var qq = 0; qq < (runDoc.queries || []).length; qq++) {
           var q = runDoc.queries[qq];

@@ -5562,7 +5562,9 @@ function acGroup(title,inner){
 // Resume parsing: extract text (mammoth for .docx, pdf.js for .pdf) then AI-extract fields.
 var _acResumeFile=null;   // #435: keep the imported file so we can attach it after Save
 // ===== #497 Upwork harvest modal + review popup =====
-var UW_ROLES=['SOC Analyst','Security Analyst','SIEM Engineer','Microsoft Sentinel','Security Engineer','Penetration Tester','Cloud Security Engineer','Incident Response','Threat Hunter','Vulnerability Management'];
+var UW_ROLES=['SOC Analyst','Security Analyst','SIEM Engineer','Security Engineer','Cloud Security Engineer','Threat Hunter','Incident Response','Penetration Tester','Vulnerability Management',
+  // #607: skill keywords find far more contractors than job titles on Upwork
+  'Splunk','Microsoft Sentinel','QRadar','CrowdStrike','Cybersecurity','Threat Hunting','Security Operations','Azure Security','AWS Security','SOC'];
 function openUpworkFetch(){
   var ov=document.createElement('div');ov.id='uwOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1500;display:flex;align-items:center;justify-content:center';
   var roles=UW_ROLES.map(function(r,i){return '<label style="display:inline-block;width:48%;font-size:.62rem;margin:.15rem 0"><input type="checkbox" class="uwRole" value="'+r+'"'+(i===0?' checked':'')+'> '+r+'</label>'}).join('');
@@ -5571,8 +5573,8 @@ function openUpworkFetch(){
    +'<div style="font-size:.6rem;color:var(--g5);margin:.3rem 0 .5rem">Each role continues from its last page — repeat fetches surface new profiles. ~2¢ per profile.</div>'
    +'<div>'+roles+'</div>'
    +'<div style="display:flex;gap:.4rem;margin-top:.5rem"><input id="uwExtra" placeholder="Extra keyword (optional)" style="flex:2;padding:.3rem .4rem;font-size:.62rem;border:1px solid var(--g100);border-radius:4px">'
-   +'<select id="uwCountry" style="flex:1;font-size:.62rem"><option value="india">India</option><option value="united states">United States</option><option value="united kingdom">United Kingdom</option><option value="canada">Canada</option><option value="philippines">Philippines</option></select>'
-   +'<select id="uwCount" style="flex:.6;font-size:.62rem"><option>10</option><option>20</option><option>30</option></select></div>'
+   +'<select id="uwCountry" style="flex:1;font-size:.62rem"><option value="india">India</option><option value="any">Any country</option><option value="united states">United States</option><option value="united kingdom">United Kingdom</option><option value="canada">Canada</option><option value="philippines">Philippines</option></select>'
+   +'<select id="uwCount" style="flex:.6;font-size:.62rem"><option>10</option><option>20</option><option>30</option><option>50</option></select></div>'
    +'<div style="display:flex;gap:.5rem;align-items:center;margin-top:.6rem"><button id="uwGo" onclick="runTalentScrape()" style="padding:.35rem .8rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.64rem;cursor:pointer;font-weight:600">Fetch</button><span id="uwStatus" style="font-size:.6rem;color:var(--g5)"></span></div></div>';
   document.body.appendChild(ov);
 }
@@ -5588,12 +5590,21 @@ async function runTalentScrape(){
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'startTalentScrape',roles:roles,country:document.getElementById('uwCountry').value,count:parseInt(document.getElementById('uwCount').value)||10})});
     var d=await r.json();if(d.error){st.textContent='⚠️ '+d.error;go.disabled=false;return}
     // #524b: one run per role — poll each to completion, aggregate the stats
-    var runs=d.runs||[],agg={fetched:0,inserted:0,updated:0,skippedManaged:0,skippedRejected:0},t0=Date.now();
+    var runs=d.runs||[],agg={fetched:0,inserted:0,updated:0,skippedManaged:0,skippedRejected:0,exhausted:[]},t0=Date.now();
     var pollRun=function(idx){
       if(idx>=runs.length){
-        st.textContent='✅ '+agg.inserted+' new cached, '+agg.updated+' refreshed, '+agg.skippedManaged+' already yours, '+agg.skippedRejected+' previously rejected ('+agg.fetched+' fetched across '+runs.length+' role'+(runs.length>1?'s':'')+').';
+        // #607: roles whose Upwork results were exhausted had their cursor reset — re-run them once from page 1
+        if(agg.exhausted.length&&!window._uwRetried){
+          window._uwRetried=true;
+          st.textContent='↻ Reached the end of Upwork results for '+agg.exhausted.join(', ')+' — restarting from page 1…';
+          document.querySelectorAll('.uwRole').forEach(function(x){x.checked=agg.exhausted.indexOf(x.value)>=0||agg.exhausted.some(function(r){return r.indexOf(x.value)===0})});
+          setTimeout(runTalentScrape,800);return;
+        }
+        window._uwRetried=false;
+        st.textContent='✅ '+agg.inserted+' new cached, '+agg.updated+' refreshed, '+agg.skippedManaged+' already yours, '+agg.skippedRejected+' previously rejected ('+agg.fetched+' fetched across '+runs.length+' role'+(runs.length>1?'s':'')+').'
+          +(agg.fetched?'':' Upwork returned nothing — try a skill keyword (Splunk, SIEM) or "Any country".');
         go.disabled=false;try{loadConsultants(true)}catch(e){}
-        _rvSort='new';setTimeout(function(){var o=document.getElementById('uwOverlay');if(o)o.remove();openReviewPending()},900);
+        if(agg.inserted||agg.updated){_rvSort='new';setTimeout(function(){var o=document.getElementById('uwOverlay');if(o)o.remove();openReviewPending()},900)}
         return;
       }
       var run=runs[idx];
@@ -5601,7 +5612,7 @@ async function runTalentScrape(){
         var pr=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'checkTalentScrape',runId:run.runId,datasetId:run.datasetId})});
         var pd=await pr.json();
         if(!pd.done){st.textContent='⏳ Harvesting "'+run.role+'" ('+(idx+1)+'/'+runs.length+', '+Math.round((Date.now()-t0)/1000)+'s)...';if(Date.now()-t0<300000)setTimeout(poll,5000);else{st.textContent='⚠️ Timed out on "'+run.role+'" — partial results kept.';go.disabled=false}return}
-        if(!pd.error&&pd.stats){var s=pd.stats;['fetched','inserted','updated','skippedManaged','skippedRejected'].forEach(function(k){agg[k]+=(s[k]||0)})}
+        if(!pd.error&&pd.stats){var s=pd.stats;['fetched','inserted','updated','skippedManaged','skippedRejected'].forEach(function(k){agg[k]+=(s[k]||0)});(s.exhausted||[]).forEach(function(x){agg.exhausted.push(x.role)})}
         pollRun(idx+1);
       };
       setTimeout(poll,idx===0?6000:1500);
