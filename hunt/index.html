@@ -1114,7 +1114,7 @@ async function searchJobs(){
         if(removed>0)console.log('Country cross-check removed '+removed+' jobs not matching '+expectedCountry);
       }
     }
-    allJobs.forEach(function(j,i){j.idx=i+1;j.status=j.status||'new';j.companyType=j.companyType||''});
+    allJobs.forEach(function(j,i){j.idx=i+1;j.status=j.status||'new';j.companyType=j.companyType||'';if(j.dateRaw)j.date=fmtDate(j.dateRaw)});   // #609: honour the date-format setting
     // 15-day filter: JSearch doesn't support 15days natively, so filter client-side
     if(clientDateFilter){
       var cutoff=new Date();cutoff.setDate(cutoff.getDate()-clientDateFilter);
@@ -3399,7 +3399,8 @@ async function loadMyWork(){
     renderMyWork();
   }catch(e){box.innerHTML='<div style="color:#DC2626;padding:.3rem">'+esc(e.message)+'</div>'}
 }
-var _mwSort={key:'due',dir:1},_mwFlt={},_mwSelected={},_mwMouseX=0;
+var _mwSort={key:'due',dir:1},_mwFlt={},_mwSelected={},_mwMouseX=0,_mwPage=1,MW_PER_PAGE=25;   // #610
+function mwGoPage(p){_mwPage=p;renderMyWork()}
 var MW_COLS=[
   {key:'title',label:'Job',ch:28},{key:'company',label:'Client',ch:16},{key:'engagementModel',label:'Engagement',ch:9},{key:'status',label:'Status',ch:9},
   {key:'cands',label:'Candidates',ch:30},{key:'next',label:'Next action',ch:28},{key:'due',label:'Due',ch:10},{key:'last',label:'Last activity',ch:11},{key:'idle',label:'Idle',ch:6,right:true},
@@ -3413,7 +3414,7 @@ function mwVal(j,k){switch(k){
   case 'owner':return (j.owner?(j.owner.name||j.owner.email):'').toLowerCase();default:return ''}}
 function mwHeaderDown(e){_mwMouseX=e.clientX}
 function mwHeaderClick(k,e){if(Math.abs(e.clientX-_mwMouseX)>5||wasResizing)return;if(_mwSort.key===k)_mwSort.dir*=-1;else{_mwSort={key:k,dir:(k==='due'||k==='title'||k==='company'||k==='owner')?1:-1}}renderMyWork()}
-function mwFilterInput(el){var k=el.getAttribute('data-f');_mwFlt[k]=el.value.trim().toLowerCase();var pos=el.selectionStart;renderMyWork();var again=document.querySelector('.mwFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}}
+function mwFilterInput(el){var k=el.getAttribute('data-f');_mwFlt[k]=el.value.trim().toLowerCase();_mwPage=1;var pos=el.selectionStart;renderMyWork();var again=document.querySelector('.mwFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}}
 function mwClearFilters(){_mwFlt={};renderMyWork()}
 function mwRowPasses(j){for(var k in _mwFlt){var v=_mwFlt[k];if(!v)continue;var val=k==='due'?(j._due?fmtDate(j._due):''):(k==='last'?(j.lastActivityAt?fmtDate(j.lastActivityAt):''):(k==='idle'?String(j._idle==null?'':j._idle):String(mwVal(j,k))));if(String(val).toLowerCase().indexOf(v)<0)return false}return true}
 function renderMyWork(){
@@ -3425,7 +3426,9 @@ function renderMyWork(){
   var sm=document.getElementById('mwSummary');
   if(sm)sm.innerHTML=all.length?all.length+' job'+(all.length===1?'':'s')+(overdue?' · <span style="color:#B91C1C;font-weight:700">'+overdue+' overdue</span>':'')+(due?' · <span style="color:#B45309;font-weight:700">'+due+' due today</span>':'')+(idle?' · <span style="color:#92400E">'+idle+' idle ≥3 working days</span>':''):'';
   if(!all.length){box.innerHTML='<div style="color:var(--g4);padding:.3rem">No jobs assigned'+(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value?'':' to you')+'. Open a job → <b>Assign to</b> (managers) to put it on a work list.</div>';return}
-  var jobs=all.filter(mwRowPasses).sort(function(a,b){var va=mwVal(a,_mwSort.key),vb=mwVal(b,_mwSort.key);if(va<vb)return -1*_mwSort.dir;if(va>vb)return 1*_mwSort.dir;return (b._idle||0)-(a._idle||0)});
+  var jobsAll=all.filter(mwRowPasses).sort(function(a,b){var va=mwVal(a,_mwSort.key),vb=mwVal(b,_mwSort.key);if(va<vb)return -1*_mwSort.dir;if(va>vb)return 1*_mwSort.dir;return (b._idle||0)-(a._idle||0)});
+  var mwPages=Math.max(1,Math.ceil(jobsAll.length/MW_PER_PAGE));if(_mwPage>mwPages)_mwPage=mwPages;
+  var jobs=jobsAll.slice((_mwPage-1)*MW_PER_PAGE,_mwPage*MW_PER_PAGE);
   var showOwner=!!(d.isAdmin||(document.getElementById('mwOwner')&&document.getElementById('mwOwner').value));
   var cols=MW_COLS.filter(function(c){return !c.admin||showOwner});
   var stCls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
@@ -3460,7 +3463,14 @@ function renderMyWork(){
       case 'action':h+='<td><button class="vb" onclick="event.stopPropagation();viewContractJob(\''+esc(j._id)+'\')">Manage</button></td>';break;}});
     h+='</tr>';
   });
-  box.innerHTML=h+'</tbody></table></div>';
+  h+='</tbody></table></div>';
+  if(jobsAll.length>MW_PER_PAGE){
+    h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem;font-size:.58rem">'
+      +(_mwPage>1?'<button onclick="mwGoPage('+(_mwPage-1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>':'')
+      +'<span style="color:var(--g5)">Page '+_mwPage+' of '+mwPages+' · '+jobsAll.length+' jobs</span>'
+      +(_mwPage<mwPages?'<button onclick="mwGoPage('+(_mwPage+1)+')" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Next ›</button>':'')+'</div>';
+  }
+  box.innerHTML=h;
   try{attachColResizers('mwTbl')}catch(e){}
   // #605: row click toggles selection (links/buttons/filter inputs excluded)
   box.querySelectorAll('tbody tr[data-mw]').forEach(function(tr){tr.onclick=function(e){if(e.target.closest('a,button,input'))return;var id=this.dataset.mw;this.classList.toggle('row-hl');if(this.classList.contains('row-hl'))_mwSelected[id]=true;else delete _mwSelected[id]}});
