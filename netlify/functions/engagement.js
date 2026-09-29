@@ -12,8 +12,8 @@ var RX = {
   w2Contract: /\b(contract[\s-]*to[\s-]*hire|c2h|cth\b|temp[\s-]*to[\s-]*(perm|hire)|w[\s-]?2\b(?![\s\/]*(\/|or|and)\s*(c2c|1099))|w2\s+contract|w-2\s+contract|contract\s+w2|on\s+our\s+w2|w2\s+hourly|benefits\s+eligible\s+contract)\b/i,
   directHire: /\b(direct\s+hire|permanent\s+(position|role|employee)|full[\s-]*time\s+employee|fte\b|salary\s*[:\-]|annual\s+salary|401\s*\(?k\)?|paid\s+time\s+off|\bpto\b|health\s+insurance|equity|stock\s+options|bonus\s+eligible)\b/i,
   offshoreYes: /\b(offshore|off-shore|nearshore|remote\s*[\-–:]\s*india|from\s+india|india[\s-]*based|work\s+from\s+india|global\s+remote|remote\s*[\-–:]\s*(anywhere|worldwide|global)|any\s+location|ist\s+(overlap|hours|shift)|overlap\s+with\s+(us|est|pst|edt|pdt)|us\s+hours\s+overlap|night\s+shift\s+ist)\b/i,
-  // #622: US clearance / federal-program signals ⇒ US-person work, never offshoreable
-  clearance: /\b(public\s+trust|(secret|top\s+secret|ts\/sci|dod|dhs|doe|government|security|federal)\s+clearance|clearance\s*[:\-]\s*[a-z]|(active|current|interim)\s+clearance|(obtain|hold|maintain)\s+(and\s+maintain\s+)?(a\s+|an\s+)?(\w+\s+){0,2}clearance|clearance\s+(is\s+)?required|federal\s+(program|contract|client|agency|cybersecurity|government)|fedramp|fisma|nist\s+800-53|u\.?s\.?\s+person(s)?\s+only|must\s+be\s+(a\s+)?u\.?s\.?\s+person)\b/i,
+  // #622/#623: US clearance / federal- or state-program signals (CJIS, background checks, nationwide) ⇒ US-person work, never offshoreable
+  clearance: /\b(public\s+trust|(secret|top\s+secret|ts\/sci|dod|dhs|doe|government|security|federal)\s+clearance|clearance\s*[:\-]\s*[a-z]|(active|current|interim)\s+clearance|(obtain|hold|maintain)\s+(and\s+maintain\s+)?(a\s+|an\s+)?(\w+\s+){0,2}clearance|clearance\s+(is\s+)?required|federal\s+(program|contract|client|agency|cybersecurity|government)|fedramp|fisma|nist\s+800-53|u\.?s\.?\s+person(s)?\s+only|must\s+be\s+(a\s+)?u\.?s\.?\s+person|cjis|open\s+to\s+candidates\s+nationwide|nationwide\s+(candidates|remote)|state\s+of\s+[A-Z][a-z]+(\s+[A-Z][a-z]+)?\b|state\s+(agency|agencies|government)|(criminal|credit)\s+(and\s+(criminal|credit)\s+)?background\s+checks?|fingerprint)\b/i,
   // #622: an annual salary band ($70,000 - $90,000 / $70K-$90K / 70k-90k per year) with no hourly rate ⇒ salaried hire
   annualSalary: /(\$\s?\d{2,3},\d{3}(\.\d\d)?\s*(-|–|to)\s*\$?\s?\d{2,3},\d{3}(\.\d\d)?|\$\s?\d{2,3}\s?k\s*(-|–|to)\s*\$?\s?\d{2,3}\s?k\b|\d{2,3}k\s*(-|–|to)\s*\d{2,3}k\s*(per\s+)?(year|annum|yr|annually)|(per\s+year|per\s+annum|\/\s?(year|yr|annum)|annually))/i,
   hourly: /(\$\s?\d{2,3}(\.\d\d)?\s*(-|–|to)?\s*\$?\s?\d{0,3}\s*\/\s*(hr|hour)|per\s+hour|hourly)/i,
@@ -32,10 +32,11 @@ function classifyEngagement(job) {
   else if ((s = snippet(text, RX.c2cLikely))) { model = 'C2C-likely'; evidence = '"' + s + '"'; }
   else if ((s = snippet(text, RX.annualSalary)) && !RX.hourly.test(text)) { model = 'Direct-hire'; evidence = 'annual salary: "' + s + '"'; }
   else if (/techfetch|dice|c2c|hotlist/.test(src)) { model = 'C2C-likely'; evidence = 'source: ' + (job.source || ''); }
-  else if (/Staffing|Recruiting|IT Consulting/.test(ctype) && /contract/i.test(job.jobType || '')) { model = 'C2C-likely'; evidence = 'contract role posted by ' + ctype + ' firm'; }
+  else if (/Staffing|Recruiting|Consulting/i.test(ctype) && /contract/i.test(job.jobType || '')) { model = 'C2C-likely'; evidence = 'contract role posted by ' + ctype + ' firm'; }
   else if ((s = snippet(text, RX.directHire)) && !/contract/i.test(job.jobType || '')) { model = 'Direct-hire'; evidence = '"' + s + '"'; }
   var offshoreOk = 'unknown', oe = '';
-  if ((s = snippet(text, RX.clearance))) { offshoreOk = 'no'; oe = 'clearance/federal: "' + s + '"'; if (model === 'Unknown' || model === 'C2C-likely') { model = model === 'Unknown' ? 'Direct-hire' : model; evidence = evidence || 'US-person role'; } }
+  var inIndia = /india/i.test(job.detectedCountry || '') || /india/i.test(job.location || '');
+  if (!inIndia && (s = snippet(text, RX.clearance))) { offshoreOk = 'no'; oe = 'clearance/govt: "' + s + '"'; }
   else if ((s = snippet(text, RX.offshoreNo))) { offshoreOk = 'no'; oe = '"' + s + '"'; }
   else if ((s = snippet(text, RX.offshoreYes))) { offshoreOk = 'yes'; oe = '"' + s + '"'; }
   else if (/india/i.test(job.detectedCountry || '') || /india/i.test(job.location || '')) { offshoreOk = 'yes'; oe = 'India-located posting'; }
