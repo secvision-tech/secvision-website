@@ -940,6 +940,8 @@ exports.handler = async function(event) {
           detectedCountry: detectCountryFromLocation(j.location),
           dateScanned: new Date()
         };
+        // #616: LinkedIn location is often just the country; take the city from a "Location(s): …" line in the JD
+        try { var em616 = require('./engagement'); if (em616.isBareLocation(jobDoc.location)) { var jl616 = em616.extractJdLocation(jobDoc.description); if (jl616) { jobDoc.locationOrig = jobDoc.location || ''; jobDoc.location = jl616 + (jobDoc.detectedCountry && jl616.toLowerCase().indexOf(jobDoc.detectedCountry.toLowerCase()) < 0 ? ', ' + jobDoc.detectedCountry : ''); } } } catch (e) {}
 
         // #559: dedup by linkedinJobId / jobId / content fingerprint (title+company+location)
         var fpBasis = (String(jobDoc.titleClean || jobDoc.title || '').toLowerCase().trim() + '|' + String(jobDoc.company || '').toLowerCase().trim() + '|' + String(jobDoc.location || '').toLowerCase().trim());

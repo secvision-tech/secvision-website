@@ -1846,7 +1846,14 @@ exports.handler = async (event) => {
     if (action === 'classifyEngagementBackfill') {
       var bfQ = body.force ? {} : { engagementModel: { $exists: false } };
       var bfJobs = await col.find(bfQ).sort({ _id: 1 }).skip(body.force ? (parseInt(body.skip) || 0) : 0).project({ title: 1, description: 1, jobType: 1, salary: 1, eligibility: 1, contractDuration: 1, source: 1, companyType: 1, detectedCountry: 1, location: 1 }).limit(400).toArray();
-      var bfOps = bfJobs.map(function (j) { var e = classifyEngagement(j); return { updateOne: { filter: { _id: j._id }, update: { $set: { engagementModel: e.model, offshoreOk: e.offshoreOk, engagementEvidence: e.evidence } } } }; });
+      var engMod = require('./engagement');
+      var bfOps = bfJobs.map(function (j) {
+        var e = classifyEngagement(j);
+        var setB = { engagementModel: e.model, offshoreOk: e.offshoreOk, engagementEvidence: e.evidence };
+        // #616: job-board location is only a country/"Remote" but the JD names the city -> use the JD's city
+        try { if (engMod.isBareLocation(j.location)) { var jl = engMod.extractJdLocation(j.description); if (jl) { setB.location = jl + (j.detectedCountry && jl.toLowerCase().indexOf(j.detectedCountry.toLowerCase()) < 0 ? ', ' + j.detectedCountry : ''); setB.locationOrig = j.location || ''; } } } catch (e2) {}
+        return { updateOne: { filter: { _id: j._id }, update: { $set: setB } } };
+      });
       if (bfOps.length) await col.bulkWrite(bfOps, { ordered: false });
       var bfLeft = body.force ? 0 : await col.countDocuments({ engagementModel: { $exists: false } });
       var bfTally = {}; bfJobs.forEach(function (j) { var m = classifyEngagement(j).model; bfTally[m] = (bfTally[m] || 0) + 1; });

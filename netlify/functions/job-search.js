@@ -1031,13 +1031,15 @@ exports.handler = async (event) => {
         }
       });
 
+      // #616: job-board location is only a country/"Remote" but the JD names the city -> use the JD's city
+      try { var em616 = require('./engagement'); jobs.forEach(function (j) { if (em616.isBareLocation(j.location)) { var jl = em616.extractJdLocation(j.description); if (jl) { j.locationOrig = j.location || ''; j.location = jl + (j.detectedCountry && jl.toLowerCase().indexOf(j.detectedCountry.toLowerCase()) < 0 ? ', ' + j.detectedCountry : ''); } } }); } catch (e) {}
       var ops = jobs.map(function(j) {
         return {
           updateOne: {
             filter: { jobId: j.id },
             update: { $set: {
               jobId: j.id, datePosted: j.dateRaw ? new Date(j.dateRaw) : null, dateScanned: new Date(),
-              engagementModel: (function(){var e=require('./engagement').classifyEngagement(j);j.engagementModel=e.model;j.offshoreOk=e.offshoreOk;j.engagementEvidence=e.evidence;return e.model})(), offshoreOk: j.offshoreOk, engagementEvidence: j.engagementEvidence,   // #592/#594 (also returned to the live-search table)
+              engagementModel: (function(){var e=require('./engagement').classifyEngagement(j);j.engagementModel=e.model;j.offshoreOk=e.offshoreOk;j.engagementEvidence=e.evidence;return e.model})(), offshoreOk: j.offshoreOk, engagementEvidence: j.engagementEvidence,   // #592/#594
               title: j.title, titleClean: j.titleClean, company: j.company, companyUrl: j.companyUrl,
               location: j.location, detectedCountry: j.detectedCountry, experience: j.experience,
               skills: j.skills, certifications: j.certifications, compliance: j.compliance,

@@ -9,10 +9,10 @@ var RX = {
   // #596: negations in any phrasing — "cannot subcontract or C2C", "not open to C2C", "C2C not accepted", "W2 only"
   c2cExcluded: /\b(w[\s-]?2\s*only|(no|not|non|cannot|can't|can\s+not|unable\s+to|not\s+able\s+to|without|excluding|excludes?|isn't|is\s+not|are\s+not|aren't|won't|will\s+not|do\s+not|don't|does\s+not|doesn't)\s+(\w+\s+){0,4}(c2c|corp[\s-]*to[\s-]*corp|corp[\s-]*2[\s-]*corp|sub[\s-]*contract\w*|third[\s-]*part(y|ies)|3rd[\s-]*part(y|ies)|vendors?|agencies|recruiters|1099)|(c2c|corp[\s-]*to[\s-]*corp|sub[\s-]*contract\w*|third[\s-]*party|vendors?)\s+(is|are|will\s+be|were)?\s*(not|never)\s+(accepted|allowed|permitted|considered|entertained|possible|available|an\s+option)|direct\s+(hire|employment)\s+only|must\s+be\s+(a\s+)?(us|u\.s\.)\s+citizen|(active\s+)?(secret|top\s+secret|ts\/sci|dod)\s+clearance\s+(required|is\s+required))\b/i,
   c2cLikely: /\b(staff\s+augmentation|staff\s+aug|t\s*&\s*m|time\s+and\s+materials|all\s+visas?\s+(accepted|ok|welcome)|h[\s-]?1b|ead|gc\s*\/\s*usc|usc\s*\/\s*gc|opt\s*\/\s*cpt|hourly\s+rate|rate\s*[:\-]\s*\$?\d|\$\s?\d{2,3}\s*\/\s*(hr|hour)|duration\s*[:\-]|\d+\s*(\+)?\s*months?\s+(contract|extension)|extension\s+possible|contract\s+to\s+hire|c2h)\b/i,
-  w2Contract: /\b(w[\s-]?2\b(?![\s\/]*(\/|or|and)\s*(c2c|1099))|w2\s+contract|w-2\s+contract|contract\s+w2|on\s+our\s+w2|w2\s+hourly|benefits\s+eligible\s+contract)\b/i,
+  w2Contract: /\b(contract[\s-]*to[\s-]*hire|c2h|cth\b|temp[\s-]*to[\s-]*(perm|hire)|w[\s-]?2\b(?![\s\/]*(\/|or|and)\s*(c2c|1099))|w2\s+contract|w-2\s+contract|contract\s+w2|on\s+our\s+w2|w2\s+hourly|benefits\s+eligible\s+contract)\b/i,
   directHire: /\b(direct\s+hire|permanent\s+(position|role|employee)|full[\s-]*time\s+employee|fte\b|salary\s*[:\-]|annual\s+salary|401\s*\(?k\)?|paid\s+time\s+off|\bpto\b|health\s+insurance|equity|stock\s+options|bonus\s+eligible)\b/i,
   offshoreYes: /\b(offshore|off-shore|nearshore|remote\s*[\-–:]\s*india|from\s+india|india[\s-]*based|work\s+from\s+india|global\s+remote|remote\s*[\-–:]\s*(anywhere|worldwide|global)|any\s+location|ist\s+(overlap|hours|shift)|overlap\s+with\s+(us|est|pst|edt|pdt)|us\s+hours\s+overlap|night\s+shift\s+ist)\b/i,
-  offshoreNo: /\b(must\s+(be\s+)?(located|reside|residing|based)\s+in\s+(the\s+)?(us|u\.s\.|usa|united\s+states)|us[\s-]*based\s+only|remote\s*[\-–:(]\s*(us|usa|u\.s\.)\s*(only)?|anywhere\s+in\s+the\s+(us|usa|united\s+states)|no\s+offshore|onshore\s+only|work\s+authori[sz]ation\s+(in\s+the\s+)?(us|usa)\s+(required|is\s+required)|must\s+be\s+authori[sz]ed\s+to\s+work\s+in\s+the\s+(us|united\s+states)|(us|u\.s\.)\s+citizens?\s+(only|or\s+green\s+card))\b/i
+  offshoreNo: /\b(visa[\s-]*independent|(usc|us\s+citizens?|green\s+card|gc)\s*(\/|or|and)?\s*(gc|green\s+card|usc|us\s+citizens?)?\s+only|no\s+(visa\s+)?sponsorship|(cannot|can't|unable\s+to|will\s+not|won't|do\s+not|does\s+not)\s+(provide\s+|offer\s+)?sponsor(ship)?|must\s+(be\s+)?(located|reside|residing|based)\s+in\s+(the\s+)?(us|u\.s\.|usa|united\s+states)|us[\s-]*based\s+only|remote\s*[\-–:(]\s*(us|usa|u\.s\.)\s*(only)?|anywhere\s+in\s+the\s+(us|usa|united\s+states)|no\s+offshore|onshore\s+only|work\s+authori[sz]ation\s+(in\s+the\s+)?(us|usa)\s+(required|is\s+required)|must\s+be\s+authori[sz]ed\s+to\s+work\s+in\s+the\s+(us|united\s+states)|(us|u\.s\.)\s+citizens?\s+(only|or\s+green\s+card))\b/i
 };
 function snippet(text, rx) { var m = text.match(rx); return m ? m[0].replace(/\s+/g, ' ').slice(0, 60) : ''; }
 function classifyEngagement(job) {
@@ -34,4 +34,20 @@ function classifyEngagement(job) {
   else if (/india/i.test(job.detectedCountry || '') || /india/i.test(job.location || '')) { offshoreOk = 'yes'; oe = 'India-located posting'; }
   return { model: model, offshoreOk: offshoreOk, evidence: evidence + (oe ? (evidence ? ' · ' : '') + 'offshore ' + offshoreOk + ': ' + oe : '') };
 }
-module.exports = { classifyEngagement: classifyEngagement };
+// #616: many JDs carry the real city in the body ("Locations: Louisville", "Location: Plano, TX") while the
+// job-board location field only says the country. Returns the city string or ''.
+function extractJdLocation(desc) {
+  var t = String(desc || '').slice(0, 4000);
+  var lines = t.split(/\r?\n|\s*\|\s*|\s·\s/);
+  for (var i = 0; i < lines.length; i++) {
+    var m = lines[i].match(/^\s*(?:job\s+|work\s+)?locations?\s*[:\-–]\s*(.+)$/i);
+    if (!m) continue;
+    var loc = m[1].replace(/\(.*?\)/g, ' ').replace(/\b(hybrid|onsite|on-site|remote|100%|only|preferred)\b/gi, ' ').replace(/\s+/g, ' ').trim().replace(/[.,;\s]+$/, '');
+    if (!loc || /^(anywhere|usa|us|u\.s\.|united states|india|multiple|various|tbd|n\/a)$/i.test(loc)) continue;
+    if (loc.length > 60) loc = loc.slice(0, 60);
+    return loc;
+  }
+  return '';
+}
+function isBareLocation(loc) { return !String(loc || '').trim() || /^(remote|hybrid|anywhere|usa|us|u\.s\.|united states|united states of america|india|uk|united kingdom|canada|worldwide|global|n\/a)$/i.test(String(loc).trim()); }
+module.exports = { classifyEngagement: classifyEngagement, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };
