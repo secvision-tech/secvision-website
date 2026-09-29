@@ -514,6 +514,36 @@ var msalConfig={auth:{clientId:'dc517c46-dcf0-4d38-80e0-3cda854a5d59',authority:
 var msal_=new msal.PublicClientApplication(msalConfig),curUser=null,allJobs=[],filtered=[],curPage=1,perPage=25,sortCol='',sortDir=1,colFilters={};
 // Block pagination: server-side total + how to fetch the next block of results
 var serverTotal=0,loadedBlocks=1,BLOCK_SIZE=500,lastSearchParams=null;
+// ===== #620: branded dialogs replacing native alert/confirm/prompt ("secvisiontech.com says") =====
+var UI_APP_TITLE='SecVision Business Hunt';
+function uiDialog(o){
+  return new Promise(function(resolve){
+    var ov=document.createElement('div');ov.className='ui-dlg-ov';ov.style.cssText='position:fixed;inset:0;background:rgba(10,20,40,.55);z-index:20000;display:flex;align-items:center;justify-content:center';
+    var kind=o.type||'alert';
+    var box=document.createElement('div');box.style.cssText='background:#fff;border-radius:10px;width:460px;max-width:92%;box-shadow:0 20px 60px rgba(0,0,0,.35);font-family:\'DM Sans\',sans-serif;overflow:hidden';
+    var title=o.title||UI_APP_TITLE;
+    var accent=kind==='alert'&&/^(⚠️|❌|Error|Failed)/.test(String(o.message||''))?'#B91C1C':(kind==='confirm'?'#6C3FBF':'#0E7490');
+    box.innerHTML='<div style="background:'+accent+';color:#fff;padding:.55rem .9rem;font-size:.8rem;font-weight:700;display:flex;align-items:center;gap:.5rem"><span>'+esc(title)+'</span></div>'
+      +'<div style="padding:.9rem 1rem .4rem;font-size:.8rem;color:#1F2937;line-height:1.5;white-space:pre-wrap;max-height:50vh;overflow:auto" class="ui-dlg-msg"></div>'
+      +(kind==='prompt'?'<div style="padding:0 1rem .4rem"><input class="ui-dlg-in" style="width:100%;box-sizing:border-box;padding:.45rem .55rem;font-size:.8rem;border:1px solid #CBD5E1;border-radius:6px;font-family:inherit"></div>':'')
+      +'<div style="display:flex;justify-content:flex-end;gap:.5rem;padding:.6rem 1rem .9rem">'
+      +(kind!=='alert'?'<button class="ui-dlg-cancel" style="padding:.4rem .9rem;background:#fff;border:1px solid #CBD5E1;border-radius:6px;font-size:.76rem;cursor:pointer;font-family:inherit">'+esc(o.cancelText||'Cancel')+'</button>':'')
+      +'<button class="ui-dlg-ok" style="padding:.4rem 1rem;background:'+accent+';color:#fff;border:none;border-radius:6px;font-size:.76rem;font-weight:600;cursor:pointer;font-family:inherit">'+esc(o.okText||'OK')+'</button></div>';
+    box.querySelector('.ui-dlg-msg').textContent=String(o.message==null?'':o.message);
+    ov.appendChild(box);document.body.appendChild(ov);
+    var inp=box.querySelector('.ui-dlg-in');if(inp){inp.value=o.defaultValue==null?'':String(o.defaultValue);setTimeout(function(){inp.focus();inp.select()},30)}else setTimeout(function(){box.querySelector('.ui-dlg-ok').focus()},30);
+    var done=function(v){document.removeEventListener('keydown',onKey,true);ov.remove();resolve(v)};
+    var onKey=function(e){if(e.key==='Escape'){e.preventDefault();e.stopPropagation();done(kind==='alert'?undefined:(kind==='prompt'?null:false))}else if(e.key==='Enter'&&(kind!=='prompt'||e.target===inp)){e.preventDefault();e.stopPropagation();done(kind==='alert'?undefined:(kind==='prompt'?inp.value:true))}};
+    document.addEventListener('keydown',onKey,true);
+    box.querySelector('.ui-dlg-ok').onclick=function(){done(kind==='alert'?undefined:(kind==='prompt'?inp.value:true))};
+    var cb=box.querySelector('.ui-dlg-cancel');if(cb)cb.onclick=function(){done(kind==='prompt'?null:false)};
+  });
+}
+function uiAlert(msg,title){return uiDialog({type:'alert',message:msg,title:title})}
+function uiConfirm(msg,title){return uiDialog({type:'confirm',message:msg,title:title})}
+function uiPrompt(msg,def,title){return uiDialog({type:'prompt',message:msg,defaultValue:def,title:title})}
+// alert() is fire-and-forget everywhere in the app, so the branded version can replace it globally
+window.alert=function(msg){uiAlert(msg)};
 var COLS=[
   {key:'idx',label:'#',w:30,num:true},
   {key:'date',label:'Date',w:68,dateSort:true},
@@ -2210,7 +2240,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')closeDet()})
 
 async function delAllContacts(){
   if(!cfCompany)return;
-  if(!confirm('Delete ALL contacts for "'+cfCompany+'"?\n\nThis cannot be undone.'))return;
+  if(!await uiConfirm('Delete ALL contacts for "'+cfCompany+'"?\n\nThis cannot be undone.'))return;
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteCompanyContacts',company:cfCompany})});
     var d=await r.json();
@@ -2237,7 +2267,7 @@ function findContacts(idx){
 async function editCompanySize(idx){
   var j=allJobs[idx];if(!j)return;
   var current=j.companySize||'';
-  var input=prompt('Company Size (employee count) for '+j.company+':\n\nCurrent: '+(current?current+' employees':'Not set')+'\n\nEnter number:',current||'');
+  var input=await uiPrompt('Company Size (employee count) for '+j.company+':\n\nCurrent: '+(current?current+' employees':'Not set')+'\n\nEnter number:',current||'');
   if(!input||input===String(current))return;
   var sizeNum=parseInt(String(input).replace(/[^0-9]/g,''));
   if(isNaN(sizeNum)||sizeNum<1){alert('Please enter a valid number.');return}
@@ -2268,7 +2298,7 @@ async function cycleStatusInView(idx){
 async function getCompanySizeFromView(idx){
   var j=allJobs[idx];if(!j)return;
   if(j.companySize&&j.companySize>0){
-    if(!confirm(j.company+' already has size: '+j.companySize.toLocaleString()+' employees.\nRe-fetch from Apollo?'))return;
+    if(!await uiConfirm(j.company+' already has size: '+j.companySize.toLocaleString()+' employees.\nRe-fetch from Apollo?'))return;
   }
   // Extract domain from corrected company URL
   var domain='';
@@ -2322,7 +2352,7 @@ async function editCompanyTypeInView(idx){
   var labels={'MSSP/MDR':'MSSP / MDR Provider','Enterprise':'Enterprise','Government':'Government / Defense','Startup':'Cybersecurity Startup','IT Consulting':'IT Consulting / Services','Job Board':'Job Board / Platform','Staffing/Recruiting':'Staffing / Recruiting Agency'};
   var current=j.companyType||'';
   var options=types.map(function(t,i){return (i+1)+'. '+labels[t]+(t===current?' ✓':'')}).join('\n');
-  var input=prompt('Select Company Type for '+j.company+':\n\nCurrent: '+(current||'Not classified')+'\n\n'+options+'\n\nEnter number (1-'+types.length+') or type name:');
+  var input=await uiPrompt('Select Company Type for '+j.company+':\n\nCurrent: '+(current||'Not classified')+'\n\n'+options+'\n\nEnter number (1-'+types.length+') or type name:');
   if(!input)return;
   var selected='';
   var num=parseInt(input);
@@ -2341,7 +2371,7 @@ async function editCompanyTypeInView(idx){
 async function editCompanyLinkedin(idx){
   var j=allJobs[idx];if(!j)return;
   var current=j.companyLinkedin||'';
-  var input=prompt('Company LinkedIn URL for '+j.company+':\n\nCurrent: '+(current||'Not set')+'\n\nPaste LinkedIn URL:',current||'https://www.linkedin.com/company/');
+  var input=await uiPrompt('Company LinkedIn URL for '+j.company+':\n\nCurrent: '+(current||'Not set')+'\n\nPaste LinkedIn URL:',current||'https://www.linkedin.com/company/');
   if(!input||input===current)return;
   if(input.indexOf('linkedin.com')===-1){alert('Please enter a valid LinkedIn URL.');return}
   try{
@@ -2357,7 +2387,7 @@ async function editField(idx,field,label,optionsStr){
   var j=allJobs[idx];if(!j)return;
   var options=optionsStr.split(',');
   var current=j[field]||'';
-  var input=prompt(label+' (current: '+current+'):\n\nOptions: '+options.join(', ')+'\n\nType value:',current);
+  var input=await uiPrompt(label+' (current: '+current+'):\n\nOptions: '+options.join(', ')+'\n\nType value:',current);
   if(!input||input===current)return;
   j[field]=input;viewDirty=true;
   try{
@@ -2370,7 +2400,7 @@ async function editField(idx,field,label,optionsStr){
 async function editFieldFree(idx,field,label){
   var j=allJobs[idx];if(!j)return;
   var current=j[field]||'';
-  var input=prompt('Enter '+label+':',current);
+  var input=await uiPrompt('Enter '+label+':',current);
   if(input===null||input===current)return;
   j[field]=input;viewDirty=true;
   try{
@@ -2384,7 +2414,7 @@ async function editCountry(idx){
   var j=allJobs[idx];if(!j)return;
   var countries=['United States','United Kingdom','Canada','India','Australia','Germany','France','Japan','Singapore','Netherlands','Ireland','Switzerland','Sweden','United Arab Emirates','Israel','Brazil','Mexico','New Zealand','South Africa','Spain','Italy','Poland','Belgium','Austria','Norway','Denmark','Finland','Saudi Arabia','Qatar'];
   var current=j.detectedCountry||'Unknown';
-  var input=prompt('Select country for this job (current: '+current+'):\n\n'+countries.join(', ')+'\n\nType country name:',current);
+  var input=await uiPrompt('Select country for this job (current: '+current+'):\n\n'+countries.join(', ')+'\n\nType country name:',current);
   if(!input||input===current)return;
   j.detectedCountry=input;
   // Update in DB
@@ -2404,7 +2434,7 @@ async function editFieldInView(idx,field){
   var j=allJobs[idx];if(!j)return;
   var labels={location:'Job Location',experience:'Experience',salary:'Salary'};
   var current=j[field]||'';
-  var input=prompt('Edit '+(labels[field]||field)+':\n\nCurrent: '+current);
+  var input=await uiPrompt('Edit '+(labels[field]||field)+':\n\nCurrent: '+current);
   if(input===null)return;
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -2416,7 +2446,7 @@ async function editFieldInView(idx,field){
 
 async function editCompanyName(idx){
   var j=allJobs[idx];if(!j)return;
-  var newName=prompt('Edit company name:',j.company||'');
+  var newName=await uiPrompt('Edit company name:',j.company||'');
   if(newName===null||newName===j.company)return;
   newName=newName.trim();
   if(!newName){alert('Company name cannot be empty.');return}
@@ -2435,7 +2465,7 @@ async function editCompanyName(idx){
 
 async function editCompanyUrl(idx){
   var j=allJobs[idx];if(!j)return;
-  var newUrl=prompt('Enter correct website URL for '+j.company+':',j.companyUrl||'https://');
+  var newUrl=await uiPrompt('Enter correct website URL for '+j.company+':',j.companyUrl||'https://');
   if(!newUrl||newUrl===j.companyUrl)return;
   // Ensure it has protocol
   if(!/^https?:\/\//i.test(newUrl))newUrl='https://'+newUrl;
@@ -2737,7 +2767,7 @@ async function runFormatBatch(){
 }
 
 async function backupJobsNow(){
-  var label=prompt('Optional label for this backup (e.g. "before_enrich"):','manual');
+  var label=await uiPrompt('Optional label for this backup (e.g. "before_enrich"):','manual');
   if(label===null)return;
   var st=document.getElementById('backupStatus');
   st.textContent='💾 Creating backup (jobs, contacts, consultants, settings)...';
@@ -2776,7 +2806,7 @@ async function showBackups(){
 }
 
 async function restoreBackup(setId,sourceCollection,count){
-  if(!confirm('Restore "'+sourceCollection+'" ('+count+' records) from this backup?\n\nThis REPLACES the current '+sourceCollection+' collection only. A safety snapshot of the current '+sourceCollection+' is taken automatically first, so this is reversible.'))return;
+  if(!await uiConfirm('Restore "'+sourceCollection+'" ('+count+' records) from this backup?\n\nThis REPLACES the current '+sourceCollection+' collection only. A safety snapshot of the current '+sourceCollection+' is taken automatically first, so this is reversible.'))return;
   var st=document.getElementById('backupStatus');
   st.textContent='♻️ Restoring '+sourceCollection+' (safety snapshot first)...';
   try{
@@ -2792,7 +2822,7 @@ async function restoreBackup(setId,sourceCollection,count){
 async function backupJobsNow_end(){}
 
 async function enrichTopCompanies(){
-  var topN=parseInt(prompt('Enrich the top N companies by job-opening count (that lack size).\n\n⚠️ Tip: Click "💾 Backup Now" first if you haven\'t!','100'))||100;
+  var topN=parseInt(await uiPrompt('Enrich the top N companies by job-opening count (that lack size).\n\n⚠️ Tip: Click "💾 Backup Now" first if you haven\'t!','100'))||100;
   if(topN>200)topN=200;
 
   var st=document.getElementById('fixCompanyTypeStatus');
@@ -2806,7 +2836,7 @@ async function enrichTopCompanies(){
       setTimeout(function(){st.textContent=''},8000);return;
     }
 
-    if(!confirm('Found top '+d1.total+' companies by job count needing size.\n\nEnrich each via Apollo (by name — finds size, website & LinkedIn automatically)?\n\nThis may take a few minutes.'))return;
+    if(!await uiConfirm('Found top '+d1.total+' companies by job count needing size.\n\nEnrich each via Apollo (by name — finds size, website & LinkedIn automatically)?\n\nThis may take a few minutes.'))return;
 
     var fixed=0,notFound=0;
     var companiesFound={};
@@ -2845,7 +2875,7 @@ async function enrichTopCompanies(){
 }
 
 async function enrichBySize(){
-  var targetSize=prompt('Enrich companies whose size = ? (enter 0 for empty/missing size, or a specific wrong value like 220):','0');
+  var targetSize=await uiPrompt('Enrich companies whose size = ? (enter 0 for empty/missing size, or a specific wrong value like 220):','0');
   if(targetSize===null)return;
   targetSize=targetSize.trim();
 
@@ -2868,7 +2898,7 @@ async function enrichBySize(){
       setTimeout(function(){st.textContent=''},15000);return;
     }
 
-    if(!confirm('Found '+d1.companies.length+' companies with size '+targetSize+' ('+scrapable.length+' have LinkedIn URLs).\n\nScrape LinkedIn to get correct company size for those '+scrapable.length+'?'))return;
+    if(!await uiConfirm('Found '+d1.companies.length+' companies with size '+targetSize+' ('+scrapable.length+' have LinkedIn URLs).\n\nScrape LinkedIn to get correct company size for those '+scrapable.length+'?'))return;
 
     var fixed=0;
     for(var i=0;i<scrapable.length;i++){
@@ -2898,9 +2928,9 @@ async function enrichBySize(){
 }
 
 async function clearContaminatedSize(){
-  var badSize=parseInt(prompt('Clear which contaminated company size value? (it was wrongly spread to many companies)','220'));
+  var badSize=parseInt(await uiPrompt('Clear which contaminated company size value? (it was wrongly spread to many companies)','220'));
   if(!badSize)return;
-  if(!confirm('Clear company size '+badSize+' from ALL jobs that have it?\n\nThese will become empty and can be re-enriched correctly.'))return;
+  if(!await uiConfirm('Clear company size '+badSize+' from ALL jobs that have it?\n\nThese will become empty and can be re-enriched correctly.'))return;
   var st=document.getElementById('fixCompanyTypeStatus');
   st.textContent='📏 Clearing wrong company size '+badSize+'...';
   try{
@@ -2913,7 +2943,7 @@ async function clearContaminatedSize(){
 }
 
 async function propagateCompanyData(){
-  if(!confirm('Propagate known-good company URL, LinkedIn, size, and type across all jobs of the same company?\n\nThis fills empty/Google-search fields using data already present on other jobs of that company. Existing real data is never overwritten.'))return;
+  if(!await uiConfirm('Propagate known-good company URL, LinkedIn, size, and type across all jobs of the same company?\n\nThis fills empty/Google-search fields using data already present on other jobs of that company. Existing real data is never overwritten.'))return;
   var st=document.getElementById('fixCompanyTypeStatus');
   st.textContent='🔄 Propagating company data across same-company jobs...';
   try{
@@ -2926,9 +2956,9 @@ async function propagateCompanyData(){
 }
 
 async function fixContactsViaLinkedin(){
-  var wrongCompany=prompt('Enter the wrong company name to fix via LinkedIn scraping:','ideaHelix');
+  var wrongCompany=await uiPrompt('Enter the wrong company name to fix via LinkedIn scraping:','ideaHelix');
   if(!wrongCompany)return;
-  var batchSize=parseInt(prompt('Contacts per batch? (5-10 recommended, scraping is slow):','10'))||10;
+  var batchSize=parseInt(await uiPrompt('Contacts per batch? (5-10 recommended, scraping is slow):','10'))||10;
   if(batchSize>25)batchSize=25;
 
   var st=document.getElementById('fixCompanyTypeStatus');
@@ -3022,7 +3052,7 @@ async function fixContactsViaLinkedin(){
 }
 
 async function fixContaminatedUrls(){
-  var badDomain=prompt('Enter the bad domain to clear from jobs (companyUrl/LinkedIn that shouldn\'t be there):','ideahelix');
+  var badDomain=await uiPrompt('Enter the bad domain to clear from jobs (companyUrl/LinkedIn that shouldn\'t be there):','ideahelix');
   if(!badDomain)return;
   var st=document.getElementById('fixCompanyTypeStatus');
   var totalCleared=0,remaining=1,batch=0;
@@ -3044,7 +3074,7 @@ async function fixContaminatedUrls(){
 }
 
 async function fixOrphanedContacts(){
-  var wrongCompany=prompt('Enter the wrong company name to fix:','ideaHelix');
+  var wrongCompany=await uiPrompt('Enter the wrong company name to fix:','ideaHelix');
   if(!wrongCompany)return;
 
   var st=document.getElementById('fixCompanyTypeStatus');
@@ -3060,7 +3090,7 @@ async function fixOrphanedContacts(){
       setTimeout(function(){st.textContent=''},8000);return;
     }
 
-    if(!confirm('Found '+d1.totalRemaining+' contacts with company "'+wrongCompany+'" ('+d1.withEmail+' have emails).\n\nFix by matching email domains to companies in your jobs database?\n(Processes 50 at a time)'))return;
+    if(!await uiConfirm('Found '+d1.totalRemaining+' contacts with company "'+wrongCompany+'" ('+d1.withEmail+' have emails).\n\nFix by matching email domains to companies in your jobs database?\n(Processes 50 at a time)'))return;
 
     // Step 2: Fix in batches of 50
     var totalFixed=0,allCompanies={},remaining=d1.totalRemaining,batch=0;
@@ -3125,7 +3155,7 @@ async function fixDescriptions(){
 async function cleanNonCyberJobs(){
   var st=document.getElementById('cleanCyberStatus');
   var btn=document.getElementById('cleanCyberBtn');
-  if(!confirm('This will permanently delete non-cybersecurity LinkedIn jobs from the database. Continue?'))return;
+  if(!await uiConfirm('This will permanently delete non-cybersecurity LinkedIn jobs from the database. Continue?'))return;
   btn.disabled=true;
   st.textContent='Cleaning non-cyber LinkedIn jobs...';
   try{
@@ -3200,7 +3230,7 @@ async function enrichFromLinkedIn(){
     var cd=await cr.json();
     totalCompanies=cd.total||0;
     if(!totalCompanies){btn.textContent='✅ All companies already enriched!';setTimeout(function(){btn.textContent='🔗 Enrich from LinkedIn';btn.disabled=false},5000);return}
-    if(!confirm('Found '+totalCompanies+' companies with missing data.\nThis will scrape LinkedIn company pages using Apify.\nProceed?')){btn.textContent='🔗 Enrich from LinkedIn';btn.disabled=false;return}
+    if(!await uiConfirm('Found '+totalCompanies+' companies with missing data.\nThis will scrape LinkedIn company pages using Apify.\nProceed?')){btn.textContent='🔗 Enrich from LinkedIn';btn.disabled=false;return}
 
     while(batch*BATCH<totalCompanies&&batch<20){// Max 200 companies
       btn.textContent='🔗 Batch '+(batch+1)+': fetching companies...';
@@ -3541,10 +3571,10 @@ function renderMyWork(){
 async function mwEditNext(id){
   var j=((_mwData&&_mwData.jobs)||[]).filter(function(x){return x._id===id})[0]||{};
   var cur=j.nextAction||{};
-  var text=prompt('Next action for "'+(j.title||'')+'" — '+(j.company||'')+'\n(leave empty to clear):',cur.text||'');
+  var text=await uiPrompt('Next action for "'+(j.title||'')+'" — '+(j.company||'')+'\n(leave empty to clear):',cur.text||'');
   if(text===null)return;
   var due='';
-  if(text.trim()){due=prompt('Due date (YYYY-MM-DD, optional):',cur.dueAt?String(cur.dueAt).slice(0,10):new Date(Date.now()+2*86400000).toISOString().slice(0,10));if(due===null)return;if(due&&!/^\d{4}-\d{2}-\d{2}$/.test(due.trim())){alert('Use the format YYYY-MM-DD');return}}
+  if(text.trim()){due=await uiPrompt('Due date (YYYY-MM-DD, optional):',cur.dueAt?String(cur.dueAt).slice(0,10):new Date(Date.now()+2*86400000).toISOString().slice(0,10));if(due===null)return;if(due&&!/^\d{4}-\d{2}-\d{2}$/.test(due.trim())){alert('Use the format YYYY-MM-DD');return}}
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'setNextAction',jobId:id,text:text.trim(),dueAt:due?due.trim():''})});
     var d=await r.json();if(d.error){alert(d.error);return}
@@ -3592,7 +3622,7 @@ function cjRowPasses(j){
 }
 async function cjClassifyEngagement(btn){
   // #596: OK = re-classify ALL jobs with the current rules (after a classifier update); Cancel = only unclassified jobs
-  var force=confirm('Re-classify ALL jobs with the latest rules?\n\nOK = all jobs (use after a classifier update)\nCancel = only jobs not yet classified');
+  var force=await uiConfirm('Re-classify ALL jobs with the latest rules?\n\nOK = all jobs (use after a classifier update)\nCancel = only jobs not yet classified');
   btn.disabled=true;var done=0,tally={},skip=0;
   try{
     for(var i=0;i<60;i++){
@@ -4028,8 +4058,8 @@ async function saveUserSettings(){
   st.textContent='✅ User preferences saved!';setTimeout(function(){st.textContent=''},4000);
 }
 
-function resetUserSettings(){
-  if(!confirm('Reset your preferences to use global defaults?'))return;
+async function resetUserSettings(){
+  if(!await uiConfirm('Reset your preferences to use global defaults?'))return;
   USER_PREFS={dateFormat:'',timeZone:'',timeFormat:'',perPage:'',defaultTab:''};
   localStorage.setItem('huntUserPrefs',JSON.stringify(USER_PREFS));
   initSettingsPage();
@@ -4167,7 +4197,7 @@ async function searchM365Directory(){
 
 async function addM365User(email,name,entraId,department){
   if(!email){alert('No email found for this user.');return}
-  var role=prompt('Assign role for '+name+':\n\nOptions: admin, manager, analyst, viewer\n\n(Default: analyst)','analyst');
+  var role=await uiPrompt('Assign role for '+name+':\n\nOptions: admin, manager, analyst, viewer\n\n(Default: analyst)','analyst');
   if(role===null)return;
   if(['super_admin','admin','manager','analyst','viewer'].indexOf(role)===-1)role='analyst';
   if(role==='super_admin'&&curUserRole!=='super_admin'){alert('Only Super Admin can assign Super Admin role.');return}
@@ -4216,7 +4246,7 @@ async function updateUserRole(userId,newRole){
 
 async function toggleUserStatus(userId,currentStatus){
   var newStatus=currentStatus==='active'?'suspended':'active';
-  if(!confirm('Change status to '+newStatus+'?'))return;
+  if(!await uiConfirm('Change status to '+newStatus+'?'))return;
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateUser',userId:userId,updates:{status:newStatus}})});
     loadUserList();
@@ -4224,7 +4254,7 @@ async function toggleUserStatus(userId,currentStatus){
 }
 
 async function deleteUser(userId,email){
-  if(!confirm('Remove user '+email+'?\n\nThis will revoke their access.'))return;
+  if(!await uiConfirm('Remove user '+email+'?\n\nThis will revoke their access.'))return;
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteUser',userId:userId})});
     loadUserList();
@@ -4393,7 +4423,7 @@ function sortConsultantsData(){
 }
 
 async function promoteCached(){
-  if(!confirm('One-time: import all cached (Match Profiles) profiles into the managed Consultant Database?\n\nThis lets you test with existing profiles. They become editable, status-trackable records.'))return;
+  if(!await uiConfirm('One-time: import all cached (Match Profiles) profiles into the managed Consultant Database?\n\nThis lets you test with existing profiles. They become editable, status-trackable records.'))return;
   try{
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'promoteAllCached'})});
     var d=await r.json();
@@ -4525,14 +4555,14 @@ function mpNav(d){   // #462: browse consultants in list order from inside the p
   openManageProfile(String(consultantsData[n]._id));
 }
 async function setConsLinkedin(id){
-  var v=prompt('LinkedIn profile URL (linkedin.com/in/...):','');if(v===null)return;v=v.trim();
+  var v=await uiPrompt('LinkedIn profile URL (linkedin.com/in/...):','');if(v===null)return;v=v.trim();
   if(!/linkedin\.com\/in\//i.test(v)){alert('Enter a URL like https://www.linkedin.com/in/username');return}
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{linkedinUrl:v}})});
     var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
 }
 var _mpPending={};
-function editConsField(id,field,label,cur,isList){
-  var v=prompt(label+':',cur||'');if(v===null)return;
+async function editConsField(id,field,label,cur,isList){
+  var v=await uiPrompt(label+':',cur||'');if(v===null)return;
   var val=isList?v.split(',').map(function(s){return s.trim()}).filter(Boolean):v.trim();
   _mpPending[field]=val;
   if(manageProfileData)manageProfileData[field]=val;   // show the edit immediately
@@ -4602,7 +4632,7 @@ async function enrichFromResume(){
   }catch(e){mpMsg('⚠️ '+e.message,'#B91C1C');_enrSt('⚠️ failed','#B91C1C')}
 }
 async function editConsCompany(id,cur){window._mpChanged=true;
-  var v=prompt('Company name:',cur||'');if(v===null)return;
+  var v=await uiPrompt('Company name:',cur||'');if(v===null)return;
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateConsultant',id:id,updates:{currentCompany:v.trim()}})});
     var d=await r.json();if(d.error){alert(d.error);return}openManageProfile(id)}catch(e){alert(e.message)}
 }
@@ -4641,7 +4671,7 @@ async function enrichConsFromLinkedIn(id){
   }catch(e){st.textContent='⚠️ '+e.message}
 }
 async function editConsYears(id,cur){
-  var v=prompt('Years of experience (e.g. 6.8). Manually set values are never overwritten by Recalc:',cur);
+  var v=await uiPrompt('Years of experience (e.g. 6.8). Manually set values are never overwritten by Recalc:',cur);
   if(v===null)return;
   var n=parseFloat(v);
   if(isNaN(n)||n<0||n>50){alert('Enter a number between 0 and 50');return}
@@ -4775,7 +4805,7 @@ async function addScreening(){
   }catch(e){st.textContent='⚠️ '+e.message;st.style.color='#B91C1C'}
 }
 async function deleteScreening(id){
-  var cm=manageProfileData;if(!cm||!confirm('Remove this screening result?'))return;
+  var cm=manageProfileData;if(!cm||!await uiConfirm('Remove this screening result?'))return;
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deleteScreening',id:String(cm._id),screeningId:id})});window._mpChanged=true;window._mpActiveTab='match';openManageProfile(cm._id)}catch(e){alert(e.message)}
 }
 async function scoreVsJob(force){
@@ -4851,12 +4881,12 @@ function mjToggleAll(on){
   if(mjLastData)renderMatchJobs(mjLastData);
 }
 function mjClearSelection(){ _mjSelected={}; if(mjLastData)renderMatchJobs(mjLastData); }
-function mjDeleteSelected(){
+async function mjDeleteSelected(){
   var c=manageProfileData;if(!c)return;
   var cid=c._id||c.sourceId||'';
   var ids=Object.keys(_mjSelected).filter(function(k){return _mjSelected[k]});
   if(!ids.length)return;
-  if(!confirm('Remove '+ids.length+' selected job'+(ids.length>1?'s':'')+' from '+(c.name||'this consultant')+'\u2019s matches?'))return;
+  if(!await uiConfirm('Remove '+ids.length+' selected job'+(ids.length>1?'s':'')+' from '+(c.name||'this consultant')+'\u2019s matches?'))return;
   // delete sequentially; they won't be re-added by future matching
   var done=0;
   ids.forEach(function(jid){
@@ -5076,10 +5106,10 @@ function mjManageJob(jobId){
   _mjPending=true;
   viewDet(idx);
 }
-function mjDeleteJob(jobId){
+async function mjDeleteJob(jobId){
   var c=manageProfileData;if(!c)return;
   var cid=c._id||c.sourceId||'';
-  if(!confirm('Remove this job from '+(c.name||'this consultant')+'\u2019s matches?\n\nIt won\u2019t be re-added by future matching unless you clear the removal.'))return;
+  if(!await uiConfirm('Remove this job from '+(c.name||'this consultant')+'\u2019s matches?\n\nIt won\u2019t be re-added by future matching unless you clear the removal.'))return;
   authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'deleteMatchedJob',consultantId:cid,jobId:jobId})})
     .then(function(r){return r.json()}).then(function(d){
       if(d.removed&&mjLastData){
@@ -5213,7 +5243,7 @@ async function openConsultantDoc(docId,download){
   try{
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'getDoc',docId:docId})});
     var d=await r.json();if(d.error){alert('⚠️ '+d.error);return}
-    if(d.integrityOk===false){if(!confirm('⚠️ INTEGRITY CHECK FAILED — the stored file no longer matches its upload hash. Open anyway?'))return}
+    if(d.integrityOk===false){if(!await uiConfirm('⚠️ INTEGRITY CHECK FAILED — the stored file no longer matches its upload hash. Open anyway?'))return}
     var bin=atob(d.data),arr=new Uint8Array(bin.length);for(var i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
     var blob=new Blob([arr],{type:d.mimeType||'application/octet-stream'});var url=URL.createObjectURL(blob);
     if(download||!/pdf|image/.test(d.mimeType||'')){var a=document.createElement('a');a.href=url;a.download=d.fileName||'document';document.body.appendChild(a);a.click();a.remove()}
@@ -5225,7 +5255,7 @@ async function toggleDocSigned(docId,val){
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'updateDoc',docId:docId,signed:val})});loadConsultantDocs()}catch(e){alert(e.message)}
 }
 async function deleteConsultantDoc(docId,name){
-  if(!confirm('Delete "'+name+'"?\n\nIt will be hidden from all users but retained for audit (admin+ only).'))return;
+  if(!await uiConfirm('Delete "'+name+'"?\n\nIt will be hidden from all users but retained for audit (admin+ only).'))return;
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deleteDoc',docId:docId})});var d=await r.json();if(d.error){alert('⚠️ '+d.error);return}loadConsultantDocs()}catch(e){alert(e.message)}
 }
 function renderManageProfile(){
@@ -5462,7 +5492,7 @@ async function saveProfileStatus(){
     var d=await r.json();
     if(d.error==='placed_frozen'){mpMsg('🔒 '+d.message,'#DC2626');return}
     if(d.error==='claimed'){
-      if(confirm('⚠️ '+d.message+'\n\nProceed anyway (override claim)?')){
+      if(await uiConfirm('⚠️ '+d.message+'\n\nProceed anyway (override claim)?')){
         body.overrideClaim=true;
         var r2=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
         var d2=await r2.json();
@@ -5500,7 +5530,7 @@ async function enrichProfile(){
 async function claimProfile(){
   try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId})});
     var d=await r.json();
-    if(d.error==='claimed'){if(confirm('⚠️ '+d.message+'\n\nOverride and claim?')){await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId,overrideClaim:true})})}else return}
+    if(d.error==='claimed'){if(await uiConfirm('⚠️ '+d.message+'\n\nOverride and claim?')){await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'claimConsultant',id:manageProfileId,overrideClaim:true})})}else return}
     _stSt('✅ saved','#047857');_pendingMpMsg={msg:'✅ Claimed by you.',color:'#047857'};openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
 }
@@ -5539,7 +5569,7 @@ async function deletePlacementHistory(idx){
   var hist=(manageProfileData&&manageProfileData.placementHistory)||[];
   var p=hist[idx]||{};
   var label=(p.client||'this placement')+(p.role?' — '+p.role:'');
-  if(!confirm('Permanently delete this placement record?\n\n'+label+'\n\nThis removes it from the placement history and cannot be undone.'))return;
+  if(!await uiConfirm('Permanently delete this placement record?\n\n'+label+'\n\nThis removes it from the placement history and cannot be undone.'))return;
   try{
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deletePlacementHistory',id:manageProfileId,historyIndex:idx})});
     var d=await r.json();
@@ -5570,7 +5600,7 @@ async function savePlacement(){
 }
 async function deleteProfile(){
   var nm=(manageProfileData&&manageProfileData.name)||'this consultant';
-  if(!confirm('Permanently delete "'+nm+'" from the Consultant Database?\n\nThis removes their profile, status, pipeline history, resume and placement history.\n\nThis cannot be undone.'))return;
+  if(!await uiConfirm('Permanently delete "'+nm+'" from the Consultant Database?\n\nThis removes their profile, status, pipeline history, resume and placement history.\n\nThis cannot be undone.'))return;
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'deleteConsultant',id:manageProfileId})});
     closeManageProfile();loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
@@ -5601,7 +5631,7 @@ async function viewResume(){
   }catch(e){mpMsg('View error: '+e.message,'#DC2626')}
 }
 async function removeResume(){
-  if(!confirm('Remove this resume?'))return;
+  if(!await uiConfirm('Remove this resume?'))return;
   try{await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'removeResume',id:manageProfileId})});
     _pendingMpMsg={msg:'✅ Resume removed.',color:'#047857'};window._mpChanged=true;openManageProfile(manageProfileId);loadConsultants();
   }catch(e){mpMsg('Error: '+e.message,'#DC2626')}
@@ -5922,7 +5952,7 @@ async function ctCopyRich(btn){
 }
 async function editJobSalary(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
-  var v=prompt('Offered rate / budget (e.g. $40/hr, $35-45/hr USD):',(j.salary&&!/not disclosed/i.test(j.salary))?j.salary:'');
+  var v=await uiPrompt('Offered rate / budget (e.g. $40/hr, $35-45/hr USD):',(j.salary&&!/not disclosed/i.test(j.salary))?j.salary:'');
   if(v===null)return;v=v.trim();if(!v)return;
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateFieldByJobId',jobId:String(j.jobId||''),field:'salary',value:v})});
@@ -5947,7 +5977,7 @@ function marginDisplay(j){
 async function editJobMargin(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
   var cur=marginDisplay(j);
-  var v=prompt('SecVision margin — absolute amount in the SAME unit as Salary (e.g. $12/hr). Percentage like 25% also accepted:',/^\$|₹|€|£/.test(cur)?cur.replace(/ \(default 25%\)$/,''):'$10/hr');
+  var v=await uiPrompt('SecVision margin — absolute amount in the SAME unit as Salary (e.g. $12/hr). Percentage like 25% also accepted:',/^\$|₹|€|£/.test(cur)?cur.replace(/ \(default 25%\)$/,''):'$10/hr');
   if(v===null)return;v=v.trim();if(!v)return;
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateFieldByJobId',jobId:String(j.jobId||''),field:'margin',value:v})});
@@ -5959,7 +5989,7 @@ async function editJobMargin(){
 async function editJobRemote(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
   var cur=String(j.remote||'');
-  var v=prompt('Remote mode — enter Yes, No, or Hybrid:',cur||'Yes');
+  var v=await uiPrompt('Remote mode — enter Yes, No, or Hybrid:',cur||'Yes');
   if(v===null)return;
   v=v.trim();var norm=/^y/i.test(v)?'Yes':(/^h/i.test(v)?'Hybrid':(/^n/i.test(v)?'No':v));
   if(!norm){return}
@@ -5975,8 +6005,8 @@ async function editJobRemote(){
 async function deleteJobProfile(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
   var label=(j.title||'this job')+(j.company?' — '+j.company:'');
-  if(!confirm('Delete the job profile "'+label+'" permanently?\n\nThis removes the job (including its saved matches, outreach drafts, assignments and comments reference). Consultant profiles themselves are NOT deleted.\n\nThis cannot be undone.'))return;
-  if(!confirm('Really delete "'+label+'"? Final confirmation.'))return;
+  if(!await uiConfirm('Delete the job profile "'+label+'" permanently?\n\nThis removes the job (including its saved matches, outreach drafts, assignments and comments reference). Consultant profiles themselves are NOT deleted.\n\nThis cannot be undone.'))return;
+  if(!await uiConfirm('Really delete "'+label+'"? Final confirmation.'))return;
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'deleteJob',id:String(j._id||''),jobId:String(j.jobId||'')})});
     var d=await r.json();
@@ -6204,14 +6234,14 @@ function rvView(id){var p=_rvList.filter(function(x){return x._id===id})[0];if(!
    +'<div style="font-size:.76rem;font-weight:600;margin-top:.5rem">Profile summary <a href="#" onclick="aiFmtSummary(\'rvSum\',this);return false" style="font-size:.66rem;font-weight:400;color:#7C3AED;text-decoration:none">✨ Format with AI</a></div><div style="font-size:.76rem;line-height:1.55;color:#1F2937;max-height:34vh;overflow:auto;border:1px solid var(--g100);border-radius:6px;padding:.55rem .65rem" id="rvSum" data-raw="'+esc(p.summary||'').replace(/"/g,'&quot;')+'">'+rvFmtSummary(p.summary||'')+'</div>'
    +((u.profileUrl||p.linkedinUrl)?'<div style="margin-top:.5rem;display:flex;gap:1rem">'+(u.profileUrl?'<a href="'+esc(u.profileUrl)+'" target="_blank" rel="noopener" style="font-size:.76rem">Open Upwork profile ↗</a>':'')+(p.linkedinUrl?'<a href="'+esc(normUrl(p.linkedinUrl))+'" target="_blank" rel="noopener" style="font-size:.76rem;color:#0A66C2">Open LinkedIn profile ↗</a>':'')+'</div>':'')+'</div>';
   document.body.appendChild(ov)}
-async function rvReject(id){var rp=_rvList.filter(function(x){return x._id===id})[0]||{};if(!confirm('Delete this profile? It will never be re-fetched.\n\n'+rvLabel(rp)))return;
+async function rvReject(id){var rp=_rvList.filter(function(x){return x._id===id})[0]||{};if(!await uiConfirm('Delete this profile? It will never be re-fetched.\n\n'+rvLabel(rp)))return;
   var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'rejectPending',id:id})});var d=await r.json();
   if(d.error){rvMsg('⚠️ '+esc(d.error),'err');return}_rvList=_rvList.filter(function(x){return x._id!==id});rvRender();rvMsg('🗑 Rejected <b>'+esc(rvLabel(rp))+'</b> — will not be fetched again. '+_rvList.length+' pending left.','warn')}
 async function rvRejectSelected(){var ids=Array.prototype.map.call(document.querySelectorAll('.rvSel:checked'),function(x){return x.value});
   if(!ids.length){rvMsg('Select profiles first (tick the boxes on the left).','info');return}
   var rps=_rvList.filter(function(x){return ids.indexOf(x._id)>=0});
   var rlist=rps.slice(0,12).map(function(p){return '• '+rvLabel(p)}).join('\n')+(rps.length>12?'\n• … and '+(rps.length-12)+' more':'');
-  if(!confirm('Delete '+ids.length+' profile'+(ids.length>1?'s':'')+'? They will never be re-fetched.\n\n'+rlist))return;
+  if(!await uiConfirm('Delete '+ids.length+' profile'+(ids.length>1?'s':'')+'? They will never be re-fetched.\n\n'+rlist))return;
   var done=0;for(var i=0;i<ids.length;i++){try{var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify({action:'rejectPending',id:ids[i]})});var d=await r.json();if(!d.error)done++}catch(e){}}
   _rvList=_rvList.filter(function(x){return ids.indexOf(x._id)<0});rvRender();rvMsg('🗑 Rejected '+done+' of '+ids.length+': <b>'+esc(rps.slice(0,5).map(function(p){return p.name||'?'}).join(', '))+(rps.length>5?' +'+(rps.length-5)+' more':'')+'</b> — will not be fetched again. '+_rvList.length+' pending left.','warn')}
 async function rvPromoteSelected(){var ids=Array.prototype.map.call(document.querySelectorAll('.rvSel:checked'),function(x){return x.value});
@@ -6730,8 +6760,8 @@ function candStageCell(c){
 }
 async function setCandStage(sid,stage,sel){
   var reason='';
-  if(stage==='Rejected'){reason=prompt('Rejection reason (e.g. rate, availability, client feedback):','');if(reason===null){loadJobCandidates();return}}
-  if(stage==='Contracted'&&!confirm('Mark as CONTRACTED on this job? The consultant will be flagged "engaged elsewhere" on every other job\'s candidate list.')){loadJobCandidates();return}
+  if(stage==='Rejected'){reason=await uiPrompt('Rejection reason (e.g. rate, availability, client feedback):','');if(reason===null){loadJobCandidates();return}}
+  if(stage==='Contracted'&&!await uiConfirm('Mark as CONTRACTED on this job? The consultant will be flagged "engaged elsewhere" on every other job\'s candidate list.')){loadJobCandidates();return}
   sel.disabled=true;
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'setCandidateStage',jobId:jobCandidatesJobId,sourceId:sid,stage:stage,reason:reason})});
@@ -6905,7 +6935,7 @@ function candidateNavGo(delta){
   openManageProfile(_candidateNav[next]._id);
 }
 async function removeJobCandidate(sourceId,name){
-  if(!confirm('Remove "'+(name||'this candidate')+'" from this job?\n\nThe consultant profile itself will be kept in the Consultant Database — only their link to this job is removed.\n\nThis cannot be undone.'))return;
+  if(!await uiConfirm('Remove "'+(name||'this candidate')+'" from this job?\n\nThe consultant profile itself will be kept in the Consultant Database — only their link to this job is removed.\n\nThis cannot be undone.'))return;
   try{
     var r=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'removeCandidate',jobId:jobCandidatesJobId,sourceId:sourceId})});
     var d=await r.json();
@@ -7309,7 +7339,7 @@ async function addContact(){
   }catch(e){document.getElementById('cfStatus').textContent='Error: '+e.message}
 }
 async function deleteContact(id){
-  if(!confirm('Remove this contact?'))return;
+  if(!await uiConfirm('Remove this contact?'))return;
   try{
     await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'deleteContact',contactId:id})});
     contactsChangedInPopup=true;

@@ -1006,6 +1006,9 @@ exports.handler = async function (event) {
     var jobsCol = db.collection('jobs');
     var cacheCol = db.collection(CACHE_COLLECTION);
     var weights = DEFAULT_WEIGHTS;
+    // #619: the Entra token carries no role — load it from the users collection (setCandidateStage checked
+    // authUser.role, which was always undefined, so every stage change failed with "Manager role or above required")
+    try { var uDoc = await db.collection('users').findOne({ email: new RegExp('^' + authUser.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', 'i') }, { projection: { role: 1, status: 1 } }); authUser.role = (uDoc && uDoc.role) || ''; } catch (e) { authUser.role = ''; }
 
     // Resolve the job requirements from jobId
     async function getReq(jobId) {
@@ -1539,6 +1542,8 @@ exports.handler = async function (event) {
       var who = authUser ? authUser.email : '';
       var setS = { 'candidateProfiles.$.stage': stg, 'candidateProfiles.$.stageAt': new Date(), 'candidateProfiles.$.stageBy': who, 'candidateProfiles.$.stageReason': String(body.reason || '').slice(0, 500) };
       var rS = await jobsCol.updateOne({ _id: jdS._id, 'candidateProfiles.sourceId': String(body.sourceId) }, { $set: setS, $push: { 'candidateProfiles.$.stageHistory': { stage: stg, at: new Date(), by: who, reason: String(body.reason || '').slice(0, 500) } } });
+      // #604: activity entry so My Work's "last activity" reflects candidate movement
+      try { var cpN = await cacheCol.findOne({ sourceId: String(body.sourceId) }, { projection: { name: 1 } }); await jobsCol.updateOne({ _id: jdS._id }, { $push: { comments: { text: 'Candidate ' + ((cpN && cpN.name) || body.sourceId) + ' → ' + stg + (body.reason ? ' (' + String(body.reason).slice(0, 120) + ')' : ''), author: who, system: true, createdAt: new Date() } }, $set: { lastActivityAt: new Date() } }); } catch (e) {}
       if (!rS.matchedCount) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Candidate not on this job' }) };
       // D-B conflict rule: Contracted here => annotate this consultant on every OTHER job (visible, never auto-rejected)
       var annotated = 0;
