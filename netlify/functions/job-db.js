@@ -232,7 +232,7 @@ exports.handler = async (event) => {
       'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE, 'classifyEngagementBackfill': ['super_admin', 'admin', 'manager'],   // #592
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       // #336: company/job field edits are manager+ ; status is analyst+
-      'updateField': MANAGER_UP, 'updateCompanyInfo': MANAGER_UP, 'updateCompanyName': MANAGER_UP,
+      'updateField': MANAGER_UP, 'updateJob': MANAGER_UP, 'updateCompanyInfo': MANAGER_UP, 'updateCompanyName': MANAGER_UP,   // #613
       'updateCompanyIfEmpty': MANAGER_UP, 'updateStatus': STATUS_ROLES,
       // contacts: add (analyst+), delete (manager+)
       'saveContacts': CONTACT_ADD_ROLES, 'addContact': CONTACT_ADD_ROLES, 'deleteContact': CONTACT_DEL_ROLES,
@@ -474,6 +474,36 @@ exports.handler = async (event) => {
       var upd = {}; upd[body.field] = body.value; upd[body.field + 'UpdatedAt'] = new Date();
       var result = await col.updateOne({ _id: new ObjectId(body.id) }, { $set: upd });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
+    }
+
+    // ---- #613: updateJob — save the whole job profile (all editable fields incl. description) in one call ----
+    if (action === 'updateJob') {
+      var ujDoc2 = await findJobDoc(body.jobId || body.id);
+      if (!ujDoc2) return { statusCode: 404, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
+      var UJ_FIELDS = ['title', 'company', 'location', 'detectedCountry', 'jobType', 'remote', 'salary', 'experience', 'contractDuration', 'eligibility', 'margin',
+                       'skills', 'certifications', 'compliance', 'tools', 'contact', 'applyLink', 'description', 'qualifications', 'responsibilities', 'benefits'];
+      var f = body.fields || {}, setU = {}, changed = [];
+      UJ_FIELDS.forEach(function (k) {
+        if (!Object.prototype.hasOwnProperty.call(f, k)) return;
+        var v = f[k];
+        if (['qualifications', 'responsibilities', 'benefits'].indexOf(k) >= 0) { v = Array.isArray(v) ? v.map(String) : String(v || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean); }
+        else v = (v == null) ? '' : String(v).slice(0, k === 'description' ? 60000 : 2000);
+        var old = ujDoc2[k];
+        if (JSON.stringify(old == null ? '' : old) !== JSON.stringify(v)) { setU[k] = v; changed.push(k); }
+      });
+      if (!changed.length) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: 0, changed: [] }) };
+      if (setU.title !== undefined) setU.titleClean = setU.title;
+      setU.updatedAt = new Date(); setU.updatedBy = authUser.email; setU.lastActivityAt = new Date();
+      // description edited -> re-classify engagement and drop the cached AI formatting so it is regenerated from the new text
+      var unsetU = {};
+      if (setU.description !== undefined || setU.title !== undefined || setU.jobType !== undefined) {
+        try { var eu = classifyEngagement(Object.assign({}, ujDoc2, setU)); setU.engagementModel = eu.model; setU.offshoreOk = eu.offshoreOk; setU.engagementEvidence = eu.evidence; } catch (e) {}
+      }
+      if (setU.description !== undefined) { unsetU.descFormatted = ''; unsetU.descFormattedHash = ''; unsetU.descFormatVersion = ''; }
+      var updU = { $set: setU, $push: { comments: { text: 'Job details edited: ' + changed.join(', '), author: authUser.email, system: true, createdAt: new Date() } } };
+      if (Object.keys(unsetU).length) updU.$unset = unsetU;
+      await col.updateOne({ _id: ujDoc2._id }, updU);
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: 1, changed: changed, engagementModel: setU.engagementModel }) };
     }
 
     // ACTION: updateFieldByJobId - update any editable field by jobId
