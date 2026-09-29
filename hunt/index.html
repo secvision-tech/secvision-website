@@ -1960,7 +1960,7 @@ async function _viewDetCore(i){
   window._currentJobDoc=j;
   if(CAP.canContacts&&!mjFromConsultant)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
   if(CAP.canContacts)h+='<button onclick="contactClient()" class="dm-apply" style="background:#047857;border:none;cursor:pointer">✉️ Contact Client</button>';
-  if(CAP.canEditFields&&!mjFromConsultant)h+='<button onclick="editJobForm('+i+')" class="dm-apply" style="background:#0E7490;border:none;cursor:pointer" title="Edit all job details including the description">✏️ Edit Job</button>';   // #613
+  h+='<button onclick="saveJobPdf('+i+')" class="dm-apply" style="background:#0E7490;border:none;cursor:pointer" title="Save this job profile — details, requirements, description and matched candidates — as a PDF">💾 Save Job</button>';   // #613
   if(CAP.canStatus)h+='<button onclick="deleteJobProfile()" class="dm-apply" style="background:#DC2626;border:none;cursor:pointer" title="Permanently delete this job profile">🗑 Delete Job</button>';
   if(mjFromConsultant)h+='<span style="font-size:.6rem;color:var(--g5);font-style:italic">Opened from a consultant — matched candidates for this job are shown below.</span>';
   if(j.applyLink)h+='<a href="'+j.applyLink+'" target="_blank" rel="noopener" style="font-size:.7rem;color:var(--ac);text-decoration:underline">View original posting &rarr;</a>';
@@ -2115,57 +2115,64 @@ async function jaAddComment(){
   }catch(e){alert('Error: '+e.message)}
 }
 
-// ===== #613: Edit Job — whole-profile edit form inside the details popup, saved with one 'Save Job' =====
-function editJobForm(i){
-  var j=allJobs[i];if(!j)return;
-  var body=document.getElementById('detBody');if(!body)return;
-  window._editJobIdx=i;window._editJobPrevHtml=body.innerHTML;window._editJobPrevScroll=body.scrollTop;
-  var I='width:100%;box-sizing:border-box;padding:.35rem .5rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px;font-family:inherit';
-  var L='font-size:.6rem;color:var(--g5);display:block;margin-bottom:.1rem;text-transform:uppercase;letter-spacing:.3px';
-  var v=function(k){var x=j[k];if(Array.isArray(x))return x.join('\n');return x==null?'':String(x)};
-  var fld=function(k,label,span){return '<div style="grid-column:span '+(span||1)+'"><label style="'+L+'">'+label+'</label><input class="ejf" data-k="'+k+'" value="'+esc(v(k)).replace(/"/g,'&quot;')+'" style="'+I+'"></div>'};
-  var sel=function(k,label,opts){return '<div><label style="'+L+'">'+label+'</label><select class="ejf" data-k="'+k+'" style="'+I+'">'+opts.map(function(o){return '<option value="'+esc(o)+'"'+((v(k)||'')===o?' selected':'')+'>'+esc(o||'—')+'</option>'}).join('')+'</select></div>'};
-  var ta=function(k,label,rows,hint){return '<div style="grid-column:1/-1"><label style="'+L+'">'+label+(hint?' <span style="text-transform:none;letter-spacing:0;color:var(--g4)">'+hint+'</span>':'')+'</label><textarea class="ejf" data-k="'+k+'" rows="'+rows+'" style="'+I+';resize:vertical;line-height:1.45">'+esc(v(k))+'</textarea></div>'};
-  var h='<div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:6px;padding:.5rem .7rem;font-size:.66rem;color:#0C4A6E;margin-bottom:.6rem">Editing job profile — change what you need and press <b>Save Job</b>. Nothing is written until you save. Skills, certifications, compliance and tools are comma-separated; qualifications, responsibilities and benefits one per line.</div>';
-  h+='<div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.55rem .7rem">'
-    +fld('title','Role / Title',2)+fld('company','Company',2)
-    +fld('location','Job location',2)+fld('detectedCountry','Country')+sel('jobType','Job type',['','Full-time','Contract','Part-time','Internship','Not specified'])
-    +sel('remote','Remote',['','Yes','No','Hybrid'])+fld('salary','Salary / Rate')+fld('experience','Experience')+fld('contractDuration','Contract duration')
-    +fld('eligibility','Eligibility',2)+fld('margin','Margin (e.g. 25% or 10)')+fld('contact','Contact')
-    +fld('applyLink','Apply / posting link',4)
-    +fld('skills','Key skills',2)+fld('tools','Technologies / tools',2)
-    +fld('certifications','Certifications',2)+fld('compliance','Compliance / frameworks',2)
-    +ta('description','Full description (JD)',14,'— saved as plain text; the AI-formatted view is regenerated on next open')
-    +ta('qualifications','Qualifications',4,'one per line')+ta('responsibilities','Responsibilities',4,'one per line')+ta('benefits','Benefits',3,'one per line')
-    +'</div>';
-  h+='<div style="display:flex;gap:.5rem;align-items:center;margin-top:.8rem;flex-wrap:wrap">'
-    +'<button onclick="saveJobEdits()" id="ejSaveBtn" class="dm-apply" style="background:#047857;border:none;cursor:pointer">💾 Save Job</button>'
-    +'<button onclick="cancelJobEdits()" class="dm-apply" style="background:#fff;color:var(--g5);border:1px solid var(--g2);cursor:pointer">Cancel</button>'
-    +'<span id="ejStatus" style="font-size:.64rem;color:var(--g5)"></span></div>';
-  body.innerHTML=h;body.scrollTop=0;
-}
-function cancelJobEdits(){var body=document.getElementById('detBody');if(body&&window._editJobPrevHtml!=null){body.innerHTML=window._editJobPrevHtml;body.scrollTop=window._editJobPrevScroll||0}window._editJobPrevHtml=null}
-async function saveJobEdits(){
-  var i=window._editJobIdx,j=allJobs[i];if(!j)return;
-  var fields={};document.querySelectorAll('.ejf').forEach(function(el){fields[el.getAttribute('data-k')]=el.value});
-  var st=document.getElementById('ejStatus'),btn=document.getElementById('ejSaveBtn');
-  btn.disabled=true;st.textContent='Saving…';
+// ===== #613: Save Job — formatted PDF of the job profile (details table, requirements, JD, matched candidates) =====
+async function saveJobPdf(i){
+  var j=allJobs[i];if(!j){alert('Job not loaded');return}
+  var doc=new jspdf.jsPDF({orientation:'portrait',unit:'pt',format:'a4'});
+  var W=doc.internal.pageSize.getWidth(),M=40,y=44;
+  var arr=function(v){return Array.isArray(v)?v.filter(Boolean).join(', '):String(v||'')};
+  var val=function(v){v=arr(v);return v&&v!=='See details'?v:'—'};
+  var mdToText=function(t){return String(t||'').replace(/\*\*(.*?)\*\*/g,'$1').replace(/^#{1,6}\s*/gm,'').replace(/^\s*[-*]\s+/gm,'• ').replace(/\r/g,'').trim()};
+  // header
+  doc.setFillColor(14,116,144);doc.rect(0,0,W,30,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont('helvetica','bold');doc.text('SecVision Technologies LLP  ·  Business Hunt — Job Profile',M,19);
+  doc.setTextColor(30,41,59);doc.setFontSize(15);doc.text(String(j.titleClean||j.title||'Job'),M,y+14,{maxWidth:W-2*M});
+  y+=14+doc.getTextDimensions(String(j.titleClean||j.title||'Job'),{maxWidth:W-2*M,fontSize:15}).h;
+  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(71,85,105);
+  doc.text([j.company||'',j.location||j.detectedCountry||''].filter(Boolean).join('  ·  '),M,y+4);y+=16;
+  var kv=function(title,rows){
+    rows=rows.filter(function(r){return r[1]&&r[1]!=='—'});if(!rows.length)return;
+    doc.autoTable({startY:y,head:[[{content:title,colSpan:2,styles:{fillColor:[14,116,144],textColor:255,fontStyle:'bold',fontSize:9}}]],body:rows,theme:'grid',
+      styles:{fontSize:8.2,cellPadding:3.5,valign:'top',textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:120,fontStyle:'bold',fillColor:[248,250,252]},1:{cellWidth:W-2*M-120}},margin:{left:M,right:M}});
+    y=doc.lastAutoTable.finalY+10;
+  };
+  var eng=(j.engagementModel&&j.engagementModel!=='Unknown')?j.engagementModel+(j.offshoreOk==='yes'?' · offshore OK':(j.offshoreOk==='no'?' · US-based only':'')):'—';
+  kv('Job details',[
+    ['Job ID',String(j.jobId||j._id||'')],['Posted',j.dateRaw||j.datePosted?fmtDate(j.dateRaw||j.datePosted):'—'],['Source',val(j.source)],
+    ['Company',val(j.company)],['Company type',val(j.companyType)],['Location',val(j.location)],['Country',val(j.detectedCountry)],
+    ['Job type',val(j.jobType)],['Remote',val(j.remote)],['Contract duration',val(j.contractDuration)],['Engagement model',eng],
+    ['Salary / Rate',val(j.salary)],['Margin',j.margin!=null&&j.margin!==''?String(j.margin):'—'],['Experience',val(j.experience)],['Eligibility',val(j.eligibility)],
+    ['Contact',val(j.contact)],['Status',val(j.status)],['Owner',j.assignedTo?(j.assignedTo.name||j.assignedTo.email):'—'],['Posting link',val(j.applyLink)]
+  ]);
+  kv('Requirements',[['Key skills',val(j.skills)],['Technologies / tools',val(j.tools)],['Certifications',val(j.certifications)],['Compliance / frameworks',val(j.compliance)]]);
+  var lists=[['Qualifications',j.qualifications],['Responsibilities',j.responsibilities],['Benefits',j.benefits]].filter(function(x){return Array.isArray(x[1])&&x[1].length});
+  lists.forEach(function(x){
+    doc.autoTable({startY:y,head:[[x[0]]],body:x[1].map(function(q){return ['• '+q]}),theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:9},styles:{fontSize:8.2,cellPadding:3.5,textColor:[30,41,59],lineColor:[226,232,240]},margin:{left:M,right:M}});
+    y=doc.lastAutoTable.finalY+10;
+  });
+  // matched candidates (live from the server so stages are current)
   try{
-    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'updateJob',jobId:j._id||j.jobId,fields:fields})});
-    var d=await r.json();if(d.error){st.textContent='⚠️ '+d.error;btn.disabled=false;return}
-    // reflect locally so the table and the popup show the new values without a reload
-    Object.keys(fields).forEach(function(k){var val=fields[k];if(['qualifications','responsibilities','benefits'].indexOf(k)>=0)val=val.split('\n').map(function(x){return x.trim()}).filter(Boolean);j[k]=val});
-    if(fields.title!==undefined)j.titleClean=fields.title;
-    if(d.engagementModel)j.engagementModel=d.engagementModel;
-    if((d.changed||[]).indexOf('description')>=0){delete j.descFormatted;delete j.descFormattedHash}
-    st.textContent=(d.changed&&d.changed.length)?'✅ Saved ('+d.changed.join(', ')+')':'No changes to save.';
-    window._editJobPrevHtml=null;
-    try{if(typeof renderTable==='function'&&document.getElementById('rBody'))renderTable()}catch(e){}
-    try{if(typeof renderContractJobs==='function'&&cjData&&cjData.length){var cj=cjData.filter(function(x){return String(x._id)===String(j._id)})[0];if(cj){Object.assign(cj,{title:j.title,company:j.company,location:j.location,salary:j.salary,tools:j.tools,certifications:j.certifications,engagementModel:j.engagementModel});renderContractJobs()}}}catch(e){}
-    setTimeout(function(){viewDet(i)},500);
-  }catch(e){st.textContent='⚠️ '+e.message;btn.disabled=false}
+    var cr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'listCandidates',jobId:j._id||j.jobId})});
+    var cd=await cr.json();var cands=(cd.candidates||[]);
+    if(cands.length){
+      doc.autoTable({startY:y,head:[['#','Candidate','Role','Location','Match','Stage','Screening']],
+        body:cands.sort(function(a,b){return (b.overall||0)-(a.overall||0)}).map(function(c,k){return [k+1,c.name||'',(c.currentRoleEn||c.currentRole||''),(c.locationEn||c.location||c.country||''),(c.overall||0)+'%',c.stage||'Screening',c.screening?(c.screening.pct+'% '+(c.screening.skillArea||'')):'—']}),
+        theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:8.5},styles:{fontSize:8,cellPadding:3,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:22},4:{cellWidth:40},5:{cellWidth:70}},margin:{left:M,right:M}});
+      y=doc.lastAutoTable.finalY+10;
+    }
+  }catch(e){}
+  // full description
+  var descTxt=mdToText(j.descFormatted||j.description||'');
+  if(descTxt){
+    doc.autoTable({startY:y,head:[['Full job description']],body:[[descTxt]],theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:9},styles:{fontSize:8.2,cellPadding:6,textColor:[30,41,59],lineColor:[226,232,240],overflow:'linebreak'},margin:{left:M,right:M}});
+  }
+  // footer on every page
+  var pages=doc.internal.getNumberOfPages();
+  for(var p=1;p<=pages;p++){doc.setPage(p);doc.setFontSize(7.5);doc.setTextColor(120,130,150);doc.text('Generated from SecVision Business Hunt on '+fmtDate(new Date())+' · Confidential',M,doc.internal.pageSize.getHeight()-18);doc.text('Page '+p+' of '+pages,W-M,doc.internal.pageSize.getHeight()-18,{align:'right'})}
+  var fn='SecVision_Job_'+String(j.company||'').replace(/[^\w]+/g,'_').slice(0,30)+'_'+String(j.titleClean||j.title||'').replace(/[^\w]+/g,'_').slice(0,40)+'_'+new Date().toISOString().slice(0,10)+'.pdf';
+  doc.save(fn);
 }
-function closeDet(){window._editJobPrevHtml=null;
+function closeDet(){
   if(window._jobChanged){window._jobChanged=false;try{if(typeof searchDb==='function')searchDb()}catch(e){}}
   var ov=document.getElementById('detailOverlay');
   ov.classList.remove('open');
