@@ -2561,14 +2561,14 @@ var LONGFORMS={
   'YARA':'YARA (Yet Another Ridiculous Acronym - Malware Rules)',
 };
 
-async function refreshDashboard(){dashLoaded=false;await loadDashboard();dashLoaded=true}
-async function refreshContract(){contractLoaded=false;await loadContractPipeline();contractLoaded=true}
+async function refreshDashboard(){window._statsForce=true;dashLoaded=false;await loadDashboard();dashLoaded=true;window._statsForce=false}
+async function refreshContract(){window._statsForce=true;contractLoaded=false;await loadContractPipeline();contractLoaded=true;window._statsForce=false}
 async function loadDashboard(){
   document.getElementById('dashLoading').style.display='block';
   document.getElementById('dashLoading').textContent='Loading dashboard...';
   document.getElementById('dashContent').style.display='none';
   try{
-    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats',force:!!window._statsForce})});
     if(!r.ok)throw new Error('API returned '+r.status);
     var d=await r.json();
     document.getElementById('dTotal').textContent=d.totalJobs||0;
@@ -3269,7 +3269,7 @@ async function loadContractPipeline(){
   document.getElementById('contractLoading').style.display='block';
   document.getElementById('contractContent').style.display='none';
   try{
-    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats'})});
+    var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'stats',force:!!window._statsForce})});
     if(!r.ok)throw new Error('API returned '+r.status);
     var d=await r.json();
     document.getElementById('dContract').textContent=d.contractTotal||0;
@@ -6756,7 +6756,7 @@ var _candFilterTimer=null;
 function candFilterInput(v){
   window._candFilterVal=v;
   clearTimeout(_candFilterTimer);
-  _candFilterTimer=setTimeout(function(){var b=document.getElementById('candFilterBox');var pos=b?b.selectionStart:0;loadJobCandidates();setTimeout(function(){var nb=document.getElementById('candFilterBox');if(nb){nb.focus();nb.setSelectionRange(pos,pos)}},120)},350);
+  _candFilterTimer=setTimeout(function(){window._candPage=1;var b=document.getElementById('candFilterBox');var pos=b?b.selectionStart:0;loadJobCandidates();setTimeout(function(){var nb=document.getElementById('candFilterBox');if(nb){nb.focus();nb.setSelectionRange(pos,pos)}},120)},350);
 }
 // #595b: profiles harvested in other languages — show the English rendering when we have it, and ask the
 // server to translate (Haiku, cached on the profile) the ones that still contain non-Latin script.
@@ -6812,8 +6812,11 @@ async function loadJobCandidates(){
       +'<th style="text-align:center;width:16ch">Action</th>'
       +'</tr></thead><tbody>';
     window._mcProfiles=window._mcProfiles||{};
-    list.forEach(function(c,i){
-      _mcProfiles[c.sourceId]=c;
+    // #614: 25 rows per page (filter/sort applied above; page state survives re-renders)
+    var CAND_PER=25,candPages=Math.max(1,Math.ceil(list.length/CAND_PER));window._candPage=Math.min(Math.max(1,window._candPage||1),candPages);
+    var candStart=(window._candPage-1)*CAND_PER,pageList=list.slice(candStart,candStart+CAND_PER);
+    list.forEach(function(c){_mcProfiles[c.sourceId]=c});
+    pageList.forEach(function(c,i){i=candStart+i;
       var pct=Math.round(c.overall||0);
       var col=pct>=80?'#047857':(pct>=70?'#0891B2':'#B45309');
       var loc=enLoc(c);
@@ -6833,7 +6836,12 @@ async function loadJobCandidates(){
         +((CAP.canStatus&&!mjFromConsultant)?'<button class="cand-del" data-sid="'+esc(c.sourceId)+'" data-name="'+esc(c.name)+'" style="padding:.15rem .5rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Delete</button>':'')
         +'</td></tr>';
     });
-    h+='</tbody></table></div></div>';
+    h+='</tbody></table></div>';
+    if(list.length>CAND_PER){h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem;font-size:.58rem">'
+      +(window._candPage>1?'<button onclick="window._candPage--;loadJobCandidates()" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">‹ Prev</button>':'')
+      +'<span style="color:var(--g5)">Page '+window._candPage+' of '+candPages+' · '+list.length+' candidates</span>'
+      +(window._candPage<candPages?'<button onclick="window._candPage++;loadJobCandidates()" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Next ›</button>':'')+'</div>'}
+    h+='</div>';
     wrap.innerHTML=h;
     attachColResizers('candTable');
     autoTranslateProfiles(list,function(){loadJobCandidates()});   // #595b

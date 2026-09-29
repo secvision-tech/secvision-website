@@ -1,5 +1,19 @@
 const { getDb } = require('./db');
 const { classifyEngagement } = require('./engagement');   // #592
+// #618: indexes the dashboard, pipeline, search and matching rely on. createIndex is idempotent; run once per container.
+var __idx618 = false;
+function ensureIndexes618(db) {
+  if (__idx618) return; __idx618 = true;
+  try {
+    var j = db.collection('jobs');
+    [[{ datePosted: -1 }], [{ dateScanned: -1 }], [{ jobType: 1, datePosted: -1 }], [{ status: 1 }], [{ detectedCountry: 1 }], [{ company: 1 }], [{ jobId: 1 }], [{ fpKey: 1 }],
+     [{ 'assignedTo.email': 1 }], [{ engagementModel: 1 }], [{ searchCountry: 1 }], [{ 'candidateProfiles.sourceId': 1 }]].forEach(function (ix) { j.createIndex(ix[0], { background: true }).catch(function () {}); });
+    var c = db.collection('consultant_profiles');
+    [[{ sourceId: 1 }], [{ managed: 1 }], [{ country: 1 }], [{ email: 1 }], [{ fetchedAt: -1 }], [{ name: 1 }]].forEach(function (ix) { c.createIndex(ix[0], { background: true }).catch(function () {}); });
+    db.collection('stats_cache').createIndex({ key: 1 }, { unique: true }).catch(function () {});
+    db.collection('consultant_docs').createIndex({ consultantId: 1, uploadedAt: -1 }).catch(function () {});
+  } catch (e) {}
+}
 
 // JWT decode (base64url → JSON, no signature verification — token comes from MSAL via HTTPS)
 function decodeJwt(token) {
@@ -527,36 +541,45 @@ exports.handler = async (event) => {
 
     // ACTION: stats - get dashboard statistics
     if (action === 'stats') {
+      // #618: 10-minute server-side cache per scope — Dashboard and Contract Pipeline both call this and the
+      // ~25 aggregations over the whole jobs collection were being recomputed on every tab switch.
+      var _sfKey = JSON.stringify(scopeFilter() || {});
+      var statsCache = db.collection('stats_cache');
+      if (!body.force) {
+        try { var hit = await statsCache.findOne({ key: 'stats|' + _sfKey }); if (hit && hit.at && (Date.now() - new Date(hit.at).getTime()) < 10 * 60 * 1000 && hit.data) { hit.data._cachedAt = hit.at; return { statusCode: 200, headers: hdrs, body: JSON.stringify(hit.data) }; } } catch (e) {}
+      }
+      ensureIndexes618(db);   // fire-and-forget, once per container
       // #330: scope stage prepended to every dashboard pipeline (empty = no restriction)
       var _sf = scopeFilter();
       var SM = _sf ? [{ $match: _sf }] : [];
       var scopedCount = _sf ? _sf : {};
-      var totalJobs = await col.countDocuments(scopedCount);
-      var statusCounts = await col.aggregate(SM.concat([
+      var totalJobs = col.countDocuments(scopedCount);
+      var statusCounts = col.aggregate(SM.concat([
         { $group: { _id: '$status', count: { $sum: 1 } } }
       ])).toArray();
-      var typeCounts = await col.aggregate(SM.concat([
+      var typeCounts = col.aggregate(SM.concat([
         { $match: { companyType: { $nin: [null, ''] } } },
         { $group: { _id: '$companyType', count: { $sum: 1 } } },
         { $sort: { count: -1 } }
       ])).toArray();
-      var countryCounts = await col.aggregate(SM.concat([
+      var countryCounts = col.aggregate(SM.concat([
         { $match: { detectedCountry: { $ne: null } } },
         { $group: { _id: '$detectedCountry', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ])).toArray();
-      var companyCounts = await col.aggregate(SM.concat([
+      var companyCounts = col.aggregate(SM.concat([
         { $project: { companyNorm: { $trim: { input: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: { $toLower: '$company' }, find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } }, companyUrl: 1 } },
         { $group: { _id: '$companyNorm', count: { $sum: 1 }, url: { $first: '$companyUrl' } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ])).toArray();
+      companyCounts = await companyCounts;   // #618: started earlier, awaited on first use
       companyCounts.forEach(function(c) {
         if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
       });
       // Split comma-separated fields, normalize case, then count
-      var certCounts = await col.aggregate(SM.concat([
+      var certCounts = col.aggregate(SM.concat([
         { $match: { certifications: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$certifications', ', '] } } },
         { $unwind: '$items' },
@@ -565,7 +588,7 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 10 }
       ])).toArray();
-      var complianceCounts = await col.aggregate(SM.concat([
+      var complianceCounts = col.aggregate(SM.concat([
         { $match: { compliance: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$compliance', ', '] } } },
         { $unwind: '$items' },
@@ -574,7 +597,7 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 10 }
       ])).toArray();
-      var toolsCounts = await col.aggregate(SM.concat([
+      var toolsCounts = col.aggregate(SM.concat([
         { $match: { tools: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$tools', ', '] } } },
         { $unwind: '$items' },
@@ -583,26 +606,27 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 10 }
       ])).toArray();
-      var locationCounts = await col.aggregate(SM.concat([
+      var locationCounts = col.aggregate(SM.concat([
         { $match: { location: { $ne: 'Remote' } } },
         { $group: { _id: '$location', count: { $sum: 1 }, country: { $first: '$detectedCountry' } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ])).toArray();
       // Append country name to location for display
+      locationCounts = await locationCounts;   // #618: started earlier, awaited on first use
       locationCounts.forEach(function(l) {
         if (l.country && l.country !== 'Unknown' && l._id && l._id.indexOf(l.country) === -1) {
           l._id = l._id + ' (' + l.country + ')';
         }
       });
-      var recentScans = await col.aggregate(SM.concat([
+      var recentScans = col.aggregate(SM.concat([
         { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateScanned' } }, count: { $sum: 1 } } },
         { $sort: { _id: -1 } },
         { $limit: 14 }
       ])).toArray();
 
       // Partnership targets: companies with most openings, grouped by type
-      var partnerTargets = await col.aggregate(SM.concat([
+      var partnerTargets = col.aggregate(SM.concat([
         { $project: { companyNorm: { $trim: { input: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '®', replacement: '' } }, find: '™', replacement: '' } }, find: '©', replacement: '' } } } } }, companyType: 1, status: 1, location: 1, companyUrl: 1, companySize: 1 } },
         { $group: { _id: { company: '$companyNorm', type: '$companyType' }, count: { $sum: 1 },
           statuses: { $push: '$status' }, locations: { $addToSet: '$location' },
@@ -611,13 +635,14 @@ exports.handler = async (event) => {
         { $limit: 20 }
       ])).toArray();
       // Title-case company names
+      partnerTargets = await partnerTargets;   // #618: started earlier, awaited on first use
       partnerTargets.forEach(function(p) {
         if (p._id && p._id.company) p._id.company = p._id.company.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
       });
 
       // Role distribution - case insensitive, normalize variants
       // #322: also compute average required experience (years) per role
-      var roleCounts = await col.aggregate(SM.concat([
+      var roleCounts = col.aggregate(SM.concat([
         { $match: { titleClean: { $ne: null } } },
         { $project: {
           role: { $toLower: '$titleClean' },
@@ -640,7 +665,7 @@ exports.handler = async (event) => {
 
       // Per-role tool demand: which technologies does EACH role actually require?
       // Raw (role, tool) pairs here; canonicalization + top-10 + distinctiveness in JS below.
-      var roleToolPairs = await col.aggregate(SM.concat([
+      var roleToolPairs = col.aggregate(SM.concat([
         { $match: { titleClean: { $ne: null }, tools: { $nin: [null, '', 'See details'] } } },
         { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$tools', ', '] } } },
         { $unwind: '$items' },
@@ -648,7 +673,7 @@ exports.handler = async (event) => {
       ])).toArray();
 
       // #449: per-role skill demand (same shape as roleToolPairs, from the skills field)
-      var roleSkillPairs = await col.aggregate(SM.concat([
+      var roleSkillPairs = col.aggregate(SM.concat([
         { $match: { titleClean: { $ne: null }, skills: { $nin: [null, '', 'See details'] } } },
         { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$skills', ', '] } } },
         { $unwind: '$items' },
@@ -656,13 +681,13 @@ exports.handler = async (event) => {
       ])).toArray();
 
       // #450: per-role certifications and compliance (same shape)
-      var roleCertPairs = await col.aggregate(SM.concat([
+      var roleCertPairs = col.aggregate(SM.concat([
         { $match: { titleClean: { $ne: null }, certifications: { $nin: [null, '', 'See details'] } } },
         { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$certifications', ', '] } } },
         { $unwind: '$items' },
         { $group: { _id: { role: '$role', tool: { $toLower: '$items' } }, count: { $sum: 1 } } }
       ])).toArray();
-      var roleCompPairs = await col.aggregate(SM.concat([
+      var roleCompPairs = col.aggregate(SM.concat([
         { $match: { titleClean: { $ne: null }, compliance: { $nin: [null, '', 'See details'] } } },
         { $project: { role: { $toLower: '$titleClean' }, items: { $split: ['$compliance', ', '] } } },
         { $unwind: '$items' },
@@ -670,7 +695,7 @@ exports.handler = async (event) => {
       ])).toArray();
 
       // Skills distribution (comma-separated) - case insensitive
-      var skillCounts = await col.aggregate(SM.concat([
+      var skillCounts = col.aggregate(SM.concat([
         { $match: { skills: { $ne: 'See details' } } },
         { $project: { items: { $split: ['$skills', ', '] } } },
         { $unwind: '$items' },
@@ -681,7 +706,7 @@ exports.handler = async (event) => {
       ])).toArray();
 
       // Salary distribution (count by ranges)
-      var salaryJobs = await col.aggregate(SM.concat([
+      var salaryJobs = col.aggregate(SM.concat([
         { $match: { salary: { $ne: 'Not disclosed' } } },
         { $group: { _id: '$salary', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
@@ -690,25 +715,26 @@ exports.handler = async (event) => {
 
       // Contract-specific aggregations
       var contractFilter = { jobType: 'Contract' };
-      var contractTotal = await col.countDocuments(applyScope(contractFilter));
-      var contractNew = await col.countDocuments(applyScope({ jobType: 'Contract', status: 'new' }));
-      var contractByCountry = await col.aggregate(SM.concat([
+      var contractTotal = col.countDocuments(applyScope(contractFilter));
+      var contractNew = col.countDocuments(applyScope({ jobType: 'Contract', status: 'new' }));
+      var contractByCountry = col.aggregate(SM.concat([
         { $match: contractFilter },
         { $group: { _id: '$detectedCountry', count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ])).toArray();
-      var contractByCompany = await col.aggregate(SM.concat([
+      var contractByCompany = col.aggregate(SM.concat([
         { $match: contractFilter },
         { $project: { companyNorm: { $toLower: { $replaceAll: { input: { $replaceAll: { input: { $replaceAll: { input: '$company', find: '\u00AE', replacement: '' } }, find: '\u2122', replacement: '' } }, find: '\u00A9', replacement: '' } } }, status: 1, location: 1, companyUrl: 1, salary: 1, companyType: 1, companySize: 1 } },
         { $group: { _id: '$companyNorm', count: { $sum: 1 }, statuses: { $push: '$status' }, locations: { $addToSet: '$location' }, companyUrl: { $first: '$companyUrl' }, salary: { $first: '$salary' }, companyType: { $first: '$companyType' }, companySize: { $first: '$companySize' } } },
         { $sort: { count: -1 } },
         { $limit: 25 }
       ])).toArray();
+      contractByCompany = await contractByCompany;   // #618: started earlier, awaited on first use
       contractByCompany.forEach(function(c) {
         if (c._id) c._id = c._id.replace(/\b\w/g, function(l) { return l.toUpperCase(); });
       });
-      var contractSkills = await col.aggregate(SM.concat([
+      var contractSkills = col.aggregate(SM.concat([
         { $match: { jobType: 'Contract', tools: { $type: 'string', $nin: ['', 'See details'] } } },
         { $project: { items: { $split: ['$tools', ', '] } } },
         { $unwind: '$items' },
@@ -717,7 +743,7 @@ exports.handler = async (event) => {
         { $sort: { count: -1 } },
         { $limit: 20 }
       ])).toArray();
-      var contractCerts = await col.aggregate(SM.concat([
+      var contractCerts = col.aggregate(SM.concat([
         { $match: { jobType: 'Contract', certifications: { $type: 'string', $nin: ['', 'See details'] } } },
         { $project: { items: { $split: ['$certifications', ', '] } } },
         { $unwind: '$items' },
@@ -727,7 +753,10 @@ exports.handler = async (event) => {
         { $limit: 15 }
       ])).toArray();
       // Average hourly rate for contracts (convert all to hourly USD)
-      var contractSalaries = await col.find(applyScope({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } })).project({ salary: 1 }).limit(200).toArray();
+      var contractSalaries = col.find(applyScope({ jobType: 'Contract', salary: { $ne: 'Not disclosed' } })).project({ salary: 1 }).limit(200).toArray();
+      // #618: all dashboard aggregations were started concurrently above; resolve them here (already-resolved ones pass through)
+      var __st = await Promise.all([totalJobs, statusCounts, typeCounts, countryCounts, companyCounts, certCounts, complianceCounts, toolsCounts, locationCounts, recentScans, partnerTargets, roleCounts, roleToolPairs, roleSkillPairs, roleCertPairs, roleCompPairs, skillCounts, salaryJobs, contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, contractCerts, contractSalaries]);
+      totalJobs = __st[0]; statusCounts = __st[1]; typeCounts = __st[2]; countryCounts = __st[3]; companyCounts = __st[4]; certCounts = __st[5]; complianceCounts = __st[6]; toolsCounts = __st[7]; locationCounts = __st[8]; recentScans = __st[9]; partnerTargets = __st[10]; roleCounts = __st[11]; roleToolPairs = __st[12]; roleSkillPairs = __st[13]; roleCertPairs = __st[14]; roleCompPairs = __st[15]; skillCounts = __st[16]; salaryJobs = __st[17]; contractTotal = __st[18]; contractNew = __st[19]; contractByCountry = __st[20]; contractByCompany = __st[21]; contractSkills = __st[22]; contractCerts = __st[23]; contractSalaries = __st[24];
       var avgRate = '-';
       if (contractSalaries.length > 0) {
         var hourlyRates = [];
@@ -976,13 +1005,15 @@ exports.handler = async (event) => {
       contractSkills = normList(contractSkills);
       contractCerts = normList(contractCerts);
 
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({
+      var statsOut = {
         totalJobs, statusCounts, typeCounts, countryCounts, companyCounts,
         certCounts, complianceCounts, toolsCounts, locationCounts, recentScans,
         partnerTargets, roleCounts, skillCounts, salaryJobs, roleTools,
         contractTotal, contractNew, contractByCountry, contractByCompany, contractSkills, contractCerts, avgRate,
         _scope: { role: authRole, countries: authScope.countries, regions: authScope.regions, scoped: scopeFilter() !== null }
-      })};
+      };
+      try { await statsCache.updateOne({ key: 'stats|' + _sfKey }, { $set: { key: 'stats|' + _sfKey, data: statsOut, at: new Date() } }, { upsert: true }); } catch (e) {}
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify(statsOut) };
     }
 
     // ACTION: reExtract - re-process all jobs to update extracted fields from stored descriptions
@@ -1865,13 +1896,10 @@ exports.handler = async (event) => {
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       var contracts = await col.find(applyScope({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] }))
         .sort({ datePosted: -1, dateScanned: -1 })
-        .project({ engagementModel: 1, offshoreOk: 1, engagementEvidence: 1, title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1, candidateProfiles: 1 })
+        .project({ candidateCount: { $size: { $ifNull: ['$candidateProfiles', []] } }, engagementModel: 1, offshoreOk: 1, engagementEvidence: 1, title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
         .toArray();
       // #395: expose matched-consultant count, drop the heavy array
-      contracts.forEach(function (c) {
-        c.candidateCount = Array.isArray(c.candidateProfiles) ? c.candidateProfiles.length : 0;
-        delete c.candidateProfiles;
-      });
+      contracts.forEach(function (c) { if (typeof c.candidateCount !== 'number') c.candidateCount = Array.isArray(c.candidateProfiles) ? c.candidateProfiles.length : 0; delete c.candidateProfiles; });   // #618: count computed in the projection
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contracts: contracts }) };
     }
 
