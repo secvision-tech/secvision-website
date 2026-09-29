@@ -2124,16 +2124,16 @@ async function saveJobPdf(i){
   var val=function(v){v=arr(v);return v&&v!=='See details'?v:'—'};
   var mdToText=function(t){return String(t||'').replace(/\*\*(.*?)\*\*/g,'$1').replace(/^#{1,6}\s*/gm,'').replace(/^\s*[-*]\s+/gm,'• ').replace(/\r/g,'').trim()};
   // header
-  doc.setFillColor(14,116,144);doc.rect(0,0,W,30,'F');
-  doc.setTextColor(255,255,255);doc.setFontSize(9);doc.setFont('helvetica','bold');doc.text('SecVision Technologies LLP  ·  Business Hunt — Job Profile',M,19);
-  doc.setTextColor(30,41,59);doc.setFontSize(15);doc.text(String(j.titleClean||j.title||'Job'),M,y+14,{maxWidth:W-2*M});
-  y+=14+doc.getTextDimensions(String(j.titleClean||j.title||'Job'),{maxWidth:W-2*M,fontSize:15}).h;
-  doc.setFontSize(10);doc.setFont('helvetica','normal');doc.setTextColor(71,85,105);
-  doc.text([j.company||'',j.location||j.detectedCountry||''].filter(Boolean).join('  ·  '),M,y+4);y+=16;
+  doc.setFillColor(14,116,144);doc.rect(0,0,W,32,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('SecVision Technologies LLP  ·  Business Hunt — Job Profile',M,19);
+  doc.setTextColor(30,41,59);doc.setFontSize(18);doc.text(String(j.titleClean||j.title||'Job'),M,y+14,{maxWidth:W-2*M});
+  y+=14+doc.getTextDimensions(String(j.titleClean||j.title||'Job'),{maxWidth:W-2*M,fontSize:18}).h;
+  doc.setFontSize(11.5);doc.setFont('helvetica','normal');doc.setTextColor(71,85,105);
+  doc.text([j.company||'',j.location||j.detectedCountry||''].filter(Boolean).join('  ·  '),M,y+6);y+=20;
   var kv=function(title,rows){
     rows=rows.filter(function(r){return r[1]&&r[1]!=='—'});if(!rows.length)return;
-    doc.autoTable({startY:y,head:[[{content:title,colSpan:2,styles:{fillColor:[14,116,144],textColor:255,fontStyle:'bold',fontSize:9}}]],body:rows,theme:'grid',
-      styles:{fontSize:8.2,cellPadding:3.5,valign:'top',textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:120,fontStyle:'bold',fillColor:[248,250,252]},1:{cellWidth:W-2*M-120}},margin:{left:M,right:M}});
+    doc.autoTable({startY:y,head:[[{content:title,colSpan:2,styles:{fillColor:[14,116,144],textColor:255,fontStyle:'bold',fontSize:11}}]],body:rows,theme:'grid',
+      styles:{fontSize:10,cellPadding:5,valign:'top',textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:140,fontStyle:'bold',fillColor:[248,250,252]},1:{cellWidth:W-2*M-140}},margin:{left:M,right:M}});
     y=doc.lastAutoTable.finalY+10;
   };
   var eng=(j.engagementModel&&j.engagementModel!=='Unknown')?j.engagementModel+(j.offshoreOk==='yes'?' · offshore OK':(j.offshoreOk==='no'?' · US-based only':'')):'—';
@@ -2147,7 +2147,7 @@ async function saveJobPdf(i){
   kv('Requirements',[['Key skills',val(j.skills)],['Technologies / tools',val(j.tools)],['Certifications',val(j.certifications)],['Compliance / frameworks',val(j.compliance)]]);
   var lists=[['Qualifications',j.qualifications],['Responsibilities',j.responsibilities],['Benefits',j.benefits]].filter(function(x){return Array.isArray(x[1])&&x[1].length});
   lists.forEach(function(x){
-    doc.autoTable({startY:y,head:[[x[0]]],body:x[1].map(function(q){return ['• '+q]}),theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:9},styles:{fontSize:8.2,cellPadding:3.5,textColor:[30,41,59],lineColor:[226,232,240]},margin:{left:M,right:M}});
+    doc.autoTable({startY:y,head:[[x[0]]],body:x[1].map(function(q){return ['• '+q]}),theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:11},styles:{fontSize:10,cellPadding:5,textColor:[30,41,59],lineColor:[226,232,240]},margin:{left:M,right:M}});
     y=doc.lastAutoTable.finalY+10;
   });
   // matched candidates (live from the server so stages are current)
@@ -2157,18 +2157,18 @@ async function saveJobPdf(i){
     if(cands.length){
       doc.autoTable({startY:y,head:[['#','Candidate','Role','Location','Match','Stage','Screening']],
         body:cands.sort(function(a,b){return (b.overall||0)-(a.overall||0)}).map(function(c,k){return [k+1,c.name||'',(c.currentRoleEn||c.currentRole||''),(c.locationEn||c.location||c.country||''),(c.overall||0)+'%',c.stage||'Screening',c.screening?(c.screening.pct+'% '+(c.screening.skillArea||'')):'—']}),
-        theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:8.5},styles:{fontSize:8,cellPadding:3,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:22},4:{cellWidth:40},5:{cellWidth:70}},margin:{left:M,right:M}});
+        theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:10.5},styles:{fontSize:9.5,cellPadding:4,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:26},4:{cellWidth:48},5:{cellWidth:80}},margin:{left:M,right:M}});
       y=doc.lastAutoTable.finalY+10;
     }
   }catch(e){}
   // full description
   var descTxt=mdToText(j.descFormatted||j.description||'');
   if(descTxt){
-    doc.autoTable({startY:y,head:[['Full job description']],body:[[descTxt]],theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:9},styles:{fontSize:8.2,cellPadding:6,textColor:[30,41,59],lineColor:[226,232,240],overflow:'linebreak'},margin:{left:M,right:M}});
+    doc.autoTable({startY:y,head:[['Full job description']],body:[[descTxt]],theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:11},styles:{fontSize:10,cellPadding:8,textColor:[30,41,59],lineColor:[226,232,240],overflow:'linebreak'},margin:{left:M,right:M}});
   }
   // footer on every page
   var pages=doc.internal.getNumberOfPages();
-  for(var p=1;p<=pages;p++){doc.setPage(p);doc.setFontSize(7.5);doc.setTextColor(120,130,150);doc.text('Generated from SecVision Business Hunt on '+fmtDate(new Date())+' · Confidential',M,doc.internal.pageSize.getHeight()-18);doc.text('Page '+p+' of '+pages,W-M,doc.internal.pageSize.getHeight()-18,{align:'right'})}
+  for(var p=1;p<=pages;p++){doc.setPage(p);doc.setFontSize(8.5);doc.setTextColor(120,130,150);doc.text('Generated from SecVision Business Hunt on '+fmtDate(new Date())+' · Confidential',M,doc.internal.pageSize.getHeight()-18);doc.text('Page '+p+' of '+pages,W-M,doc.internal.pageSize.getHeight()-18,{align:'right'})}
   var fn='SecVision_Job_'+String(j.company||'').replace(/[^\w]+/g,'_').slice(0,30)+'_'+String(j.titleClean||j.title||'').replace(/[^\w]+/g,'_').slice(0,40)+'_'+new Date().toISOString().slice(0,10)+'.pdf';
   doc.save(fn);
 }
