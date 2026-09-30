@@ -280,6 +280,7 @@ body.role-viewer .edit-btn{display:none!important}
         </div>
         <div style="display:flex;gap:1rem;align-items:center;margin-top:.35rem">
           <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem;cursor:pointer" title="Only jobs classified as Corp-to-Corp / vendor-friendly (explicit C2C wording, or contract roles posted by staffing firms / C2C boards)"><input type="checkbox" id="dbC2cOnly" onchange="searchDb()" style="cursor:pointer"> 🤝 C2C / vendor-friendly only</label>
+          <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem" title="#628 — based on the engagement classifier: 'Possible' hides jobs marked US-only (clearance, visa-independent, state/federal, onsite-only)">🌏 Offshore: <select id="dbOffshore" onchange="searchDb()" style="font-size:.6rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px"><option value="possible" selected>Possible (not US-only)</option><option value="any">Any</option><option value="yes">Confirmed yes</option><option value="no">Not possible (US-only)</option></select></label>
         </div>
         <div id="dbCustomDates" style="display:none;gap:.6rem;margin-top:.4rem;align-items:end">
           <div class="sg"><label>From</label><input type="date" id="dbDateFrom"></div>
@@ -977,7 +978,8 @@ async function searchDb(){
   document.getElementById('pag').classList.remove('show');document.getElementById('exportBtns').style.display='none';
   try{
     var c2cOnly=!!(document.getElementById('dbC2cOnly')&&document.getElementById('dbC2cOnly').checked);   // #592
-    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly};
+    var offshore=(document.getElementById('dbOffshore')||{}).value||'any';   // #628
+    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly,offshore:offshore};
     loadedBlocks=1;
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(Object.assign({},lastSearchParams,{limit:BLOCK_SIZE,page:1}))});
@@ -3607,7 +3609,7 @@ function cjHeaderClick(colKey,e){
 }
 
 // #593: per-column filters for the Latest Contract Jobs table (applied before sort/pagination)
-var _cjFlt={},_cjC2cOnly=false;
+var _cjFlt={},_cjC2cOnly=false,_cjOffshore='possible';   // #628 default: hide US-only jobs
 var CJ_FVAL={idx:null,action:null,date:function(j){return j.date||''},engagementModel:function(j){return (j.engagementModel||'')+' '+(j.offshoreOk==='yes'?'offshore':'')}};
 function cjFilterInput(el){
   var k=el.getAttribute('data-f');_cjFlt[k]=el.value.trim().toLowerCase();cjPage=1;
@@ -3615,9 +3617,13 @@ function cjFilterInput(el){
   var again=document.querySelector('.cjFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}
 }
 function cjToggleC2c(el){_cjC2cOnly=!!el.checked;cjPage=1;renderContractJobs()}
-function cjClearFilters(){_cjFlt={};_cjC2cOnly=false;cjPage=1;renderContractJobs()}
+function cjSetOffshore(el){_cjOffshore=el.value;cjPage=1;renderContractJobs()}   // #628
+function cjClearFilters(){_cjFlt={};_cjC2cOnly=false;_cjOffshore='any';cjPage=1;renderContractJobs()}
 function cjRowPasses(j){
   if(_cjC2cOnly&&!/^C2C/.test(j.engagementModel||''))return false;
+  if(_cjOffshore==='possible'&&j.offshoreOk==='no')return false;   // #628
+  if(_cjOffshore==='yes'&&j.offshoreOk!=='yes')return false;
+  if(_cjOffshore==='no'&&j.offshoreOk!=='no')return false;
   for(var k in _cjFlt){var v=_cjFlt[k];if(!v)continue;var fn=CJ_FVAL[k];var val=fn?fn(j):(j[k]==null?'':String(j[k]));if(String(val).toLowerCase().indexOf(v)<0)return false}
   return true;
 }
@@ -3658,6 +3664,9 @@ function renderContractJobs(){
   // table grow past the container so the wrapper's overflow-x scrolls instead of squeezing.
   var html='<div style="display:flex;gap:.8rem;align-items:center;margin-bottom:.3rem;flex-wrap:wrap">'
     +'<label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem;cursor:pointer"><input type="checkbox" onchange="cjToggleC2c(this)"'+(_cjC2cOnly?' checked':'')+' style="cursor:pointer"> 🤝 C2C / vendor-friendly only</label>'
+    +'<label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem" title="#628 — Possible hides jobs the classifier marked US-only (clearance, visa-independent, state/federal, onsite-only)">🌏 Offshore: <select onchange="cjSetOffshore(this)" style="font-size:.6rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px">'
+    +['possible|Possible (not US-only)','any|Any','yes|Confirmed yes','no|Not possible (US-only)'].map(function(o){var p=o.split('|');return '<option value="'+p[0]+'"'+(_cjOffshore===p[0]?' selected':'')+'>'+p[1]+'</option>'}).join('')
+    +'</select></label>'
     +'<span style="font-size:.56rem;color:var(--g5)">'+total+' of '+cjData.length+' shown</span>'
     +(CAP.canEditFields?'<button onclick="cjClassifyEngagement(this)" title="Classify engagement model (C2C / W2 / direct-hire) for jobs saved before this feature existed" style="margin-left:auto;padding:.15rem .5rem;background:#fff;border:1px solid var(--g2);border-radius:4px;font-size:.56rem;cursor:pointer">🏷️ Classify engagement</button>':'')
     +'</div>';

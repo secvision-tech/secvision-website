@@ -307,6 +307,10 @@ exports.handler = async (event) => {
       if (body.companyType && body.companyType !== 'all') filter.companyType = body.companyType;
       if (body.jobType && body.jobType !== 'all') filter.jobType = body.jobType;
       if (body.c2cOnly) filter.engagementModel = { $in: ['C2C', 'C2C-likely'] };   // #592: 'C2C only' checkbox
+      // #628: offshore filter — 'possible' hides jobs the classifier marked US-only (yes + unknown pass)
+      if (body.offshore === 'possible') filter.offshoreOk = { $ne: 'no' };
+      else if (body.offshore === 'yes') filter.offshoreOk = 'yes';
+      else if (body.offshore === 'no') filter.offshoreOk = 'no';
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
       if (body.detectedCountry && body.detectedCountry !== 'all') filter.detectedCountry = body.detectedCountry;
       if (body.location) {

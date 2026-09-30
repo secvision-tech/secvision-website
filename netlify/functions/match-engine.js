@@ -1680,6 +1680,10 @@ exports.handler = async function (event) {
           { $or: [{ jobType: { $regex: 'contract', $options: 'i' } }, { contractDuration: { $exists: true, $nin: [null, ''] } }] }
         ]
       };
+      // #628: an India-based consultant is never scored against jobs the classifier marked US-only
+      // (clearance, visa-independent, state/federal). Saves scoring credits and keeps the list honest.
+      var consOffshore = /india/i.test(String(consultant.country || '') + ' ' + String(consultant.location || '') + ' ' + String(consultant.locationEn || ''));
+      if (consOffshore && !body.includeUsOnly) jobQuery.$and.push({ offshoreOk: { $ne: 'no' } });
       var candidateJobs = await jobsCol.find(jobQuery)
         .project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, salary: 1,
           datePosted: 1, dateScanned: 1, skills: 1, certifications: 1, compliance: 1, tools: 1,
@@ -1707,7 +1711,7 @@ exports.handler = async function (event) {
             $and: [
               { $or: [{ _id: { $in: oids } }, { jobId: { $in: missingKeys } }] },
               { $or: [{ datePosted: { $gte: since } }, { dateScanned: { $gte: since } }] }
-            ]
+            ].concat(consOffshore && !body.includeUsOnly ? [{ offshoreOk: { $ne: 'no' } }] : [])   // #628
           }).project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, salary: 1,
             datePosted: 1, dateScanned: 1, skills: 1, certifications: 1, compliance: 1, tools: 1,
             experience: 1, experienceLevel: 1, jobType: 1, remote: 1, contractDuration: 1, applyLink: 1,
