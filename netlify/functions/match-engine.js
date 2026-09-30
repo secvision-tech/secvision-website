@@ -403,8 +403,9 @@ function extractJobRequirements(job) {
     jobType: job.jobType || '',
     salary: job.salary || '',
     margin: job.margin || '',
+    offshoreOk: job.offshoreOk || '',   // #634: classifier verdict — 'yes' switches the country penalty off
     reqHash: (function () {   // #583 D-C: fingerprint of the scoring-relevant requirement
-      var basis = [job.title, job.skills, job.tools, job.certifications, job.compliance, job.experience, job.salary, job.margin, job.remote, job.workType, job.jobType, job.detectedCountry, job.location].map(function (x) { return String(x || '').toLowerCase().trim(); }).join('|');
+      var basis = [job.title, job.skills, job.tools, job.certifications, job.compliance, job.experience, job.salary, job.margin, job.remote, job.workType, job.jobType, job.detectedCountry, job.location, job.offshoreOk].map(function (x) { return String(x || '').toLowerCase().trim(); }).join('|');
       var h = 0; for (var i = 0; i < basis.length; i++) h = ((h << 5) - h + basis.charCodeAt(i)) | 0;
       return 'rq_' + Math.abs(h).toString(36);
     })(),
@@ -813,6 +814,10 @@ function locationFit(req, profile) {
   if (jobCountry === profCountry) {
     return { factor: band.sameCountry, sameCountry: true, profCountry: profCountry, note: '' };
   }
+  // #634: the posting itself says offshore/nearshore is accepted — a different country is not a penalty.
+  if (String(req.offshoreOk || '') === 'yes') {
+    return { factor: 1, sameCountry: false, profCountry: profCountry, note: 'Different country — posting accepts offshore, no penalty' };
+  }
   var pretty = profCountry.replace(/\b\w/g, function (m) { return m.toUpperCase(); });
   var jobPretty = jobCountry.replace(/\b\w/g, function (m) { return m.toUpperCase(); });
   var note = remote === true
@@ -1125,7 +1130,9 @@ exports.handler = async function (event) {
         var mc = (p.matchCache || {})[req.jobId] || (p.jobMatchCache || {})[req.jobId];   // #491: union
         // Re-score anything cached before the current scoring version (e.g. entries saved
         // before the location penalty existed), otherwise stale scores would persist forever.
-        if (mc && mc.v === SCORING_VERSION) {
+        // #634: a cached score whose requirement fingerprint no longer matches (job edited, offshore verdict
+        // changed) is stale — re-score it instead of showing a number computed against the old requirement.
+        if (mc && mc.v === SCORING_VERSION && (!mc.reqHash || mc.reqHash === req.reqHash)) {
           // locationFit isn't stored in the cache entry — recompute it (cheap, deterministic)
           // so the in-country count and the UI badge work for cached results too.
           var lfC = locationFit(req, p);
