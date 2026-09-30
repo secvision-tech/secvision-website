@@ -278,6 +278,8 @@ exports.handler = async (event) => {
       var filter = {};
       if (body.query) {
         var q = body.query.trim();
+        // #631: "SOC OR Splunk OR SIEM" → alternation (the box is already a case-insensitive regex, so "SOC|Splunk" also works)
+        q = q.replace(/\s+OR\s+/gi, '|');
         // #444: a 24-hex query is an ID lookup — find that exact job.
         if (/^[0-9a-f]{24}$/i.test(q)) {
           try { filter._id = new (require('mongodb').ObjectId)(q); } catch (e) {}
