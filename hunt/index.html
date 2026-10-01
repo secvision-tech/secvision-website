@@ -1001,9 +1001,10 @@ async function searchDb(){
 // #592: engagement-model chip (C2C / C2C-likely / W2-contract / Direct-hire); evidence on hover
 function engChip(j){
   var m=j.engagementModel;if(!m||m==='Unknown')return '';
-  var C={'C2C':['#DCFCE7','#166534','C2C'],'C2C-likely':['#ECFDF5','#047857','C2C?'],'W2-contract':['#FEF3C7','#92400E','W2'],'Direct-hire':['#F3F4F6','#4B5563','Direct']}[m]||['#F3F4F6','#4B5563',m];
+  var C={'C2C':['#DCFCE7','#166534','C2C'],'C2C-likely':['#ECFDF5','#047857','C2C?'],'W2-contract':['#FEF3C7','#92400E','W2'],'Direct-hire':['#F3F4F6','#4B5563','Direct'],'Expert-gig':['#EDE9FE','#5B21B6','Gig']}[m]||['#F3F4F6','#4B5563',m];
   var off=j.offshoreOk==='yes'?' 🌏':(j.offshoreOk==='no'?' 🚫':'');
-  return ' <span title="'+esc(m+(j.engagementEvidence?' — '+j.engagementEvidence:'')+(j.offshoreOk&&j.offshoreOk!=='unknown'?' · offshore '+j.offshoreOk:''))+'" style="font-size:.5rem;background:'+C[0]+';color:'+C[1]+';padding:.05rem .3rem;border-radius:3px;font-weight:700;white-space:nowrap">'+C[2]+off+'</span>';
+  var wm=j.workMode&&j.workMode!=='unknown'?' · '+j.workMode:'';   // #636
+  return ' <span title="'+esc(m+wm+(j.engagementAI?' (AI)':' (rules)')+(j.engagementEvidence?' — '+j.engagementEvidence:'')+(j.offshoreOk&&j.offshoreOk!=='unknown'?' · offshore '+j.offshoreOk:''))+'" style="font-size:.5rem;background:'+C[0]+';color:'+C[1]+';padding:.05rem .3rem;border-radius:3px;font-weight:700;white-space:nowrap">'+C[2]+off+'</span>';
 }
 function statusBadge(status){
   var cls={'new':'status-new','reviewed':'status-reviewed','contacted':'status-contacted','archived':'status-archived'};
@@ -1155,6 +1156,7 @@ async function searchJobs(){
     }
     var savedMsg=data.savedToDb?' | '+data.savedToDb+' saved to database':'';
     dashLoaded=false;contractLoaded=false; // Reset dashboard cache for fresh data
+    if(data.savedToDb)setTimeout(function(){aiClassifyDrain(5)},1500);   // #636: AI verdicts for the new jobs, in the background
     document.getElementById('apiText').textContent='Found '+data.totalResults+' jobs ('+data.apiCalls+' API calls, '+data.rolesSearched.length+' roles). '+allJobs.length+' after filters.'+savedMsg;
     colFilters={};sortCol='';sortDir=1;
     document.querySelectorAll('#thFilter input').forEach(function(i){i.value=''});
@@ -1334,6 +1336,7 @@ async function apifySearchBackground(roles,selRegion,selCountry,datePosted,empTy
       }catch(e){console.error('Batch save error:',e)}
     }
 
+    setTimeout(function(){aiClassifyDrain(5)},1500);   // #636
     // Merge into current view — add new jobs that aren't already displayed
     var existingTitles={};
     allJobs.forEach(function(j){existingTitles[(j.title+'|'+j.company).toLowerCase()]=true});
@@ -2168,7 +2171,7 @@ async function saveJobPdf(i){
       styles:{fontSize:10,cellPadding:5,valign:'top',textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:140,fontStyle:'bold',fillColor:[248,250,252]},1:{cellWidth:W-2*M-140}},margin:{left:M,right:M}});
     y=doc.lastAutoTable.finalY+10;
   };
-  var eng=(j.engagementModel&&j.engagementModel!=='Unknown')?j.engagementModel+(j.offshoreOk==='yes'?' · offshore OK':(j.offshoreOk==='no'?' · US-based only':'')):'—';
+  var eng=(j.engagementModel&&j.engagementModel!=='Unknown')?j.engagementModel+(j.workMode&&j.workMode!=='unknown'?' · '+j.workMode:'')+(j.offshoreOk==='yes'?' · offshore OK':(j.offshoreOk==='no'?' · not offshoreable':'')):'—';
   kv('Job details',[
     ['Job ID',String(j._id||j.jobId||'')],['Source ID',j._id&&j.jobId&&String(j.jobId)!==String(j._id)?String(j.jobId):'—'],['Posted',j.dateRaw||j.datePosted?fmtDate(j.dateRaw||j.datePosted):'—'],['Source',val(j.source)],
     ['Company',val(j.company)],['Company type',val(j.companyType)],['Location',val(j.location)],['Country',val(j.detectedCountry)],
@@ -3627,22 +3630,43 @@ function cjRowPasses(j){
   for(var k in _cjFlt){var v=_cjFlt[k];if(!v)continue;var fn=CJ_FVAL[k];var val=fn?fn(j):(j[k]==null?'':String(j[k]));if(String(val).toLowerCase().indexOf(v)<0)return false}
   return true;
 }
-async function cjClassifyEngagement(btn){
-  // #596: OK = re-classify ALL jobs with the current rules (after a classifier update); Cancel = only unclassified jobs
-  var force=await uiConfirm('Re-classify ALL jobs with the latest rules?\n\nOK = all jobs (use after a classifier update)\nCancel = only jobs not yet classified');
-  btn.disabled=true;var done=0,tally={},skip=0;
+// #636: AI engagement classification. One Haiku call per job, 20 per request. The rules-based classifier
+// still runs at harvest as the instant placeholder; this pass replaces it with the AI verdict.
+var _aiDrainBusy=false;
+async function aiClassifyDrain(maxCalls,opts){
+  // background: classify pending jobs from the last 90 days, a few batches at a time, never blocking the UI
+  if(_aiDrainBusy)return;_aiDrainBusy=true;var total=0;
   try{
-    for(var i=0;i<60;i++){
-      btn.textContent='Classifying... '+done;
-      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'classifyEngagementBackfill',force:force,skip:skip})});
-      var d=await r.json();if(d.error){alert(d.error);break}
-      done+=d.classified||0;skip+=d.classified||0;Object.keys(d.tally||{}).forEach(function(k){tally[k]=(tally[k]||0)+d.tally[k]});
-      if(!d.classified||(!force&&!d.remaining)||(force&&d.classified<400))break;
+    for(var i=0;i<(maxCalls||3);i++){
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action:'classifyEngagementAI',limit:20,days:90},opts||{}))});
+      var d=await r.json();if(d.error||!d.picked)break;total+=d.classified||0;
+      if(!d.remaining)break;
     }
-    alert('Engagement classification: '+done+' jobs classified.\n'+Object.keys(tally).map(function(k){return k+': '+tally[k]}).join('\n')+(done?'\n\nRefreshing the table.':''));
+  }catch(e){}
+  _aiDrainBusy=false;
+  if(total){contractLoaded=false;try{if(document.getElementById('contractJobsList')&&cjData.length)loadContractPipeline()}catch(e){}}
+  return total;
+}
+async function cjClassifyEngagement(btn,ev){
+  var forceAll=!!(ev&&ev.shiftKey);   // Shift+click = re-run every job in the window (after a prompt change)
+  var ok=await uiConfirm(forceAll?'Re-run AI classification on ALL contract jobs from the last 90 days?\n\nThis re-reads every JD (roughly $2–3 of credits per 1,500 jobs).':'AI-classify contract jobs from the last 90 days that have no AI verdict yet?\n\n(Shift+click the button to re-run all of them after a prompt change.)');
+  if(!ok)return;
+  btn.disabled=true;var done=0,failed=0,tally={},off={yes:0,no:0,unknown:0},calls=0,skip=0;
+  try{
+    for(var i=0;i<400;i++){
+      btn.textContent='🤖 AI classifying... '+done;calls++;
+      var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'classifyEngagementAI',limit:20,days:90,force:forceAll,skip:skip})});
+      var d=await r.json();if(d.error){await uiAlert(d.error);break}
+      done+=d.classified||0;failed+=d.failed||0;skip+=d.picked||0;
+      Object.keys(d.tally||{}).forEach(function(k){tally[k]=(tally[k]||0)+d.tally[k]});Object.keys(d.offshore||{}).forEach(function(k){off[k]=(off[k]||0)+d.offshore[k]});
+      if(!d.picked)break;
+      if(forceAll){if(d.picked<20)break}else if(!d.remaining)break;
+      if(forceAll&&!d.classified&&d.failed)break;   // API down — don't spin
+    }
+    await uiAlert('AI engagement classification: '+done+' jobs classified'+(failed?', '+failed+' failed (API)':'')+'.\n'+Object.keys(tally).map(function(k){return k+': '+tally[k]}).join('\n')+'\n\nOffshore — yes: '+off.yes+' · no: '+off.no+' · unknown: '+off.unknown+(done?'\n\nRefreshing the table.':''));
     if(done){contractLoaded=false;await loadContractPipeline();contractLoaded=true}
-  }catch(e){alert('Failed: '+e.message)}
-  btn.disabled=false;btn.textContent='🏷️ Classify engagement';
+  }catch(e){await uiAlert('Failed: '+e.message)}
+  btn.disabled=false;btn.textContent='🤖 AI classify engagement';
 }
 function renderContractJobs(){
   var el=document.getElementById('contractJobsList');if(!el||!cjData.length)return;
@@ -3668,7 +3692,7 @@ function renderContractJobs(){
     +['possible|Possible (not US-only)','any|Any','yes|Confirmed yes','no|Not possible (US-only)'].map(function(o){var p=o.split('|');return '<option value="'+p[0]+'"'+(_cjOffshore===p[0]?' selected':'')+'>'+p[1]+'</option>'}).join('')
     +'</select></label>'
     +'<span style="font-size:.56rem;color:var(--g5)">'+total+' of '+cjData.length+' shown</span>'
-    +(CAP.canEditFields?'<button onclick="cjClassifyEngagement(this)" title="Classify engagement model (C2C / W2 / direct-hire) for jobs saved before this feature existed" style="margin-left:auto;padding:.15rem .5rem;background:#fff;border:1px solid var(--g2);border-radius:4px;font-size:.56rem;cursor:pointer">🏷️ Classify engagement</button>':'')
+    +(CAP.canEditFields?'<button onclick="cjClassifyEngagement(this,event)" title="#636 — AI reads each JD (last 90 days) and sets engagement model, work mode, locality, clearance and offshore verdict. Runs only on jobs without an AI verdict unless you choose re-run all." style="margin-left:auto;padding:.15rem .5rem;background:#fff;border:1px solid var(--g2);border-radius:4px;font-size:.56rem;cursor:pointer">🤖 AI classify engagement</button>':'')
     +'</div>';
   html+='<div style="overflow-x:auto"><table class="dash-table" id="cjTable" style="font-size:.62rem;table-layout:fixed;width:100%;min-width:'+CJ_COLS.reduce(function(s,c){return s+c.ch},0)+'ch"><thead><tr>';
   CJ_COLS.forEach(function(c){
@@ -5903,6 +5927,7 @@ async function saveDemand(){
     if(d.error){st.textContent='⚠️ '+d.error;go.disabled=false;return}
     if(d.filtered){st.textContent='⚠️ The pipeline judged this not cybersecurity-relevant — add security terms to the description.';go.disabled=false;return}
     st.textContent='✅ Requirement saved ('+(d.saved!=null?d.saved:1)+'). It now appears in the jobs table and matches against consultants.';
+    setTimeout(function(){aiClassifyDrain(1,{jobIds:[job.jobId],force:true})},800);   // #636
     setTimeout(function(){document.getElementById('adOverlay').remove();try{if(typeof searchDb==='function')searchDb()}catch(e){}},1400);
   }catch(e){st.textContent='⚠️ '+e.message;go.disabled=false}
 }

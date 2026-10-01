@@ -404,8 +404,9 @@ function extractJobRequirements(job) {
     salary: job.salary || '',
     margin: job.margin || '',
     offshoreOk: job.offshoreOk || '',   // #634: classifier verdict — 'yes' switches the country penalty off
+    workMode: job.workMode || '',       // #636: AI verdict remote/hybrid/onsite — authoritative in jobIsRemote
     reqHash: (function () {   // #583 D-C: fingerprint of the scoring-relevant requirement
-      var basis = [job.title, job.skills, job.tools, job.certifications, job.compliance, job.experience, job.salary, job.margin, job.remote, job.workType, job.jobType, job.detectedCountry, job.location, job.offshoreOk].map(function (x) { return String(x || '').toLowerCase().trim(); }).join('|');
+      var basis = [job.title, job.skills, job.tools, job.certifications, job.compliance, job.experience, job.salary, job.margin, job.remote, job.workType, job.jobType, job.detectedCountry, job.location, job.offshoreOk, job.workMode].map(function (x) { return String(x || '').toLowerCase().trim(); }).join('|');
       var h = 0; for (var i = 0; i < basis.length; i++) h = ((h << 5) - h + basis.charCodeAt(i)) | 0;
       return 'rq_' + Math.abs(h).toString(36);
     })(),
@@ -722,6 +723,9 @@ const LOC_PENALTY = {
 function jobIsRemote(req) {
   // #572: the remote field itself is authoritative when it carries an explicit value —
   // "Yes"/"true" (the popup edit stores "Yes") means remote even though the WORD isn't there.
+  var wm = String(req.workMode || '').toLowerCase();   // #636
+  if (wm === 'remote') return true;
+  if (wm === 'hybrid' || wm === 'onsite') return false;
   var rf = String(req.remote || '').trim().toLowerCase();
   if (/^(yes|true|remote)\b/.test(rf)) return true;
   if (/^(no|false)\b/.test(rf) && !/hybrid|remote/.test(rf)) return false;
@@ -1695,7 +1699,7 @@ exports.handler = async function (event) {
         .project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, salary: 1,
           datePosted: 1, dateScanned: 1, skills: 1, certifications: 1, compliance: 1, tools: 1,
           experience: 1, experienceLevel: 1, jobType: 1, remote: 1, contractDuration: 1, applyLink: 1,
-          jobUrl: 1, source: 1, matchCacheRev: 1 })
+          jobUrl: 1, source: 1, matchCacheRev: 1, offshoreOk: 1, workMode: 1 })
         .sort({ datePosted: -1, dateScanned: -1 }).limit(500).toArray();
 
       // Split into already-scored (cached on the consultant) vs to-score.
@@ -1722,7 +1726,7 @@ exports.handler = async function (event) {
           }).project({ title: 1, titleClean: 1, company: 1, location: 1, detectedCountry: 1, salary: 1,
             datePosted: 1, dateScanned: 1, skills: 1, certifications: 1, compliance: 1, tools: 1,
             experience: 1, experienceLevel: 1, jobType: 1, remote: 1, contractDuration: 1, applyLink: 1,
-            jobUrl: 1, source: 1, matchCacheRev: 1 }).toArray();
+            jobUrl: 1, source: 1, matchCacheRev: 1, offshoreOk: 1, workMode: 1 }).toArray();
           candidateJobs = candidateJobs.concat(pinned);
         }
       } catch (e) { /* pinning is additive; never fail the match */ }

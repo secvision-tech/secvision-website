@@ -125,6 +125,7 @@ exports.handler = async (event) => {
       getJob: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
       getRecentContracts: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
       classifyEngagementBackfill: ['super_admin', 'admin', 'manager'],   // #592
+      classifyEngagementAI: ['super_admin', 'admin', 'manager', 'analyst'],   // #636
       getEnrichmentStatus: ['super_admin', 'admin', 'manager', 'analyst'],
       // Pie chart searches: all
       searchDashPie: ['super_admin', 'admin', 'manager', 'analyst', 'viewer'],
@@ -243,7 +244,7 @@ exports.handler = async (event) => {
     // Define RBAC rules per action
     var ACTION_ROLES = {
       'search': ALL_ACTIVE, 'getDashboard': ALL_ACTIVE, 'getJob': ALL_ACTIVE, 'deleteJob': ['super_admin', 'admin', 'manager'],
-      'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE, 'classifyEngagementBackfill': ['super_admin', 'admin', 'manager'],   // #592
+      'getRecentContracts': ALL_ACTIVE, 'searchDashPie': ALL_ACTIVE, 'classifyEngagementBackfill': ['super_admin', 'admin', 'manager'], 'classifyEngagementAI': ['super_admin', 'admin', 'manager', 'analyst'],   // #592 / #636
       'searchContractByCountry': ALL_ACTIVE, 'searchContractBySkill': ALL_ACTIVE,
       // #336: company/job field edits are manager+ ; status is analyst+
       'updateField': MANAGER_UP, 'updateJob': MANAGER_UP, 'updateCompanyInfo': MANAGER_UP, 'updateCompanyName': MANAGER_UP,   // #613
@@ -517,7 +518,7 @@ exports.handler = async (event) => {
       // description edited -> re-classify engagement and drop the cached AI formatting so it is regenerated from the new text
       var unsetU = {};
       if (setU.description !== undefined || setU.title !== undefined || setU.jobType !== undefined) {
-        try { var eu = classifyEngagement(Object.assign({}, ujDoc2, setU)); setU.engagementModel = eu.model; setU.offshoreOk = eu.offshoreOk; setU.engagementEvidence = eu.evidence; } catch (e) {}
+        try { var eu = classifyEngagement(Object.assign({}, ujDoc2, setU)); setU.engagementModel = eu.model; setU.offshoreOk = eu.offshoreOk; setU.engagementEvidence = eu.evidence; setU.engagementAI = false; } catch (e) {}   // #636: AI re-runs on the next pass
       }
       if (setU.description !== undefined) { unsetU.descFormatted = ''; unsetU.descFormattedHash = ''; unsetU.descFormatVersion = ''; }
       var updU = { $set: setU, $push: { comments: { text: 'Job details edited: ' + changed.join(', '), author: authUser.email, system: true, createdAt: new Date() } } };
@@ -1897,12 +1898,56 @@ exports.handler = async (event) => {
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ classified: bfOps.length, remaining: bfLeft, tally: bfTally }) };
     }
 
+    // ---- #636: AI engagement classification (Haiku, one call per job, 20 per request in parallel) ----
+    // body.jobIds: classify exactly these (after a harvest / manual add); otherwise pick jobs in the last
+    // body.days (default 90) that have no AI verdict yet (or all of them with body.force), newest first.
+    if (action === 'classifyEngagementAI') {
+      var engAI = require('./engagement');
+      if (!process.env.ANTHROPIC_API_KEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI key not configured' }) };
+      var aiLimit = Math.min(parseInt(body.limit) || 20, 25);
+      var aiDays = Math.min(parseInt(body.days) || 90, 3650);
+      var aiSince = new Date(Date.now() - aiDays * 86400000);
+      var aiQ;
+      if (Array.isArray(body.jobIds) && body.jobIds.length) {
+        var OIDa = require('mongodb').ObjectId, aiOids = [];
+        body.jobIds.forEach(function (k) { try { aiOids.push(new OIDa(String(k))); } catch (e) {} });
+        aiQ = { $or: [{ _id: { $in: aiOids } }, { jobId: { $in: body.jobIds.map(String) } }] };
+        if (!body.force) aiQ.engagementAI = { $ne: true };
+      } else {
+        aiQ = { $or: [{ datePosted: { $gte: aiSince } }, { dateScanned: { $gte: aiSince } }] };
+        if (!body.force) aiQ.engagementAI = { $ne: true };
+        if (body.contractOnly !== false) aiQ.$and = [{ $or: [{ jobType: { $regex: 'contract', $options: 'i' } }, { contractDuration: { $exists: true, $nin: [null, ''] } }, { source: 'Manual' }] }];
+      }
+      var aiJobs = await col.find(aiQ).sort({ datePosted: -1, dateScanned: -1 }).skip(body.force && !(Array.isArray(body.jobIds) && body.jobIds.length) ? (parseInt(body.skip) || 0) : 0)
+        .project({ title: 1, company: 1, companyType: 1, description: 1, jobType: 1, salary: 1, contractDuration: 1, source: 1, detectedCountry: 1, location: 1, remote: 1, workType: 1 })
+        .limit(aiLimit).toArray();
+      var aiResults = await Promise.all(aiJobs.map(function (j) { return engAI.classifyEngagementAI(j).catch(function () { return null; }); }));
+      var aiOps = [], aiTally = {}, aiFailed = 0, aiOff = { yes: 0, no: 0, unknown: 0 };
+      aiJobs.forEach(function (j, i) {
+        var r = aiResults[i];
+        if (!r) { aiFailed++; return; }
+        var setA = engAI.aiSetFields(r);
+        // the JD names a city while the board only gave a country/"Remote"
+        try { if (engAI.isBareLocation(j.location) && r.ai.jdCity && !engAI.isBareLocation(r.ai.jdCity)) { setA.location = r.ai.jdCity; setA.locationOrig = j.location || ''; } } catch (e) {}
+        aiOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: setA } } });
+        aiTally[r.model] = (aiTally[r.model] || 0) + 1; aiOff[r.offshoreOk] = (aiOff[r.offshoreOk] || 0) + 1;
+      });
+      if (aiOps.length) await col.bulkWrite(aiOps, { ordered: false });
+      var aiLeft = 0;
+      if (!(Array.isArray(body.jobIds) && body.jobIds.length)) {
+        var leftQ = { $or: [{ datePosted: { $gte: aiSince } }, { dateScanned: { $gte: aiSince } }], engagementAI: { $ne: true } };
+        if (body.contractOnly !== false) leftQ.$and = aiQ.$and;
+        aiLeft = await col.countDocuments(leftQ);
+      }
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ classified: aiOps.length, failed: aiFailed, picked: aiJobs.length, remaining: aiLeft, tally: aiTally, offshore: aiOff }) };
+    }
+
     if (action === 'getRecentContracts') {
       var oneMonthAgo = new Date();
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       var contracts = await col.find(applyScope({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] }))
         .sort({ datePosted: -1, dateScanned: -1 })
-        .project({ candidateCount: { $size: { $ifNull: ['$candidateProfiles', []] } }, engagementModel: 1, offshoreOk: 1, engagementEvidence: 1, title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
+        .project({ candidateCount: { $size: { $ifNull: ['$candidateProfiles', []] } }, engagementModel: 1, offshoreOk: 1, engagementEvidence: 1, engagementAI: 1, workMode: 1, title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
         .toArray();
       // #395: expose matched-consultant count, drop the heavy array
       contracts.forEach(function (c) { if (typeof c.candidateCount !== 'number') c.candidateCount = Array.isArray(c.candidateProfiles) ? c.candidateProfiles.length : 0; delete c.candidateProfiles; });   // #618: count computed in the projection

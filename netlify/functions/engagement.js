@@ -63,4 +63,103 @@ function extractJdLocation(desc) {
   return '';
 }
 function isBareLocation(loc) { return !String(loc || '').trim() || /^(remote|hybrid|anywhere|usa|us|u\.s\.|united states|united states of america|india|uk|united kingdom|canada|worldwide|global|n\/a)$/i.test(String(loc).trim()); }
-module.exports = { classifyEngagement: classifyEngagement, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };
+
+// ---------------------------------------------------------------------------
+// #636: AI classification — one Haiku call per job, strict JSON out. The regex classifier above stays as the
+// instant placeholder at harvest and as the fallback when the API is unavailable; this is the authority.
+// Requirement paragraphs outrank company boilerplate ("global provider of offshore outsourcing" is not a
+// term of the job). offshoreOk is DERIVED here from workMode/locality/workAuth/clearance so fields never
+// contradict each other.
+// ---------------------------------------------------------------------------
+var AI_MODEL = 'claude-haiku-4-5-20251001';
+var AI_PROMPT = [
+  'You classify a job posting for a staffing agency that supplies India-based remote cybersecurity consultants to US/EU clients.',
+  'Read the posting and return ONLY a JSON object (no prose, no code fence) with exactly these keys:',
+  '{',
+  '  "engagementModel": "C2C" | "C2C-likely" | "W2-contract" | "Direct-hire" | "Expert-gig" | "Unknown",',
+  '  "workMode": "remote" | "hybrid" | "onsite" | "unknown",',
+  '  "locality": "none" | "must-be-local" | "state-residents" | "nationwide-US" | "country-only",',
+  '  "workAuth": "none" | "usc-only" | "usc-gc" | "no-sponsorship" | "visa-independent" | "any-visa",',
+  '  "clearance": "none" | "public-trust" | "secret" | "ts-sci" | "cjis" | "other",',
+  '  "payType": "hourly" | "annual" | "per-task" | "none",',
+  '  "offshoreStated": "yes" | "no" | "unstated",',
+  '  "jdCity": "<city, state/country named as the work location in the body, or empty>",',
+  '  "confidence": <0.0-1.0>,',
+  '  "evidence": ["<verbatim quote>", "<verbatim quote>", "<verbatim quote>"]',
+  '}',
+  'Rules:',
+  '- Only the REQUIREMENTS of this job count. Ignore "About the company" boilerplate: a firm that "provides offshore/nearshore outsourcing" says nothing about whether THIS seat can be offshore.',
+  '- engagementModel: "C2C" when corp-to-corp / vendors / subcontractors / all visas are explicitly welcome; "W2-contract" for W2-only, contract-to-hire, CTH, temp-to-perm, or when subcontracting/C2C is explicitly refused; "Direct-hire" for permanent or salaried employment (annual salary band, benefits, 401k, PTO) even if the board tags it "Contract"; "Expert-gig" for AI-training / data-labelling / expert-grading platforms paid per task or hour to individuals; "C2C-likely" for a contract role from a staffing or consulting firm with hourly rate or duration but no explicit vendor language; otherwise "Unknown".',
+  '- workMode: "hybrid" if any days on-site are required; "onsite" if fully on-site; "remote" only if the role is fully remote.',
+  '- locality: "must-be-local" for "candidate must be local" / "locals only"; "state-residents" for residency in a named state; "nationwide-US" for "anywhere in the US" / "open to candidates nationwide" / "remote - US"; "country-only" when the posting restricts to a named country other than the US; else "none".',
+  '- clearance: any government clearance, Public Trust, CJIS, or "must be able to obtain a clearance" counts. State or federal program work with background checks beyond a routine check -> "other".',
+  '- payType: "annual" when a yearly salary figure is given (e.g. $90,000 - $120,000, $85K/yr, per annum); "hourly" for $/hr; "per-task" for per-task/per-item payment.',
+  '- offshoreStated: "yes" only if the REQUIREMENT says offshore / nearshore / India-based / global remote / any location is acceptable; "no" if it says US-based only, must reside in the US, no offshore, onshore only; else "unstated".',
+  '- evidence: up to 3 short verbatim quotes, one for each decisive field. Prefer the sentence that decided workMode/locality/clearance.',
+  '- If the posting is in India (location in India), answer the same fields literally; do not reason about offshoring.',
+  'Posting follows.'
+].join('\n');
+
+function deriveOffshore(c, job) {
+  var inIndia = /india/i.test(String((job && job.detectedCountry) || '') + ' ' + String((job && job.location) || ''));
+  if (inIndia) return { offshoreOk: 'yes', why: 'India-located posting' };
+  if (c.clearance && c.clearance !== 'none') return { offshoreOk: 'no', why: 'clearance: ' + c.clearance };
+  if (c.workMode === 'onsite' || c.workMode === 'hybrid') return { offshoreOk: 'no', why: 'work mode: ' + c.workMode };
+  if (c.locality === 'must-be-local' || c.locality === 'state-residents' || c.locality === 'nationwide-US' || c.locality === 'country-only') return { offshoreOk: 'no', why: 'locality: ' + c.locality };
+  if (c.workAuth === 'usc-only' || c.workAuth === 'usc-gc' || c.workAuth === 'visa-independent') return { offshoreOk: 'no', why: 'work authorization: ' + c.workAuth };
+  if (c.offshoreStated === 'no') return { offshoreOk: 'no', why: 'posting says US/onshore only' };
+  if (c.payType === 'annual' && c.engagementModel === 'Direct-hire') return { offshoreOk: 'no', why: 'salaried employee hire' };
+  if (c.offshoreStated === 'yes') return { offshoreOk: 'yes', why: 'posting accepts offshore' };
+  if (c.workAuth === 'any-visa') return { offshoreOk: 'yes', why: 'all visas accepted' };
+  return { offshoreOk: 'unknown', why: '' };
+}
+
+// Returns {model, offshoreOk, evidence, ai:{...}} or null when the API is not configured / fails.
+async function classifyEngagementAI(job, opts) {
+  opts = opts || {};
+  var key = opts.apiKey || process.env.ANTHROPIC_API_KEY;
+  if (!key) return null;
+  var desc = String(job.description || '').replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 9000);
+  if (!desc && !job.title) return null;
+  var header = [
+    'Title: ' + (job.title || ''), 'Company: ' + (job.company || ''), 'Company type: ' + (job.companyType || ''),
+    'Board location: ' + (job.location || ''), 'Country: ' + (job.detectedCountry || ''), 'Board job type: ' + (job.jobType || ''),
+    'Board remote flag: ' + (job.remote || job.workType || ''), 'Salary/rate field: ' + (job.salary || ''), 'Duration field: ' + (job.contractDuration || ''),
+    'Source: ' + (job.source || '')
+  ].join('\n');
+  var ctrl = new AbortController();
+  var tmo = setTimeout(function () { ctrl.abort(); }, opts.timeoutMs || 18000);
+  try {
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', signal: ctrl.signal,
+      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: AI_MODEL, max_tokens: 500, temperature: 0,
+        system: AI_PROMPT,
+        messages: [{ role: 'user', content: header + '\n\n---\n' + desc }] })
+    });
+    if (!resp.ok) throw new Error('Anthropic ' + resp.status);
+    var data = await resp.json();
+    var txt = (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
+    txt = txt.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    var m = txt.match(/\{[\s\S]*\}/); if (!m) throw new Error('no JSON');
+    var c = JSON.parse(m[0]);
+    var MODELS = ['C2C', 'C2C-likely', 'W2-contract', 'Direct-hire', 'Expert-gig', 'Unknown'];
+    if (MODELS.indexOf(c.engagementModel) < 0) c.engagementModel = 'Unknown';
+    var d = deriveOffshore(c, job);
+    var ev = (Array.isArray(c.evidence) ? c.evidence : []).filter(Boolean).map(function (q) { return '"' + String(q).replace(/\s+/g, ' ').slice(0, 90) + '"'; }).join(' · ');
+    var tags = [c.workMode && c.workMode !== 'unknown' ? c.workMode : '', c.locality && c.locality !== 'none' ? c.locality : '', c.clearance && c.clearance !== 'none' ? 'clearance:' + c.clearance : '', c.workAuth && c.workAuth !== 'none' ? c.workAuth : '', c.payType && c.payType !== 'none' ? c.payType : ''].filter(Boolean).join(', ');
+    return {
+      model: c.engagementModel, offshoreOk: d.offshoreOk,
+      evidence: 'AI: ' + (tags || 'no restrictions found') + (d.why ? ' · offshore ' + d.offshoreOk + ' (' + d.why + ')' : '') + (ev ? ' · ' + ev : ''),
+      ai: { workMode: c.workMode || 'unknown', locality: c.locality || 'none', workAuth: c.workAuth || 'none', clearance: c.clearance || 'none', payType: c.payType || 'none', offshoreStated: c.offshoreStated || 'unstated', jdCity: String(c.jdCity || '').slice(0, 60), confidence: typeof c.confidence === 'number' ? c.confidence : null, model: AI_MODEL, at: new Date() }
+    };
+  } catch (e) {
+    return null;
+  } finally { clearTimeout(tmo); }
+}
+// Fields to $set on a job doc from an AI result
+function aiSetFields(r) {
+  return { engagementModel: r.model, offshoreOk: r.offshoreOk, engagementEvidence: r.evidence, engagementAI: true, workMode: r.ai.workMode, engagementDetail: r.ai };
+}
+
+module.exports = { classifyEngagement: classifyEngagement, classifyEngagementAI: classifyEngagementAI, aiSetFields: aiSetFields, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };
