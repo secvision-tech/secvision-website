@@ -89,13 +89,14 @@ var AI_PROMPT = [
   '}',
   'Rules:',
   '- Only the REQUIREMENTS of this job count. Ignore "About the company" boilerplate: a firm that "provides offshore/nearshore outsourcing" says nothing about whether THIS seat can be offshore.',
-  '- engagementModel: "C2C" when corp-to-corp / vendors / subcontractors / all visas are explicitly welcome; "W2-contract" for W2-only, contract-to-hire, CTH, temp-to-perm, or when subcontracting/C2C is explicitly refused; "Direct-hire" for permanent or salaried employment (annual salary band, benefits, 401k, PTO) even if the board tags it "Contract"; "Expert-gig" for AI-training / data-labelling / expert-grading platforms paid per task or hour to individuals; "C2C-likely" for a contract role from a staffing or consulting firm with hourly rate or duration but no explicit vendor language; otherwise "Unknown".',
-  '- workMode: "hybrid" if any days on-site are required; "onsite" if fully on-site; "remote" only if the role is fully remote.',
+  '- engagementModel: "C2C" when corp-to-corp / vendors / subcontractors / all visas are explicitly welcome; "W2-contract" ONLY when the text itself says W2 / W-2 only, contract-to-hire, CTH, temp-to-perm, or explicitly refuses subcontracting or C2C; "Direct-hire" for permanent or salaried employment (annual salary band, benefits, 401k, PTO) even if the board tags it "Contract"; "Expert-gig" for AI-training / data-labelling / expert-grading platforms paid per task or hour to individuals; "C2C-likely" for a contract role from a staffing or consulting firm with hourly rate or duration but no explicit vendor language; otherwise "Unknown".',
+  '- Never infer engagement terms from the company name or its reputation (e.g. "large staffing firms usually use W2"). If no sentence states the terms, answer "Unknown". "Unknown" is a correct and expected answer.',
+  '- workMode: "hybrid" if any days on-site are required; "onsite" ONLY if the text says on-site / in-office / in-person / at the client location is required; "remote" only if the role is fully remote. A city or address alone, with no statement about remote or on-site, is "unknown".',
   '- locality: "must-be-local" for "candidate must be local" / "locals only"; "state-residents" for residency in a named state; "nationwide-US" for "anywhere in the US" / "open to candidates nationwide" / "remote - US"; "country-only" when the posting restricts to a named country other than the US; else "none".',
   '- clearance: any government clearance, Public Trust, CJIS, or "must be able to obtain a clearance" counts. State or federal program work with background checks beyond a routine check -> "other".',
   '- payType: "annual" when a yearly salary figure is given (e.g. $90,000 - $120,000, $85K/yr, per annum); "hourly" for $/hr; "per-task" for per-task/per-item payment.',
   '- offshoreStated: "yes" only if the REQUIREMENT says offshore / nearshore / India-based / global remote / any location is acceptable; "no" if it says US-based only, must reside in the US, no offshore, onshore only; else "unstated".',
-  '- evidence: up to 3 short verbatim quotes, one for each decisive field. Prefer the sentence that decided workMode/locality/clearance.',
+  '- evidence: up to 3 short verbatim quotes (under 100 characters each), one for each decisive field. Prefer the sentence that decided workMode/locality/clearance. Inside a quote, replace any double-quote character with a single quote so the JSON stays valid.',
   '- If the posting is in India (location in India), answer the same fields literally; do not reason about offshoring.',
   'Posting follows.'
 ].join('\n');
@@ -114,6 +115,23 @@ function deriveOffshore(c, job) {
   return { offshoreOk: 'unknown', why: '' };
 }
 
+// #636c: JSON.parse first; if the model's verbatim quotes broke the JSON (unescaped double quotes are the usual
+// culprit), recover the scalar fields one by one and the evidence strings loosely instead of failing the job.
+function parseLoose(src) {
+  try { return JSON.parse(src); } catch (e) {}
+  var c = {};
+  ['engagementModel', 'workMode', 'locality', 'workAuth', 'clearance', 'payType', 'offshoreStated', 'jdCity'].forEach(function (k) {
+    var mm = src.match(new RegExp('"' + k + '"\\s*:\\s*"([^"\\n]*)"')); if (mm) c[k] = mm[1];
+  });
+  var cf = src.match(/"confidence"\s*:\s*([0-9.]+)/); if (cf) c.confidence = parseFloat(cf[1]);
+  var ev = src.match(/"evidence"\s*:\s*\[([\s\S]*?)\]\s*\}?\s*$/);
+  if (ev) {
+    // split on `", "` boundaries rather than every quote, so an inner quote doesn't fragment a sentence
+    c.evidence = ev[1].split(/"\s*,\s*"/).map(function (q) { return q.replace(/^\s*"/, '').replace(/"\s*$/, '').trim(); }).filter(Boolean).slice(0, 3);
+  }
+  if (!c.engagementModel) throw new Error('unrecoverable JSON');
+  return c;
+}
 // Returns {model, offshoreOk, evidence, ai:{...}} or null when the API is not configured / fails.
 async function classifyEngagementAI(job, opts) {
   opts = opts || {};
@@ -127,7 +145,7 @@ async function classifyEngagementAI(job, opts) {
     'Board remote flag: ' + (job.remote || job.workType || ''), 'Salary/rate field: ' + (job.salary || ''), 'Duration field: ' + (job.contractDuration || ''),
     'Source: ' + (job.source || '')
   ].join('\n');
-  var body = JSON.stringify({ model: AI_MODEL, max_tokens: 500, temperature: 0, system: AI_PROMPT,
+  var body = JSON.stringify({ model: AI_MODEL, max_tokens: 700, temperature: 0, system: AI_PROMPT,
     messages: [{ role: 'user', content: header + '\n\n---\n' + desc }] });
   // #636b: retry on rate-limit / overload / timeout with backoff (429, 529, 5xx, abort)
   var attempts = opts.attempts || 3, lastErr = null, data = null;
@@ -157,7 +175,7 @@ async function classifyEngagementAI(job, opts) {
     var txt = (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
     txt = txt.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     var m = txt.match(/\{[\s\S]*\}/); if (!m) throw new Error('no JSON');
-    var c = JSON.parse(m[0]);
+    var c = parseLoose(m[0]);
     var MODELS = ['C2C', 'C2C-likely', 'W2-contract', 'Direct-hire', 'Expert-gig', 'Unknown'];
     if (MODELS.indexOf(c.engagementModel) < 0) c.engagementModel = 'Unknown';
     var d = deriveOffshore(c, job);
