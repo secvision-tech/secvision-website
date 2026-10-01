@@ -17,6 +17,10 @@ var RX = {
   // #622: an annual salary band ($70,000 - $90,000 / $70K-$90K / 70k-90k per year) with no hourly rate ⇒ salaried hire
   annualSalary: /(\$\s?\d{2,3},\d{3}(\.\d\d)?\s*(-|–|to)\s*\$?\s?\d{2,3},\d{3}(\.\d\d)?|\$\s?\d{2,3}\s?k\s*(-|–|to)\s*\$?\s?\d{2,3}\s?k\b|\d{2,3}k\s*(-|–|to)\s*\d{2,3}k\s*(per\s+)?(year|annum|yr|annually)|(per\s+year|per\s+annum|\/\s?(year|yr|annum)|annually))/i,
   hourly: /(\$\s?\d{2,3}(\.\d\d)?\s*(-|–|to)?\s*\$?\s?\d{0,3}\s*\/\s*(hr|hour)|per\s+hour|hourly)/i,
+  // #635: presence requirements — local-only, hybrid, N days on-site — are never offshoreable
+  presence: /\b(must\s+be\s+(a\s+)?local|local\s+(candidates?|resources?|consultants?)\s+only|locals?\s+only|candidates?\s+must\s+be\s+local|hybrid|\d+\s*(-|to)?\s*\d*\s*days?\s+(a|per)\s+(week|month)\s+(on-?site|in\s+(the\s+)?office)|on-?site\s+(\d+|one|two|three|four)\s+days?|(fully|100%)\s+on-?site|on-?site\s+only|in[\s-]office\s+(role|position|required))\b/i,
+  // #635: company boilerplate that mentions offshore as a SERVICE LINE, not as a term of this job — stripped before offshoreYes runs
+  offshoreBoilerplate: /\b(provider|providers|leader|leaders|specialist|specialists|company|firm)\s+(of|in)\s+[^.\n]{0,80}\b(offshore|nearshore|near\s*shore)\b[^.\n]*|\b(offshore|off-shore)(\s*,\s*|\s+and\s+|\s*\/\s*|\s+or\s+)(onshore|on-shore|nearshore|near\s*shore)\b[^.\n]*|\b(onshore|nearshore|near\s*shore)(\s*,\s*|\s+and\s+|\s*\/\s*|\s+or\s+)(offshore|off-shore)\b[^.\n]*|\b(offshore|nearshore)\s+(outsourcing|services|delivery|development\s+cent(er|re)s?|teams?|model|capabilit(y|ies))\b/gi,
   offshoreNo: /\b(visa[\s-]*independent|(usc|us\s+citizens?|green\s+card|gc)\s*(\/|or|and)?\s*(gc|green\s+card|usc|us\s+citizens?)?\s+only|no\s+(visa\s+)?sponsorship|(cannot|can't|unable\s+to|will\s+not|won't|do\s+not|does\s+not)\s+(provide\s+|offer\s+)?sponsor(ship)?|must\s+(be\s+)?(located|reside|residing|based)\s+in\s+(the\s+)?(us|u\.s\.|usa|united\s+states)|us[\s-]*based\s+only|remote\s*[\-–:(]\s*(us|usa|u\.s\.)\s*(only)?|anywhere\s+in\s+the\s+(us|usa|united\s+states)|no\s+offshore|onshore\s+only|work\s+authori[sz]ation\s+(in\s+the\s+)?(us|usa)\s+(required|is\s+required)|must\s+be\s+authori[sz]ed\s+to\s+work\s+in\s+the\s+(us|united\s+states)|(us|u\.s\.)\s+citizens?\s+(only|or\s+green\s+card))\b/i
 };
 function snippet(text, rx) { var m = text.match(rx); return m ? m[0].replace(/\s+/g, ' ').slice(0, 60) : ''; }
@@ -37,8 +41,9 @@ function classifyEngagement(job) {
   var offshoreOk = 'unknown', oe = '';
   var inIndia = /india/i.test(job.detectedCountry || '') || /india/i.test(job.location || '');
   if (!inIndia && (s = snippet(text, RX.clearance))) { offshoreOk = 'no'; oe = 'clearance/govt: "' + s + '"'; }
+  else if (!inIndia && (s = snippet(text, RX.presence))) { offshoreOk = 'no'; oe = 'presence required: "' + s + '"'; }
   else if ((s = snippet(text, RX.offshoreNo))) { offshoreOk = 'no'; oe = '"' + s + '"'; }
-  else if ((s = snippet(text, RX.offshoreYes))) { offshoreOk = 'yes'; oe = '"' + s + '"'; }
+  else if ((s = snippet(text.replace(RX.offshoreBoilerplate, ' '), RX.offshoreYes))) { offshoreOk = 'yes'; oe = '"' + s + '"'; }
   else if (/india/i.test(job.detectedCountry || '') || /india/i.test(job.location || '')) { offshoreOk = 'yes'; oe = 'India-located posting'; }
   return { model: model, offshoreOk: offshoreOk, evidence: evidence + (oe ? (evidence ? ' · ' : '') + 'offshore ' + offshoreOk + ': ' + oe : '') };
 }
