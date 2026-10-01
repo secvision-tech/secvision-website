@@ -132,6 +132,30 @@ function parseLoose(src) {
   if (!c.engagementModel) throw new Error('unrecoverable JSON');
   return c;
 }
+// #636d: a restrictive label survives only if the model's own evidence (or, failing that, the JD text) contains
+// words that justify it. Haiku fills every field; this stops "W2-contract" on a posting that never says W2,
+// "usc-only" with no citizenship sentence, and "must-be-local" because a city was mentioned.
+var VERIFY = {
+  w2: /\bw[\s-]?2\b|contract[\s-]*to[\s-]*hire|\bc2h\b|\bcth\b|temp[\s-]*to[\s-]*(perm|hire)|(no|not|cannot|can't|without)\s+(\w+\s+){0,3}(c2c|corp|sub[\s-]*contract|third[\s-]*part|vendor|1099)|fixed[\s-]*term|our\s+employee|employee\s+of|inside\s+ir35|payroll/i,
+  c2c: /\bc2c\b|corp[\s-]*to[\s-]*corp|corp[\s-]*2[\s-]*corp|vendors?|sub[\s-]*contract|implementation\s+partner|all\s+visas|own\s+(llc|corporation|company)|1099/i,
+  auth: /citizen|green\s*card|\bgc\b|\busc\b|sponsor|visa|work\s+authori|eligib\w*\s+to\s+work|right\s+to\s+work|permanent\s+resident|national(s|ity)|clearance|security\s+check|ead\b|opt\b|h-?1b/i,
+  local: /\blocal|resid|commut|relocat|based\s+in|must\s+(live|be\s+located)|within\s+\d+\s*(miles|km|hours?)|nationwide|anywhere\s+in\s+the\s+(us|usa|united\s+states)|remote\s*[-–:(]\s*(us|usa)\b|us[\s-]*based|in\s+the\s+(us|usa|united\s+states)\s+only/i,
+  clearance: /clearance|public\s+trust|cjis|polygraph|vetting|bpss|\bsc\b|\bdv\b|secret|ts\/sci|security\s+check|background\s+(investigation|check)|dod|federal|government|baseline|nv1|nv2|reliability\s+status/i,
+  onsite: /on-?site|in[\s-]office|in[\s-]person|at\s+the\s+(client|office|site)|office\s+based|site[\s-]based|hybrid|days?\s+(a|per)\s+(week|fortnight|month)|remote\s+flag:\s*(no|hybrid)|workplace\s*type/i
+};
+function verifyAgainstEvidence(c, desc) {
+  var ev = (Array.isArray(c.evidence) ? c.evidence : []).map(String).join(' \n ');
+  var all = ev + ' \n ' + String(desc || '');
+  var inEv = function (rx) { return rx.test(ev); }, inAll = function (rx) { return rx.test(all); };
+  c._adjusted = [];
+  if (c.engagementModel === 'W2-contract' && !inAll(VERIFY.w2)) { c.engagementModel = /staffing|recruit|consult/i.test(desc) || c.payType === 'hourly' ? 'C2C-likely' : 'Unknown'; c._adjusted.push('W2 unsupported'); }
+  if (c.engagementModel === 'C2C' && !inAll(VERIFY.c2c)) { c.engagementModel = 'C2C-likely'; c._adjusted.push('C2C unsupported'); }
+  if (c.workAuth && c.workAuth !== 'none' && !inAll(VERIFY.auth)) { c.workAuth = 'none'; c._adjusted.push('workAuth unsupported'); }
+  if (c.locality && c.locality !== 'none' && !inAll(VERIFY.local)) { c.locality = 'none'; c._adjusted.push('locality unsupported'); }
+  if (c.clearance && c.clearance !== 'none' && !inAll(VERIFY.clearance)) { c.clearance = 'none'; c._adjusted.push('clearance unsupported'); }
+  if ((c.workMode === 'onsite' || c.workMode === 'hybrid') && !inAll(VERIFY.onsite)) { c.workMode = 'unknown'; c._adjusted.push('workMode unsupported'); }
+  return c;
+}
 // Returns {model, offshoreOk, evidence, ai:{...}} or null when the API is not configured / fails.
 async function classifyEngagementAI(job, opts) {
   opts = opts || {};
@@ -145,6 +169,7 @@ async function classifyEngagementAI(job, opts) {
     'Board remote flag: ' + (job.remote || job.workType || ''), 'Salary/rate field: ' + (job.salary || ''), 'Duration field: ' + (job.contractDuration || ''),
     'Source: ' + (job.source || '')
   ].join('\n');
+  header = 'Board metadata (not part of the posting text; quote it only if the posting itself is silent):\n' + header;
   var body = JSON.stringify({ model: AI_MODEL, max_tokens: 700, temperature: 0, system: AI_PROMPT,
     messages: [{ role: 'user', content: header + '\n\n---\n' + desc }] });
   // #636b: retry on rate-limit / overload / timeout with backoff (429, 529, 5xx, abort)
@@ -178,12 +203,13 @@ async function classifyEngagementAI(job, opts) {
     var c = parseLoose(m[0]);
     var MODELS = ['C2C', 'C2C-likely', 'W2-contract', 'Direct-hire', 'Expert-gig', 'Unknown'];
     if (MODELS.indexOf(c.engagementModel) < 0) c.engagementModel = 'Unknown';
+    c = verifyAgainstEvidence(c, desc);   // #636d
     var d = deriveOffshore(c, job);
     var ev = (Array.isArray(c.evidence) ? c.evidence : []).filter(Boolean).map(function (q) { return '"' + String(q).replace(/\s+/g, ' ').slice(0, 90) + '"'; }).join(' · ');
     var tags = [c.workMode && c.workMode !== 'unknown' ? c.workMode : '', c.locality && c.locality !== 'none' ? c.locality : '', c.clearance && c.clearance !== 'none' ? 'clearance:' + c.clearance : '', c.workAuth && c.workAuth !== 'none' ? c.workAuth : '', c.payType && c.payType !== 'none' ? c.payType : ''].filter(Boolean).join(', ');
     return {
       model: c.engagementModel, offshoreOk: d.offshoreOk,
-      evidence: 'AI: ' + (tags || 'no restrictions found') + (d.why ? ' · offshore ' + d.offshoreOk + ' (' + d.why + ')' : '') + (ev ? ' · ' + ev : ''),
+      evidence: 'AI: ' + (tags || 'no restrictions found') + (d.why ? ' · offshore ' + d.offshoreOk + ' (' + d.why + ')' : '') + (ev ? ' · ' + ev : '') + (c._adjusted && c._adjusted.length ? ' · [verified: ' + c._adjusted.join(', ') + ']' : ''),
       ai: { workMode: c.workMode || 'unknown', locality: c.locality || 'none', workAuth: c.workAuth || 'none', clearance: c.clearance || 'none', payType: c.payType || 'none', offshoreStated: c.offshoreStated || 'unstated', jdCity: String(c.jdCity || '').slice(0, 60), confidence: typeof c.confidence === 'number' ? c.confidence : null, model: AI_MODEL, at: new Date() }
     };
   } catch (e) {
