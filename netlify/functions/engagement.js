@@ -127,18 +127,33 @@ async function classifyEngagementAI(job, opts) {
     'Board remote flag: ' + (job.remote || job.workType || ''), 'Salary/rate field: ' + (job.salary || ''), 'Duration field: ' + (job.contractDuration || ''),
     'Source: ' + (job.source || '')
   ].join('\n');
-  var ctrl = new AbortController();
-  var tmo = setTimeout(function () { ctrl.abort(); }, opts.timeoutMs || 18000);
+  var body = JSON.stringify({ model: AI_MODEL, max_tokens: 500, temperature: 0, system: AI_PROMPT,
+    messages: [{ role: 'user', content: header + '\n\n---\n' + desc }] });
+  // #636b: retry on rate-limit / overload / timeout with backoff (429, 529, 5xx, abort)
+  var attempts = opts.attempts || 3, lastErr = null, data = null;
+  for (var at = 0; at < attempts && !data; at++) {
+    var ctrl = new AbortController();
+    var tmo = setTimeout(function () { ctrl.abort(); }, opts.timeoutMs || 15000);
+    try {
+      var resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST', signal: ctrl.signal,
+        headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+        body: body
+      });
+      if (!resp.ok) {
+        var et = ''; try { et = (await resp.text()).slice(0, 160); } catch (e) {}
+        lastErr = 'HTTP ' + resp.status + (et ? ' ' + et : '');
+        if (resp.status === 429 || resp.status === 529 || resp.status >= 500) { await new Promise(function (r) { setTimeout(r, 1200 * (at + 1) + Math.random() * 600); }); continue; }
+        break;   // 400/401/403: retrying won't help
+      }
+      data = await resp.json();
+    } catch (e) {
+      lastErr = (e && e.name === 'AbortError') ? 'timeout' : String(e && e.message || e);
+      await new Promise(function (r) { setTimeout(r, 800 * (at + 1)); });
+    } finally { clearTimeout(tmo); }
+  }
+  if (!data) { if (opts.errors) opts.errors.push(lastErr || 'unknown'); return null; }
   try {
-    var resp = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', signal: ctrl.signal,
-      headers: { 'Content-Type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: AI_MODEL, max_tokens: 500, temperature: 0,
-        system: AI_PROMPT,
-        messages: [{ role: 'user', content: header + '\n\n---\n' + desc }] })
-    });
-    if (!resp.ok) throw new Error('Anthropic ' + resp.status);
-    var data = await resp.json();
     var txt = (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
     txt = txt.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
     var m = txt.match(/\{[\s\S]*\}/); if (!m) throw new Error('no JSON');
@@ -154,8 +169,9 @@ async function classifyEngagementAI(job, opts) {
       ai: { workMode: c.workMode || 'unknown', locality: c.locality || 'none', workAuth: c.workAuth || 'none', clearance: c.clearance || 'none', payType: c.payType || 'none', offshoreStated: c.offshoreStated || 'unstated', jdCity: String(c.jdCity || '').slice(0, 60), confidence: typeof c.confidence === 'number' ? c.confidence : null, model: AI_MODEL, at: new Date() }
     };
   } catch (e) {
+    if (opts.errors) opts.errors.push('parse: ' + String(e && e.message || e));
     return null;
-  } finally { clearTimeout(tmo); }
+  }
 }
 // Fields to $set on a job doc from an AI result
 function aiSetFields(r) {

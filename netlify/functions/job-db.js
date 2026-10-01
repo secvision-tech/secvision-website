@@ -1915,17 +1915,20 @@ exports.handler = async (event) => {
         if (!body.force) aiQ.engagementAI = { $ne: true };
       } else {
         aiQ = { $or: [{ datePosted: { $gte: aiSince } }, { dateScanned: { $gte: aiSince } }] };
-        if (!body.force) aiQ.engagementAI = { $ne: true };
+        if (!body.force) { aiQ.engagementAI = { $ne: true }; aiQ.$nor = [{ engagementAIFailedAt: { $gte: new Date(Date.now() - 3600000) } }]; }   // #636b: a failed job is retried after an hour, not in the same run
         if (body.contractOnly !== false) aiQ.$and = [{ $or: [{ jobType: { $regex: 'contract', $options: 'i' } }, { contractDuration: { $exists: true, $nin: [null, ''] } }, { source: 'Manual' }] }];
       }
       var aiJobs = await col.find(aiQ).sort({ datePosted: -1, dateScanned: -1 }).skip(body.force && !(Array.isArray(body.jobIds) && body.jobIds.length) ? (parseInt(body.skip) || 0) : 0)
         .project({ title: 1, company: 1, companyType: 1, description: 1, jobType: 1, salary: 1, contractDuration: 1, source: 1, detectedCountry: 1, location: 1, remote: 1, workType: 1 })
         .limit(aiLimit).toArray();
-      var aiResults = await Promise.all(aiJobs.map(function (j) { return engAI.classifyEngagementAI(j).catch(function () { return null; }); }));
+      // #636b: bounded concurrency (8) so a burst of 20 doesn't trip the API rate limit; errors collected for the response
+      var aiErrors = [], aiResults = new Array(aiJobs.length), aiNext = 0;
+      async function aiWorker() { while (aiNext < aiJobs.length) { var ix = aiNext++; try { aiResults[ix] = await engAI.classifyEngagementAI(aiJobs[ix], { errors: aiErrors }); } catch (e) { aiResults[ix] = null; aiErrors.push(String(e && e.message || e)); } } }
+      await Promise.all([0, 1, 2, 3, 4, 5, 6, 7].map(function () { return aiWorker(); }));
       var aiOps = [], aiTally = {}, aiFailed = 0, aiOff = { yes: 0, no: 0, unknown: 0 };
       aiJobs.forEach(function (j, i) {
         var r = aiResults[i];
-        if (!r) { aiFailed++; return; }
+        if (!r) { aiFailed++; aiOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { engagementAIFailedAt: new Date() } } } }); return; }
         var setA = engAI.aiSetFields(r);
         // the JD names a city while the board only gave a country/"Remote"
         try { if (engAI.isBareLocation(j.location) && r.ai.jdCity && !engAI.isBareLocation(r.ai.jdCity)) { setA.location = r.ai.jdCity; setA.locationOrig = j.location || ''; } } catch (e) {}
@@ -1935,11 +1938,12 @@ exports.handler = async (event) => {
       if (aiOps.length) await col.bulkWrite(aiOps, { ordered: false });
       var aiLeft = 0;
       if (!(Array.isArray(body.jobIds) && body.jobIds.length)) {
-        var leftQ = { $or: [{ datePosted: { $gte: aiSince } }, { dateScanned: { $gte: aiSince } }], engagementAI: { $ne: true } };
+        var leftQ = { $or: [{ datePosted: { $gte: aiSince } }, { dateScanned: { $gte: aiSince } }], engagementAI: { $ne: true }, $nor: [{ engagementAIFailedAt: { $gte: new Date(Date.now() - 3600000) } }] };
         if (body.contractOnly !== false) leftQ.$and = aiQ.$and;
         aiLeft = await col.countDocuments(leftQ);
       }
-      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ classified: aiOps.length, failed: aiFailed, picked: aiJobs.length, remaining: aiLeft, tally: aiTally, offshore: aiOff }) };
+      var aiErrTally = {}; aiErrors.forEach(function (e) { var k = String(e).slice(0, 60); aiErrTally[k] = (aiErrTally[k] || 0) + 1; });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ classified: aiOps.length - aiFailed, failed: aiFailed, picked: aiJobs.length, remaining: aiLeft, tally: aiTally, offshore: aiOff, errors: aiErrTally }) };
     }
 
     if (action === 'getRecentContracts') {

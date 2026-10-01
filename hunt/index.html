@@ -3640,6 +3640,7 @@ async function aiClassifyDrain(maxCalls,opts){
     for(var i=0;i<(maxCalls||3);i++){
       var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(Object.assign({action:'classifyEngagementAI',limit:20,days:90},opts||{}))});
       var d=await r.json();if(d.error||!d.picked)break;total+=d.classified||0;
+      if(!d.classified)break;   // #636b: API trouble — don't keep hammering in the background
       if(!d.remaining)break;
     }
   }catch(e){}
@@ -3651,7 +3652,7 @@ async function cjClassifyEngagement(btn,ev){
   var forceAll=!!(ev&&ev.shiftKey);   // Shift+click = re-run every job in the window (after a prompt change)
   var ok=await uiConfirm(forceAll?'Re-run AI classification on ALL contract jobs from the last 90 days?\n\nThis re-reads every JD (roughly $2–3 of credits per 1,500 jobs).':'AI-classify contract jobs from the last 90 days that have no AI verdict yet?\n\n(Shift+click the button to re-run all of them after a prompt change.)');
   if(!ok)return;
-  btn.disabled=true;var done=0,failed=0,tally={},off={yes:0,no:0,unknown:0},calls=0,skip=0;
+  btn.disabled=true;var done=0,failed=0,tally={},off={yes:0,no:0,unknown:0},calls=0,skip=0,errs={},consecFail=0;
   try{
     for(var i=0;i<400;i++){
       btn.textContent='🤖 AI classifying... '+done;calls++;
@@ -3659,11 +3660,13 @@ async function cjClassifyEngagement(btn,ev){
       var d=await r.json();if(d.error){await uiAlert(d.error);break}
       done+=d.classified||0;failed+=d.failed||0;skip+=d.picked||0;
       Object.keys(d.tally||{}).forEach(function(k){tally[k]=(tally[k]||0)+d.tally[k]});Object.keys(d.offshore||{}).forEach(function(k){off[k]=(off[k]||0)+d.offshore[k]});
+      Object.keys(d.errors||{}).forEach(function(k){errs[k]=(errs[k]||0)+d.errors[k]});
       if(!d.picked)break;
+      if(!d.classified&&d.failed){consecFail++;if(consecFail>=2)break}else consecFail=0;   // #636b: two dead batches in a row = API down, stop
       if(forceAll){if(d.picked<20)break}else if(!d.remaining)break;
-      if(forceAll&&!d.classified&&d.failed)break;   // API down — don't spin
     }
-    await uiAlert('AI engagement classification: '+done+' jobs classified'+(failed?', '+failed+' failed (API)':'')+'.\n'+Object.keys(tally).map(function(k){return k+': '+tally[k]}).join('\n')+'\n\nOffshore — yes: '+off.yes+' · no: '+off.no+' · unknown: '+off.unknown+(done?'\n\nRefreshing the table.':''));
+    var errTxt=Object.keys(errs).length?'\n\nAPI errors:\n'+Object.keys(errs).map(function(k){return errs[k]+'× '+k}).join('\n'):'';
+    await uiAlert('AI engagement classification: '+done+' jobs classified'+(failed?', '+failed+' failed (retried automatically on the next run)':'')+'.\n'+Object.keys(tally).map(function(k){return k+': '+tally[k]}).join('\n')+'\n\nOffshore — yes: '+off.yes+' · no: '+off.no+' · unknown: '+off.unknown+errTxt+(done?'\n\nRefreshing the table.':''));
     if(done){contractLoaded=false;await loadContractPipeline();contractLoaded=true}
   }catch(e){await uiAlert('Failed: '+e.message)}
   btn.disabled=false;btn.textContent='🤖 AI classify engagement';
