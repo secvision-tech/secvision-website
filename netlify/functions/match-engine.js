@@ -1063,17 +1063,17 @@ exports.handler = async function (event) {
       //   (1) managed consultants (your bench) ALWAYS load — they are the proposable people;
       //   (2) same-country profiles ALWAYS load — the only ones an onsite job can use;
       //   (3) the general window fills the rest.
-      var mcFetches = [ cacheCol.find({ managed: true }).limit(200).toArray() ];
+      var mcFetches = [ cacheCol.find({ managed: true }).limit(1000).toArray() ];   // #642: bench is never truncated
       // #535: the popup's From selector overrides which country gets priority scoring
       var mcPrefer = String(body.preferCountry || '').trim();
       var mcCountryForPool = mcPrefer || req.country;
       try {
         if (mcCountryForPool) {
           var cRe = new RegExp(mcCountryForPool.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-          mcFetches.push(cacheCol.find({ $or: [ { country: cRe }, { location: cRe } ] }).limit(200).toArray());
+          mcFetches.push(cacheCol.find({ $or: [ { country: cRe }, { location: cRe } ] }).limit(1500).toArray());   // #642
         }
       } catch (e) {}
-      mcFetches.push(cacheCol.find({}).limit(600).toArray());
+      mcFetches.push(cacheCol.find({}).sort({ fetchedAt: -1, _id: -1 }).limit(2500).toArray());   // #642: was 600 — profiles beyond that could never be scored
       var mcParts = await Promise.all(mcFetches);
       var mcDbg = { pool: 0, prefer: mcPrefer || '', preferBatch: (mcParts[1] || []).length, newScored: 0, skippedCached: 0, firstTen: [] };
       var mcSeen = {}, cached = [];
@@ -1159,7 +1159,7 @@ exports.handler = async function (event) {
       //   2. Enough matches — once we have (page+1)*PAGE_SIZE matches, the current page is
       //      full, so stop. Further scoring happens only when the user asks (Next / Fetch More).
       // Both are overridable per-request so "Next" can push further into the cache.
-      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 600);  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
+      var EVAL_CAP = Math.min(parseInt(body.evalCap) || 50, 3000);  // #642: was 600 — 'Score 50 more' silently stopped at 600 of a larger cache
       var NEED_MATCHES = (page + 1) * PAGE_SIZE;
 
       var SCORE_CAP = 16;   // #540: fewer clicks to verdicts
@@ -1676,7 +1676,7 @@ exports.handler = async function (event) {
 
       var page = parseInt(body.page) || 0;
       var PAGE = 10;
-      var EVAL_CAP = body.noScore ? 0 : Math.min(parseInt(body.evalCap) || 50, 600);   // #491c: noScore returns cached matches only  // ceiling matches cache/job window; was 200 — spent caps permanently blocked in-country scoring
+      var EVAL_CAP = body.noScore ? 0 : Math.min(parseInt(body.evalCap) || 50, 3000);   // #491c: noScore returns cached matches only  // #642: ceiling 3000
       var NEED = (page + 1) * PAGE;
       var SCORE_CAP = 16;   // #540: fewer clicks to verdicts
 
