@@ -5968,7 +5968,6 @@ function _ctModalRich(title,subject,html,plain,mailto){
   var ov=document.createElement('div');ov.id='ctOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1600;display:flex;align-items:center;justify-content:center';
   ov.innerHTML='<div style="background:#fff;border-radius:10px;width:720px;max-width:96%;max-height:90vh;overflow:auto;padding:1rem">'
    +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">'+title+'</b><button onclick="document.getElementById(\'ctOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
-   +'<div style="font-size:.62rem;color:var(--g5);margin:.25rem 0 .4rem">Rich HTML draft — editable below; "Copy (rich)" pastes into Outlook/Gmail with formatting and table intact.</div>'
    +'<input id="ctSubj" value="'+String(subject).replace(/"/g,'&quot;')+'" style="width:100%;padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px;margin-bottom:.4rem">'
    +'<div id="ctPreview" contenteditable="true" style="border:1px solid var(--g100);border-radius:6px;padding:.6rem;max-height:52vh;overflow:auto;font-size:.72rem">'+(html||('<pre style="white-space:pre-wrap;font-family:inherit">'+String(plain).replace(/</g,'&lt;')+'</pre>'))+'</div>'
    +'<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">'
@@ -6055,6 +6054,18 @@ async function deleteJobProfile(){
     try{if(typeof searchDb==='function')searchDb()}catch(e){}
   }catch(e){alert('⚠️ '+e.message)}
 }
+// #640b: "Name (https://linkedin.com/in/x)" -> linked name; "Name (Title - a@b.com)" -> Name (Title) with mailto; several contacts separated by ", "
+function contactLinkHtml(c){
+  return String(c||'').split(/,\s*(?=[A-Z][\w.' -]+\s*\()/).map(function(one){
+    var m=one.match(/^\s*([^(]+?)\s*\((.*)\)\s*$/);
+    if(!m)return esc(one.trim());
+    var name=m[1].trim(),inner=m[2].trim();
+    var url=(inner.match(/https?:\/\/[^\s)]+/)||[])[0],mail=(inner.match(/[\w.+-]+@[\w-]+\.[\w.-]+/)||[])[0];
+    var title=inner.replace(url||'','').replace(mail||'','').replace(/^[\s\-–|]+|[\s\-–|]+$/g,'').trim();
+    var a=url?'<a href="'+esc(url)+'" target="_blank" rel="noopener" style="color:#0A66C2;font-weight:600">'+esc(name)+'</a>':(mail?'<a href="mailto:'+esc(mail)+'" style="color:#0E7490;font-weight:600">'+esc(name)+'</a>':'<b>'+esc(name)+'</b>');
+    return a+(title?' <span style="color:var(--g5)">('+esc(title)+')</span>':'');
+  }).join(', ');
+}
 // #640: company-level partner pitch (sourcing-partner model) — angle chosen from the company's posting profile
 var ANGLE_LABEL={'us-sourcing':'US-candidate sourcing (their seats are mostly US-only)','india-bench':'India bench on their hours (seats mostly remote / open)','both':'Both: US candidates for US-only seats, India bench for remote','india-domestic':'India-based firm — rate-band question first'};
 async function partnerPitch(){
@@ -6068,7 +6079,7 @@ async function partnerPitch(){
     var st=d.stats||{},ang=(d.angle||'').replace('+large','');
     var info='<div style="font-size:.62rem;color:var(--g5);margin:.2rem 0 .4rem;line-height:1.5"><b style="color:#6D28D9">Angle:</b> '+esc(ANGLE_LABEL[ang]||ang)+(/\+large/.test(d.angle||'')?' · large firm, short note':'')
       +' &nbsp;·&nbsp; <b>Their postings (180d):</b> '+(st.reqs||0)+' &nbsp;·&nbsp; <b>Offshore:</b> yes '+((st.offshore||{}).yes||0)+' / no '+((st.offshore||{}).no||0)+' / unknown '+((st.offshore||{}).unknown||0)
-      +(st.contacts&&st.contacts.length?'<br><b>Recruiters seen:</b> '+esc(st.contacts.join(' · ')).slice(0,300):'')
+      +(st.contacts&&st.contacts.length?'<br><b>Recruiters seen:</b> '+st.contacts.map(contactLinkHtml).join(' · '):'')
       +(d.partner&&d.partner.status&&d.partner.status!=='drafted'?'<br><b>Status:</b> '+esc(d.partner.status)+(d.partner.statusAt?' on '+fmtDate(d.partner.statusAt):''):'')+'</div>';
     _ctModalRich('🤝 Partner pitch — '+esc(j.company),d.subject||'',d.html||'',d.body||'',(d.emails&&d.emails[0])||'');
     var lx=document.getElementById('ctLoading');if(lx)lx.textContent=d.cached?'📦 From saved draft':'🤖 Generated with AI (saved for this company)';
