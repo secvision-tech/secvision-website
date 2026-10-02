@@ -1929,7 +1929,7 @@ exports.handler = async (event) => {
       aiJobs.forEach(function (j, i) {
         var r = aiResults[i];
         if (!r) { aiFailed++; aiOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: { engagementAIFailedAt: new Date() } } } }); return; }
-        var setA = engAI.aiSetFields(r);
+        var setA = engAI.aiSetFields(r, j);
         // the JD names a city while the board only gave a country/"Remote"
         try { if (engAI.isBareLocation(j.location) && r.ai.jdCity && !engAI.isBareLocation(r.ai.jdCity)) { setA.location = r.ai.jdCity; setA.locationOrig = j.location || ''; } } catch (e) {}
         aiOps.push({ updateOne: { filter: { _id: j._id }, update: { $set: setA } } });
@@ -1951,7 +1951,7 @@ exports.handler = async (event) => {
       oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
       var contracts = await col.find(applyScope({ jobType: 'Contract', $or: [{ datePosted: { $gte: oneMonthAgo } }, { dateScanned: { $gte: oneMonthAgo } }] }))
         .sort({ datePosted: -1, dateScanned: -1 })
-        .project({ candidateCount: { $size: { $ifNull: ['$candidateProfiles', []] } }, engagementModel: 1, offshoreOk: 1, engagementEvidence: 1, engagementAI: 1, workMode: 1, title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
+        .project({ candidateCount: { $size: { $ifNull: ['$candidateProfiles', []] } }, engagementModel: 1, offshoreOk: 1, engagementEvidence: 1, engagementAI: 1, workMode: 1, domain: 1, title: 1, company: 1, companyType: 1, companySize: 1, companyLinkedin: 1, companyUrl: 1, location: 1, salary: 1, datePosted: 1, status: 1, source: 1, applyLink: 1, detectedCountry: 1, tools: 1, certifications: 1, experience: 1, contractDuration: 1 })
         .toArray();
       // #395: expose matched-consultant count, drop the heavy array
       contracts.forEach(function (c) { if (typeof c.candidateCount !== 'number') c.candidateCount = Array.isArray(c.candidateProfiles) ? c.candidateProfiles.length : 0; delete c.candidateProfiles; });   // #618: count computed in the projection

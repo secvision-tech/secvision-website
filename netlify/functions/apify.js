@@ -355,15 +355,21 @@ exports.handler = async function(event) {
       var pRe = new RegExp('^\\s*' + pCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '\\s*$', 'i');
       var pSince = new Date(Date.now() - 180 * 86400000);
       var pJobs = await pdb.collection('jobs').find({ company: pRe, $or: [{ datePosted: { $gte: pSince } }, { dateScanned: { $gte: pSince } }] })
-        .project({ title: 1, titleClean: 1, detectedCountry: 1, location: 1, engagementModel: 1, offshoreOk: 1, workMode: 1, contact: 1, salary: 1, companyType: 1, companySize: 1, datePosted: 1, tools: 1, jobType: 1, applyLink: 1 })
+        .project({ title: 1, titleClean: 1, detectedCountry: 1, location: 1, engagementModel: 1, offshoreOk: 1, workMode: 1, contact: 1, salary: 1, companyType: 1, companySize: 1, datePosted: 1, tools: 1, toolsAI: 1, domain: 1, skills: 1, jobType: 1, applyLink: 1, description: 1 })
         .sort({ datePosted: -1 }).limit(60).toArray();
+      // #641: the job open in the popup is the anchor — the pitch references IT, and its JD sets the domain
+      var pAnchor = null;
+      if (body.jobId) { try { var AOID = require('mongodb').ObjectId; pAnchor = pJobs.find(function (j) { return String(j._id) === String(body.jobId); }) || await pdb.collection('jobs').findOne(/^[0-9a-f]{24}$/i.test(String(body.jobId)) ? { _id: new AOID(String(body.jobId)) } : { jobId: String(body.jobId) }); } catch (ae) {} }
+      if (!pAnchor) pAnchor = pJobs[0] || null;
+      var pExcerpt = function (d) { return String(d || '').replace(/<[^>]+>/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 1600); };
       var tally = function (arr, f) { var t = {}; arr.forEach(function (x) { var v = f(x); if (v) t[v] = (t[v] || 0) + 1; }); return t; };
       var pStats = {
         reqs: pJobs.length, countries: tally(pJobs, function (j) { return j.detectedCountry || ''; }),
         engagement: tally(pJobs, function (j) { return j.engagementModel || 'Unknown'; }), offshore: tally(pJobs, function (j) { return j.offshoreOk || 'unknown'; }),
         workMode: tally(pJobs, function (j) { return j.workMode || ''; }),
         titles: Array.from(new Set(pJobs.map(function (j) { return j.titleClean || j.title || ''; }).filter(Boolean))).slice(0, 6),
-        tools: (function () { var t = tally(pJobs, function (j) { return ''; }); pJobs.forEach(function (j) { String(j.tools || '').split(/,\s*/).forEach(function (x) { x = x.trim(); if (x && !/see details/i.test(x)) t[x] = (t[x] || 0) + 1; }); }); return Object.keys(t).sort(function (a, b) { return t[b] - t[a]; }).slice(0, 8); })(),
+        tools: (function () { var t = {}; pJobs.forEach(function (j) { String(j.toolsAI || j.tools || '').split(/,\s*/).forEach(function (x) { x = x.trim(); if (x && !/see details/i.test(x)) t[x] = (t[x] || 0) + 1; }); }); return Object.keys(t).sort(function (a, b) { return t[b] - t[a]; }).slice(0, 12); })(),
+        domains: tally(pJobs, function (j) { return j.domain || ''; }),
         contacts: Array.from(new Set(pJobs.map(function (j) { return j.contact; }).filter(function (c) { return c && !/see details/i.test(c); }))).slice(0, 4),
         rates: Array.from(new Set(pJobs.map(function (j) { return j.salary; }).filter(function (r) { return r && !/not disclosed/i.test(r); }))).slice(0, 4),
         companyType: (pJobs.find(function (j) { return j.companyType; }) || {}).companyType || '', companySize: (pJobs.find(function (j) { return j.companySize; }) || {}).companySize || null,
@@ -378,7 +384,8 @@ exports.handler = async function(event) {
 
       if (action === 'partnerInfo') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ stats: pStats, angle: pAngle, emails: pEmails, partner: pDoc ? { status: pDoc.status, statusAt: pDoc.statusAt, channel: pDoc.channel, history: (pDoc.history || []).slice(-5) } : null }) };
 
-      if (pDoc && pDoc.pitch && pDoc.pitch.body && !body.force) {
+      var pAnchorDomain = (pAnchor && pAnchor.domain) || 'other';
+      if (pDoc && pDoc.pitch && pDoc.pitch.body && !body.force && (!pDoc.pitch.domain || pDoc.pitch.domain === pAnchorDomain)) {
         return { statusCode: 200, headers: hdrs, body: JSON.stringify({ subject: pDoc.pitch.subject, body: pDoc.pitch.body, html: pDoc.pitch.html, cached: true, angle: pDoc.pitch.angle, stats: pStats, emails: pEmails, partner: { status: pDoc.status, statusAt: pDoc.statusAt, channel: pDoc.channel } }) };
       }
       var PKEY2 = process.env.ANTHROPIC_API_KEY;
@@ -391,12 +398,15 @@ exports.handler = async function(event) {
       };
       var pLarge = /\+large/.test(pAngle);
       var pAngleKey = pAngle.replace('+large', '');
-      var pPrompt = 'You write business-development outreach for Sunil Shilimkar, Business Head, SecVision Technologies LLP (Pune, India). SecVision sources and technically screens cybersecurity talent for staffing and consulting firms, using its own job-intelligence and matching platform (patent pending). '
+      var pDomains = Object.keys(pStats.domains || {}).sort(function (a, b) { return pStats.domains[b] - pStats.domains[a]; }).slice(0, 3);
+      var pPrompt = 'You write business-development outreach for Sunil Shilimkar, Business Head, SecVision Technologies LLP (Pune, India). SecVision is a cybersecurity services company (SOC services, cloud security, security architecture; leadership with 18+ years, Microsoft Cybersecurity Architect Expert, two US patents in malware protection). It sources and technically screens cybersecurity talent across ALL security specialities — cloud security and security architecture (AWS, Azure, GCP), detection engineering and SIEM (Splunk, Sentinel), SOC operations, IAM/PAM, AppSec/DevSecOps, GRC, network security, vulnerability management, threat intelligence, incident response, data security — using its own job-intelligence and matching platform (patent pending). '
+        + 'CAPABILITY STATEMENT RULE: describe what we supply IN THE RECIPIENT\'S DOMAIN, inferred from their postings (domains: ' + (pDomains.join(', ') || 'unknown') + '; technologies they ask for: ' + (pStats.tools.slice(0, 10).join(', ') || 'n/a') + '). Name 3-5 of THEIR technologies back to them (e.g. for an AWS Security Lake / OCSF / CloudWatch posting, talk about AWS security data architecture and detection pipelines — not SOC analysts). Mention SOC/SIEM analysts ONLY if their postings are SOC/SIEM roles. Never paste a generic list of our services. '
         + 'Write a PARTNER PITCH to the company described below — a staffing / IT consulting firm that posts cybersecurity contract roles. The recipient is a recruiter or owner there.\n'
         + 'ANGLE: ' + ANGLE_TEXT[pAngleKey] + (pLarge ? ' This is a very large firm: keep it to 90-120 words, recruiter-to-recruiter tone, no mention of fees in the first message — just offer screened candidates for a specific req and ask who handles vendor/sourcing partners.' : ' Length 140-190 words for the plain version.') + '\n'
         + 'RULES: open by referencing ONE of their recent postings by title (and city if present) so it is clearly not a mass mail; never claim they said anything; no superlatives, no "I hope this finds you well"; one clear ask at the end (a 15-minute call or three live reqs to pilot); British/Indian business English, plain, specific. Promise "two or three screened profiles within 72 hours" — never 24 or 48. Do not invent names: if no recruiter name is given, use "Hi there,". Do not mention the stats numerically (no "you posted 7 jobs"); use them only to choose emphasis.\n'
         + 'OUTPUT exactly in this format:\nSUBJECT: <subject under 70 characters>\n---PLAIN---\n<plain-text version suitable for a LinkedIn InMail; paragraphs separated by blank lines; end with the signature block exactly:\nBest regards,\nSunil Shilimkar\nBusiness Head | SecVision Technologies LLP | Pune | India\nsunil@secvisiontech.com | +91-9822500435>\n---HTML---\n<the same message as a complete HTML email body starting at a wrapper <div>, inline CSS only, font-family Arial, 14px, a thin #0E7490 header line reading "SecVision Technologies"; signature with sunil@secvisiontech.com as a mailto link and secvisiontech.com linked to https://secvisiontech.com/>\n'
-        + 'COMPANY DATA (JSON): ' + JSON.stringify({ company: pCompany, companyType: pStats.companyType, companySize: pStats.companySize, mainCountry: pMainCountry, countries: pStats.countries, recentTitles: pStats.titles, latestPosting: pStats.latest, toolsTheyAskFor: pStats.tools, engagementMix: pStats.engagement, offshoreMix: pStats.offshore, workModeMix: pStats.workMode, ratesSeen: pStats.rates, namedRecruiters: pStats.contacts, recipientFirstName: body.recipient || '' });
+        + 'ANCHOR POSTING (open it with THIS one — title, and city/remote if stated): ' + JSON.stringify(pAnchor ? { title: pAnchor.titleClean || pAnchor.title, location: pAnchor.location, country: pAnchor.detectedCountry, remote: pAnchor.workMode || pAnchor.remote, tools: pAnchor.toolsAI || pAnchor.tools, domain: pAnchor.domain, jdExcerpt: pExcerpt(pAnchor.description) } : null) + '\n'
+        + 'COMPANY DATA (JSON): ' + JSON.stringify({ company: pCompany, companyType: pStats.companyType, companySize: pStats.companySize, mainCountry: pMainCountry, countries: pStats.countries, recentTitles: pStats.titles, domains: pStats.domains, toolsTheyAskFor: pStats.tools, engagementMix: pStats.engagement, offshoreMix: pStats.offshore, workModeMix: pStats.workMode, ratesSeen: pStats.rates, namedRecruiters: pStats.contacts, recipientFirstName: body.recipient || '' });
       var pOut = '';
       try {
         var prr = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': PKEY2, 'anthropic-version': '2023-06-01' },
@@ -409,7 +419,7 @@ exports.handler = async function(event) {
       var pHtml = (pOut.split(/---HTML---/)[1] || '').replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/, '').trim();
       if (!pPlain) pPlain = pOut.replace(/^SUBJECT:.*$/m, '').replace(/---HTML---[\s\S]*$/, '').trim();
       if (!pHtml) pHtml = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1F2937">' + pPlain.split(/\n{2,}/).map(function (para) { return '<p>' + para.replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div>';
-      await partners.updateOne({ key: pKey }, { $set: { key: pKey, company: pCompany, stats: pStats, pitch: { subject: pSubj.trim(), body: pPlain, html: pHtml, angle: pAngle, at: new Date(), by: pUser } }, $setOnInsert: { createdAt: new Date(), status: 'drafted' } }, { upsert: true });
+      await partners.updateOne({ key: pKey }, { $set: { key: pKey, company: pCompany, stats: pStats, pitch: { subject: pSubj.trim(), body: pPlain, html: pHtml, angle: pAngle, domain: pAnchorDomain, anchorJobId: pAnchor ? String(pAnchor._id) : '', at: new Date(), by: pUser } }, $setOnInsert: { createdAt: new Date(), status: 'drafted' } }, { upsert: true });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ subject: pSubj.trim(), body: pPlain, html: pHtml, cached: false, angle: pAngle, stats: pStats, emails: pEmails, partner: pDoc ? { status: pDoc.status, statusAt: pDoc.statusAt, channel: pDoc.channel } : { status: 'drafted' } }) };
     }
 

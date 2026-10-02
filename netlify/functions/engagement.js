@@ -84,6 +84,8 @@ var AI_PROMPT = [
   '  "payType": "hourly" | "annual" | "per-task" | "none",',
   '  "offshoreStated": "yes" | "no" | "unstated",',
   '  "jdCity": "<city, state/country named as the work location in the body, or empty>",',
+  '  "technologies": ["<up to 12 specific products, platforms, standards or services the posting names, e.g. Amazon Security Lake, OCSF, Splunk ES, Microsoft Sentinel, CrowdStrike, Zscaler ZPA, Terraform, CyberArk — most specific first; no generic words like security, cloud, tools>"],',
+  '  "domain": "soc-operations" | "detection-engineering" | "siem-engineering" | "cloud-security" | "cloud-architecture" | "iam-pam" | "appsec-devsecops" | "grc-compliance" | "network-security" | "vulnerability-mgmt" | "threat-intel-hunting" | "incident-response" | "ot-ics" | "data-security" | "security-architecture" | "other",',
   '  "confidence": <0.0-1.0>,',
   '  "evidence": ["<verbatim quote>", "<verbatim quote>", "<verbatim quote>"]',
   '}',
@@ -96,6 +98,8 @@ var AI_PROMPT = [
   '- clearance: any government clearance, Public Trust, CJIS, or "must be able to obtain a clearance" counts. State or federal program work with background checks beyond a routine check -> "other".',
   '- payType: "annual" when a yearly salary figure is given (e.g. $90,000 - $120,000, $85K/yr, per annum); "hourly" for $/hr; "per-task" for per-task/per-item payment.',
   '- offshoreStated: "yes" only if the REQUIREMENT says offshore / nearshore / India-based / global remote / any location is acceptable; "no" if it says US-based only, must reside in the US, no offshore, onshore only; else "unstated".',
+  '- technologies: exact product/standard names as written in the posting (keep version numbers like OCSF v1.5); include cloud services (AWS Glue, Athena, CloudWatch), security platforms, IaC and scripting only if named. Empty array if none.',
+  '- domain: the single best label for what the role mainly does.',
   '- evidence: up to 3 short verbatim quotes (under 100 characters each), one for each decisive field. Prefer the sentence that decided workMode/locality/clearance. Inside a quote, replace any double-quote character with a single quote so the JSON stays valid.',
   '- If the posting is in India (location in India), answer the same fields literally; do not reason about offshoring.',
   'Posting follows.'
@@ -120,10 +124,12 @@ function deriveOffshore(c, job) {
 function parseLoose(src) {
   try { return JSON.parse(src); } catch (e) {}
   var c = {};
-  ['engagementModel', 'workMode', 'locality', 'workAuth', 'clearance', 'payType', 'offshoreStated', 'jdCity'].forEach(function (k) {
+  ['engagementModel', 'workMode', 'locality', 'workAuth', 'clearance', 'payType', 'offshoreStated', 'jdCity', 'domain'].forEach(function (k) {
     var mm = src.match(new RegExp('"' + k + '"\\s*:\\s*"([^"\\n]*)"')); if (mm) c[k] = mm[1];
   });
   var cf = src.match(/"confidence"\s*:\s*([0-9.]+)/); if (cf) c.confidence = parseFloat(cf[1]);
+  var tk = src.match(/"technologies"\s*:\s*\[([\s\S]*?)\]/);
+  if (tk) c.technologies = tk[1].split(/"\s*,\s*"/).map(function (q) { return q.replace(/^\s*"/, '').replace(/"\s*$/, '').trim(); }).filter(Boolean).slice(0, 12);
   var ev = src.match(/"evidence"\s*:\s*\[([\s\S]*?)\]\s*\}?\s*$/);
   if (ev) {
     // split on `", "` boundaries rather than every quote, so an inner quote doesn't fragment a sentence
@@ -210,7 +216,8 @@ async function classifyEngagementAI(job, opts) {
     return {
       model: c.engagementModel, offshoreOk: d.offshoreOk,
       evidence: 'AI: ' + (tags || 'no restrictions found') + (d.why ? ' · offshore ' + d.offshoreOk + ' (' + d.why + ')' : '') + (ev ? ' · ' + ev : '') + (c._adjusted && c._adjusted.length ? ' · [verified: ' + c._adjusted.join(', ') + ']' : ''),
-      ai: { workMode: c.workMode || 'unknown', locality: c.locality || 'none', workAuth: c.workAuth || 'none', clearance: c.clearance || 'none', payType: c.payType || 'none', offshoreStated: c.offshoreStated || 'unstated', jdCity: String(c.jdCity || '').slice(0, 60), confidence: typeof c.confidence === 'number' ? c.confidence : null, model: AI_MODEL, at: new Date() }
+      ai: { workMode: c.workMode || 'unknown', locality: c.locality || 'none', workAuth: c.workAuth || 'none', clearance: c.clearance || 'none', payType: c.payType || 'none', offshoreStated: c.offshoreStated || 'unstated', jdCity: String(c.jdCity || '').slice(0, 60), confidence: typeof c.confidence === 'number' ? c.confidence : null,
+            technologies: (Array.isArray(c.technologies) ? c.technologies : []).map(function (t) { return String(t).trim().slice(0, 40); }).filter(Boolean).slice(0, 12), domain: String(c.domain || 'other').slice(0, 30), model: AI_MODEL, at: new Date() }
     };
   } catch (e) {
     if (opts.errors) opts.errors.push('parse: ' + String(e && e.message || e));
@@ -218,8 +225,19 @@ async function classifyEngagementAI(job, opts) {
   }
 }
 // Fields to $set on a job doc from an AI result
-function aiSetFields(r) {
-  return { engagementModel: r.model, offshoreOk: r.offshoreOk, engagementEvidence: r.evidence, engagementAI: true, workMode: r.ai.workMode, engagementDetail: r.ai };
+function aiSetFields(r, job) {
+  var set = { engagementModel: r.model, offshoreOk: r.offshoreOk, engagementEvidence: r.evidence, engagementAI: true, workMode: r.ai.workMode, engagementDetail: r.ai, domain: r.ai.domain || 'other' };
+  // #641: specific technologies from the JD. The keyword extractor often leaves tools as "AWS, Azure" for a JD
+  // full of Security Lake / OCSF / Glue — merge the AI list in (AI first, then whatever was there), de-duplicated.
+  if (r.ai.technologies && r.ai.technologies.length) {
+    set.toolsAI = r.ai.technologies.join(', ');
+    var have = String((job && job.tools) || '').split(/,\s*/).map(function (t) { return t.trim(); }).filter(function (t) { return t && !/see details/i.test(t); });
+    var seen = {}, merged = [];
+    r.ai.technologies.concat(have).forEach(function (t) { var k = t.toLowerCase().replace(/[^a-z0-9]+/g, ''); if (!k || seen[k]) return; seen[k] = 1; merged.push(t); });
+    set.tools = merged.slice(0, 18).join(', ');
+    if (have.length) set.toolsOrig = have.join(', ');
+  }
+  return set;
 }
 
 module.exports = { classifyEngagement: classifyEngagement, classifyEngagementAI: classifyEngagementAI, aiSetFields: aiSetFields, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };
