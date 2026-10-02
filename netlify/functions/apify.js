@@ -331,6 +331,88 @@ exports.handler = async function(event) {
       } }) };
     }
     // ============ #551 AI OUTREACH DRAFT (client / consultant) ============
+    // ============ #640 PARTNER PITCH: company-level outreach to a staffing / consulting firm ============
+    // Builds the company's profile from what Business Hunt already knows (reqs, countries, engagement/offshore mix,
+    // recruiters, rates), chooses the angle, and has Haiku write an InMail-length plain pitch plus an HTML email.
+    // Cached per company in `partners`; body.force regenerates. partnerStatus logs sent/replied/etc. per company.
+    if (action === 'draftPartnerPitch' || action === 'partnerStatus' || action === 'partnerInfo') {
+      var { getDb: gdbP } = require('./db');
+      var pdb = await gdbP();
+      var pCompany = String(body.company || '').replace(/[®™©]/g, '').trim();
+      if (!pCompany) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'company required' }) };
+      var pKey = pCompany.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().replace(/\b(inc|llc|ltd|limited|corp|corporation|pvt|private|co|company|group|technologies|technology|solutions|consulting|services|global|international|usa|us)\b/g, '').replace(/\s+/g, ' ').trim() || pCompany.toLowerCase();
+      var partners = pdb.collection('partners');
+      var pDoc = await partners.findOne({ key: pKey });
+      var pUser = (authResult && authResult.email) || '';
+
+      if (action === 'partnerStatus') {
+        var pst = String(body.status || '').slice(0, 30), pnote = String(body.note || '').slice(0, 500), pch = String(body.channel || '').slice(0, 20);
+        await partners.updateOne({ key: pKey }, { $set: { key: pKey, company: pCompany, status: pst, statusAt: new Date(), statusBy: pUser, channel: pch || (pDoc && pDoc.channel) || '' }, $push: { history: { status: pst, note: pnote, channel: pch, by: pUser, at: new Date() } }, $setOnInsert: { createdAt: new Date() } }, { upsert: true });
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, status: pst }) };
+      }
+
+      // ---- company profile from the jobs collection (180 days) ----
+      var pRe = new RegExp('^\\s*' + pCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '\\s*$', 'i');
+      var pSince = new Date(Date.now() - 180 * 86400000);
+      var pJobs = await pdb.collection('jobs').find({ company: pRe, $or: [{ datePosted: { $gte: pSince } }, { dateScanned: { $gte: pSince } }] })
+        .project({ title: 1, titleClean: 1, detectedCountry: 1, location: 1, engagementModel: 1, offshoreOk: 1, workMode: 1, contact: 1, salary: 1, companyType: 1, companySize: 1, datePosted: 1, tools: 1, jobType: 1, applyLink: 1 })
+        .sort({ datePosted: -1 }).limit(60).toArray();
+      var tally = function (arr, f) { var t = {}; arr.forEach(function (x) { var v = f(x); if (v) t[v] = (t[v] || 0) + 1; }); return t; };
+      var pStats = {
+        reqs: pJobs.length, countries: tally(pJobs, function (j) { return j.detectedCountry || ''; }),
+        engagement: tally(pJobs, function (j) { return j.engagementModel || 'Unknown'; }), offshore: tally(pJobs, function (j) { return j.offshoreOk || 'unknown'; }),
+        workMode: tally(pJobs, function (j) { return j.workMode || ''; }),
+        titles: Array.from(new Set(pJobs.map(function (j) { return j.titleClean || j.title || ''; }).filter(Boolean))).slice(0, 6),
+        tools: (function () { var t = tally(pJobs, function (j) { return ''; }); pJobs.forEach(function (j) { String(j.tools || '').split(/,\s*/).forEach(function (x) { x = x.trim(); if (x && !/see details/i.test(x)) t[x] = (t[x] || 0) + 1; }); }); return Object.keys(t).sort(function (a, b) { return t[b] - t[a]; }).slice(0, 8); })(),
+        contacts: Array.from(new Set(pJobs.map(function (j) { return j.contact; }).filter(function (c) { return c && !/see details/i.test(c); }))).slice(0, 4),
+        rates: Array.from(new Set(pJobs.map(function (j) { return j.salary; }).filter(function (r) { return r && !/not disclosed/i.test(r); }))).slice(0, 4),
+        companyType: (pJobs.find(function (j) { return j.companyType; }) || {}).companyType || '', companySize: (pJobs.find(function (j) { return j.companySize; }) || {}).companySize || null,
+        latest: pJobs[0] ? { title: pJobs[0].titleClean || pJobs[0].title, location: pJobs[0].location, link: pJobs[0].applyLink || '' } : null
+      };
+      var pEmails = []; pStats.contacts.forEach(function (c) { (String(c).match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []).forEach(function (e) { if (pEmails.indexOf(e) < 0) pEmails.push(e); }); });
+      var pTotal = pJobs.length || 1, pNo = pStats.offshore.no || 0, pYes = pStats.offshore.yes || 0;
+      var pMainCountry = Object.keys(pStats.countries).sort(function (a, b) { return pStats.countries[b] - pStats.countries[a]; })[0] || '';
+      var pAngle = pNo / pTotal >= 0.7 ? 'us-sourcing' : ((pYes + (pStats.offshore.unknown || 0)) / pTotal >= 0.6 ? 'india-bench' : 'both');
+      if (pStats.companySize && pStats.companySize >= 5000) pAngle += '+large';
+      if (/india/i.test(pMainCountry)) pAngle = 'india-domestic';
+
+      if (action === 'partnerInfo') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ stats: pStats, angle: pAngle, emails: pEmails, partner: pDoc ? { status: pDoc.status, statusAt: pDoc.statusAt, channel: pDoc.channel, history: (pDoc.history || []).slice(-5) } : null }) };
+
+      if (pDoc && pDoc.pitch && pDoc.pitch.body && !body.force) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ subject: pDoc.pitch.subject, body: pDoc.pitch.body, html: pDoc.pitch.html, cached: true, angle: pDoc.pitch.angle, stats: pStats, emails: pEmails, partner: { status: pDoc.status, statusAt: pDoc.statusAt, channel: pDoc.channel } }) };
+      }
+      var PKEY2 = process.env.ANTHROPIC_API_KEY;
+      if (!PKEY2) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI key not configured' }) };
+      var ANGLE_TEXT = {
+        'us-sourcing': 'Most of their seats are US-only (on-site/hybrid, local, clearance or work-authorisation restricted). Lead with: we source and technically screen US-BASED candidates for their open security reqs; they keep the client, the paperwork and the W2/C2C; we are paid only when someone starts (flat placement fee or small hourly override). Mention the India-based bench only as a secondary line for any remote seats.',
+        'india-bench': 'Most of their seats are remote or do not restrict location. Lead with: screened India-based SOC/SIEM/cloud-security consultants (Splunk, Microsoft Sentinel, SOAR, threat hunting, detection engineering) working on the client\'s hours, two or three verified profiles within 72 hours; mention US-based sourcing for any on-site seats as a secondary line.',
+        'both': 'Their seats are mixed. Offer both in one short paragraph: US-based candidates for US-only seats, India-based consultants for remote seats, each with a written technical screen; paid only on placement.',
+        'india-domestic': 'This is an India-based firm hiring in India. Keep it short: we have screened SOC/SIEM consultants available for contract work and can also supply for their overseas clients on US/UK hours; ask what rate bands they work with.'
+      };
+      var pLarge = /\+large/.test(pAngle);
+      var pAngleKey = pAngle.replace('+large', '');
+      var pPrompt = 'You write business-development outreach for Sunil Shilimkar, Business Head, SecVision Technologies LLP (Pune, India). SecVision sources and technically screens cybersecurity talent for staffing and consulting firms, using its own job-intelligence and matching platform (patent pending). '
+        + 'Write a PARTNER PITCH to the company described below — a staffing / IT consulting firm that posts cybersecurity contract roles. The recipient is a recruiter or owner there.\n'
+        + 'ANGLE: ' + ANGLE_TEXT[pAngleKey] + (pLarge ? ' This is a very large firm: keep it to 90-120 words, recruiter-to-recruiter tone, no mention of fees in the first message — just offer screened candidates for a specific req and ask who handles vendor/sourcing partners.' : ' Length 140-190 words for the plain version.') + '\n'
+        + 'RULES: open by referencing ONE of their recent postings by title (and city if present) so it is clearly not a mass mail; never claim they said anything; no superlatives, no "I hope this finds you well"; one clear ask at the end (a 15-minute call or three live reqs to pilot); British/Indian business English, plain, specific. Promise "two or three screened profiles within 72 hours" — never 24 or 48. Do not invent names: if no recruiter name is given, use "Hi there,". Do not mention the stats numerically (no "you posted 7 jobs"); use them only to choose emphasis.\n'
+        + 'OUTPUT exactly in this format:\nSUBJECT: <subject under 70 characters>\n---PLAIN---\n<plain-text version suitable for a LinkedIn InMail; paragraphs separated by blank lines; end with the signature block exactly:\nBest regards,\nSunil Shilimkar\nBusiness Head | SecVision Technologies LLP | Pune | India\nsunil@secvisiontech.com | +91-9822500435>\n---HTML---\n<the same message as a complete HTML email body starting at a wrapper <div>, inline CSS only, font-family Arial, 14px, a thin #0E7490 header line reading "SecVision Technologies"; signature with sunil@secvisiontech.com as a mailto link and secvisiontech.com linked to https://secvisiontech.com/>\n'
+        + 'COMPANY DATA (JSON): ' + JSON.stringify({ company: pCompany, companyType: pStats.companyType, companySize: pStats.companySize, mainCountry: pMainCountry, countries: pStats.countries, recentTitles: pStats.titles, latestPosting: pStats.latest, toolsTheyAskFor: pStats.tools, engagementMix: pStats.engagement, offshoreMix: pStats.offshore, workModeMix: pStats.workMode, ratesSeen: pStats.rates, namedRecruiters: pStats.contacts, recipientFirstName: body.recipient || '' });
+      var pOut = '';
+      try {
+        var prr = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-api-key': PKEY2, 'anthropic-version': '2023-06-01' },
+          body: JSON.stringify({ model: 'claude-haiku-4-5-20251001', max_tokens: 2000, temperature: 0.4, messages: [{ role: 'user', content: pPrompt }] }) });
+        if (!prr.ok) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI draft failed (' + prr.status + ')' }) };
+        pOut = ((await prr.json()).content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
+      } catch (pe) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI draft failed: ' + pe.message }) }; }
+      var pSubj = (pOut.match(/^SUBJECT:\s*(.+)$/m) || [])[1] || ('Screened cybersecurity candidates for ' + pCompany + ' — pay only on placement');
+      var pPlain = ((pOut.split(/---PLAIN---/)[1] || '').split(/---HTML---/)[0] || '').trim();
+      var pHtml = (pOut.split(/---HTML---/)[1] || '').replace(/^```(?:html)?\s*/i, '').replace(/```\s*$/, '').trim();
+      if (!pPlain) pPlain = pOut.replace(/^SUBJECT:.*$/m, '').replace(/---HTML---[\s\S]*$/, '').trim();
+      if (!pHtml) pHtml = '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#1F2937">' + pPlain.split(/\n{2,}/).map(function (para) { return '<p>' + para.replace(/\n/g, '<br>') + '</p>'; }).join('') + '</div>';
+      await partners.updateOne({ key: pKey }, { $set: { key: pKey, company: pCompany, stats: pStats, pitch: { subject: pSubj.trim(), body: pPlain, html: pHtml, angle: pAngle, at: new Date(), by: pUser } }, $setOnInsert: { createdAt: new Date(), status: 'drafted' } }, { upsert: true });
+      return { statusCode: 200, headers: hdrs, body: JSON.stringify({ subject: pSubj.trim(), body: pPlain, html: pHtml, cached: false, angle: pAngle, stats: pStats, emails: pEmails, partner: pDoc ? { status: pDoc.status, statusAt: pDoc.statusAt, channel: pDoc.channel } : { status: 'drafted' } }) };
+    }
+
     if (action === 'draftOutreach') {
       var OKEY = process.env.ANTHROPIC_API_KEY;
       if (!OKEY) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI key not configured' }) };
