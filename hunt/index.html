@@ -1995,7 +1995,7 @@ async function _viewDetCore(i){
   window._currentJobDoc=j;
   if(CAP.canContacts&&!mjFromConsultant)h+='<button onclick="openMatchProfiles('+i+')" class="dm-apply" style="background:#6C3FBF;border:none;cursor:pointer">🎯 Match Profiles</button>';
   if(CAP.canContacts)h+='<button onclick="contactClient()" class="dm-apply" style="background:#047857;border:none;cursor:pointer">✉️ Contact Client</button>';
-  if(CAP.canContacts)h+='<button onclick="partnerPitch()" class="dm-apply" title="#640 — AI-drafted sourcing-partner pitch to this staffing / consulting firm, based on everything we know about them (reqs, countries, offshore mix, recruiters). Cached per company." style="background:#6D28D9;border:none;cursor:pointer">🤝 Partner pitch</button>';
+  if(CAP.canContacts)h+='<button onclick="partnerPitch()" class="dm-apply" title="#640 — AI-drafted sourcing-partner pitch to this staffing / consulting firm, based on everything we know about them (reqs, countries, offshore mix, recruiters). Cached per company." style="background:#6D28D9;border:none;cursor:pointer">🏢 Partner pitch</button>';
   h+='<button onclick="saveJobPdf('+i+')" class="dm-apply" style="background:#0E7490;border:none;cursor:pointer" title="Save this job profile — details, requirements, description and matched candidates — as a PDF">💾 Save Job</button>';   // #613
   if(CAP.canStatus)h+='<button onclick="deleteJobProfile()" class="dm-apply" style="background:#DC2626;border:none;cursor:pointer" title="Permanently delete this job profile">🗑 Delete Job</button>';
   if(mjFromConsultant)h+='<span style="font-size:.6rem;color:var(--g5);font-style:italic">Opened from a consultant — matched candidates for this job are shown below.</span>';
@@ -6070,7 +6070,7 @@ function contactLinkHtml(c){
 var ANGLE_LABEL={'us-sourcing':'US-candidate sourcing (their seats are mostly US-only)','india-bench':'India bench on their hours (seats mostly remote / open)','both':'Both: US candidates for US-only seats, India bench for remote','india-domestic':'India-based firm — rate-band question first'};
 async function partnerPitch(){
   var j=window._currentJobDoc;if(!j||!j.company){await uiAlert('Open a job with a company name first');return}
-  var ld=document.createElement('div');ld.id='ctLoading';ld.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld.textContent='🤝 Reading what we know about '+j.company+'...';document.body.appendChild(ld);
+  var ld=document.createElement('div');ld.id='ctLoading';ld.style.cssText='position:fixed;bottom:1rem;right:1rem;background:#1F2937;color:#fff;padding:.5rem .9rem;border-radius:6px;font-size:.72rem;z-index:1700';ld.textContent='🏢 Reading what we know about '+j.company+'...';document.body.appendChild(ld);
   try{
     var r=await authFetch('/.netlify/functions/apify',{method:'POST',body:JSON.stringify({action:'draftPartnerPitch',company:j.company,jobId:String(j._id||j.jobId||''),force:!!window._ctForce})});window._ctForce=false;
     var d=await r.json();var l=document.getElementById('ctLoading');if(l)l.remove();
@@ -6078,10 +6078,11 @@ async function partnerPitch(){
     window._ctCtx={kind:'partner',job:j,profile:null,company:j.company};window._partnerLast=d;
     var st=d.stats||{},ang=(d.angle||'').replace('+large','');
     var info='<div style="font-size:.62rem;color:var(--g5);margin:.2rem 0 .4rem;line-height:1.5"><b style="color:#6D28D9">Angle:</b> '+esc(ANGLE_LABEL[ang]||ang)+(/\+large/.test(d.angle||'')?' · large firm, short note':'')
+      +(d.anchorTitle?' &nbsp;·&nbsp; <b>Anchor:</b> '+esc(d.anchorTitle)+(d.stale?' <span style="color:#B45309;font-weight:700">(older than 45 days — referenced as past)</span>':''):'')
       +' &nbsp;·&nbsp; <b>Their postings (180d):</b> '+(st.reqs||0)+' &nbsp;·&nbsp; <b>Offshore:</b> yes '+((st.offshore||{}).yes||0)+' / no '+((st.offshore||{}).no||0)+' / unknown '+((st.offshore||{}).unknown||0)
       +(st.contacts&&st.contacts.length?'<br><b>Recruiters seen:</b> '+st.contacts.map(contactLinkHtml).join(' · '):'')
       +(d.partner&&d.partner.status&&d.partner.status!=='drafted'?'<br><b>Status:</b> '+esc(d.partner.status)+(d.partner.statusAt?' on '+fmtDate(d.partner.statusAt):''):'')+'</div>';
-    _ctModalRich('🤝 Partner pitch — '+esc(j.company),d.subject||'',d.html||'',d.body||'',(d.emails&&d.emails[0])||'');
+    _ctModalRich('🏢 Partner pitch — '+esc(j.company),d.subject||'',d.html||'',d.body||'',(d.emails&&d.emails[0])||'');
     var lx=document.getElementById('ctLoading');if(lx)lx.textContent=d.cached?'📦 From saved draft':'🤖 Generated with AI (saved for this company)';
     // inject the angle/info strip and a Mark-as-sent control into the modal
     var ov=document.getElementById('ctOverlay');if(!ov)return;
