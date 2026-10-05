@@ -1025,12 +1025,17 @@ exports.handler = async (event) => {
 
     // ACTION: reExtract - re-process all jobs to update extracted fields from stored descriptions
     // #176: Contact management
+    // #646: company names carry ®/™/© inconsistently ("TekWissen ®" on jobs, "TekWissen" typed) — match either form
+    function companyRe(name) {
+      var core = String(name || '').replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+      return { $regex: '^\\s*' + core + '\\s*[®™©]?\\s*$', $options: 'i' };
+    }
     if (action === 'saveContacts') {
       var contactsCol = db.collection('contacts');
       var contacts = body.contacts || [];
-      var company = body.company || '';
+      var company = String(body.company || '').replace(/[®™©]/g, '').trim();
       if (!company || !contacts.length) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Company and contacts required' }) };
-      var compRe = { $regex: '^' + company.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$', $options: 'i' };
+      var compRe = companyRe(company);
       // Cap at 20 contacts per company
       var MAX_CONTACTS = 20;
       var existingCount = await contactsCol.countDocuments({ company: compRe });
@@ -1051,8 +1056,7 @@ exports.handler = async (event) => {
       var savedCount = (result.upsertedCount || 0) + (result.modifiedCount || 0);
       // Also update the contact field on matching jobs
       var contactStr = contacts.map(function(c) { return c.name + ' (' + c.designation + (c.email && c.email !== 'N/A' ? ' - ' + c.email : '') + ')'; }).join(', ');
-      var compPattern = company.replace(/[®™©]/g, '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      await col.updateMany({ company: { $regex: '^' + compPattern + '$', $options: 'i' } }, { $set: { contact: contactStr } });
+      await col.updateMany({ company: compRe }, { $set: { contact: contactStr } });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ saved: contacts.length, upserted: result.upsertedCount || 0, modified: result.modifiedCount || 0, contactStr: contactStr }) };
     }
 
@@ -1992,8 +1996,7 @@ exports.handler = async (event) => {
       var contactsCol = db.collection('contacts');
       var compRaw = (body.company || '').replace(/[®™©]/g, '').trim();
       if (!compRaw) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: [] }) };
-      var compPattern = '^' + compRaw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$';
-      var contacts = await contactsCol.find({ company: { $regex: compPattern, $options: 'i' } }).limit(20).toArray();
+      var contacts = await contactsCol.find({ company: companyRe(compRaw) }).limit(20).toArray();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ contacts: contacts }) };
     }
 
