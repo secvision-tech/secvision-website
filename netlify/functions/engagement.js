@@ -84,7 +84,7 @@ var AI_PROMPT = [
   '  "payType": "hourly" | "annual" | "per-task" | "none",',
   '  "offshoreStated": "yes" | "no" | "unstated",',
   '  "jdCity": "<city, state/country named as the work location in the body, or empty>",',
-  '  "technologies": ["<up to 12 specific products, platforms, standards or services the posting names, e.g. Amazon Security Lake, OCSF, Splunk ES, Microsoft Sentinel, CrowdStrike, Zscaler ZPA, Terraform, CyberArk — most specific first; no generic words like security, cloud, tools>"],',
+  '  "technologies": ["<up to 12 specific products, platforms, standards or services the posting names, e.g. Amazon Security Lake, OCSF, Splunk ES, Microsoft Sentinel, CrowdStrike, Zscaler ZPA, Terraform, CyberArk; include programming/scripting languages the posting names such as Python, Java, .NET, JavaScript, C++, Bash, PowerShell — most specific first; no generic words like security, cloud, tools>"],',
   '  "domain": "soc-operations" | "detection-engineering" | "siem-engineering" | "cloud-security" | "cloud-architecture" | "iam-pam" | "appsec-devsecops" | "grc-compliance" | "network-security" | "vulnerability-mgmt" | "threat-intel-hunting" | "incident-response" | "ot-ics" | "data-security" | "security-architecture" | "other",',
   '  "confidence": <0.0-1.0>,',
   '  "evidence": ["<verbatim quote>", "<verbatim quote>", "<verbatim quote>"]',

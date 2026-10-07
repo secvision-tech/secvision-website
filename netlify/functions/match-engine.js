@@ -1195,6 +1195,15 @@ exports.handler = async function (event) {
           mcDbg.gateReasons = gated.filter(function (g) { return !g.gate.passed; }).slice(0, 3).map(function (g) { return (g.p.name || '?') + ': ' + g.gate.reasons.join('; '); });
           mcDbg.reqGates = { clearance: !!req.requiresClearance, citizen: !!req.requiresCitizen };
         }
+        // #643: a profile that fails the hard gates is still EVALUATED — persist a zero-score cache entry so it
+        // counts toward the cap and is not re-picked on every request. Without this, a job whose gates reject most
+        // of the pool made "Score 50 more" spin on the same 16 profiles with the counter never moving.
+        var gatedOutList = gated.filter(function (g) { return !g.gate.passed; });
+        for (var gi = 0; gi < gatedOutList.length; gi++) {
+          var gp = gatedOutList[gi].p, gEntry = { overall: 0, dimensions: {}, reason: 'Gated: ' + gatedOutList[gi].gate.reasons.join('; '), flags: gatedOutList[gi].gate.flags || [], gated: true, scoredAt: new Date(), v: SCORING_VERSION, reqHash: req.reqHash };
+          try { await cacheCol.updateOne({ _id: gp._id }, { $set: { ['matchCache.' + req.jobId]: gEntry } }); } catch (e) {}
+          newlyScored.push({ profile: gp, overall: 0, dimensions: {}, reason: gEntry.reason, flags: gEntry.flags, gated: true });
+        }
         try {
           // #564: sub-batches run in PARALLEL (sequential runs hit the gateway's ~26s kill);
           // results persist per profile as each batch settles.
@@ -1546,7 +1555,7 @@ exports.handler = async function (event) {
     // ============ #582 PIPELINE STAGE per job-candidate pair ============
     if (action === 'setCandidateStage') {
       if (!/super_admin|admin|manager/.test(String(authUser.role || ''))) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Manager role or above required' }) };
-      var STAGES = ['Screening', 'Submitted', 'Client Interview', 'Selected', 'Contracted', 'Rejected'];
+      var STAGES = ['Shortlisted', 'Contacted', 'Screening', 'Submitted', 'Client Interview', 'Selected', 'Contracted', 'Rejected'];  // #648
       var stg = String(body.stage || ''); if (STAGES.indexOf(stg) === -1) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Invalid stage' }) };
       var jdS = await findJobDoc(body.jobId);
       if (!jdS) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Job not found' }) };
@@ -1585,7 +1594,7 @@ exports.handler = async function (event) {
         var best = fresh.length ? fresh.reduce(function (a, b) { return (b.pct || 0) > (a.pct || 0) ? b : a; }) : null;
         return {
           _id: p._id ? p._id.toString() : '', sourceId: c.sourceId, overall: c.overall, addedAt: c.addedAt,
-          stage: c.stage || 'Screening', stageAt: c.stageAt || null, stageReason: c.stageReason || '', engagedElsewhere: c.engagedElsewhere || null,
+          stage: c.stage || 'Shortlisted', stageAt: c.stageAt || null, stageReason: c.stageReason || '', engagedElsewhere: c.engagedElsewhere || null,
           screening: best ? { pct: best.pct, skillArea: best.skillArea, date: String(best.date || '').slice(0, 10) } : null,
           stale: !!(mc && reqL && mc.reqHash && mc.reqHash !== reqL.reqHash),
           name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',

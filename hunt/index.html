@@ -2192,7 +2192,7 @@ async function saveJobPdf(i){
     var cd=await cr.json();var cands=(cd.candidates||[]);
     if(cands.length){
       doc.autoTable({startY:y,head:[['#','Candidate','Role','Location','Match','Stage','Screening']],
-        body:cands.sort(function(a,b){return (b.overall||0)-(a.overall||0)}).map(function(c,k){return [k+1,c.name||'',(c.currentRoleEn||c.currentRole||''),(c.locationEn||c.location||c.country||''),(c.overall||0)+'%',c.stage||'Screening',c.screening?(c.screening.pct+'% '+(c.screening.skillArea||'')):'—']}),
+        body:cands.sort(function(a,b){return (b.overall||0)-(a.overall||0)}).map(function(c,k){return [k+1,c.name||'',(c.currentRoleEn||c.currentRole||''),(c.locationEn||c.location||c.country||''),(c.overall||0)+'%',c.stage||'Shortlisted',c.screening?(c.screening.pct+'% '+(c.screening.skillArea||'')):'—']}),
         theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:10.5},styles:{fontSize:9.5,cellPadding:4,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:26},4:{cellWidth:48},5:{cellWidth:80}},margin:{left:M,right:M}});
       y=doc.lastAutoTable.finalY+10;
     }
@@ -6836,10 +6836,10 @@ async function autoAddCandidates(refs){
   }catch(e){}
   if(jobCandidatesJobId)loadJobCandidates();
 }
-var CAND_STAGES=['Screening','Submitted','Client Interview','Selected','Contracted','Rejected'];
-var STAGE_COL={'Screening':'#6B7280','Submitted':'#0E7490','Client Interview':'#7C3AED','Selected':'#047857','Contracted':'#065F46','Rejected':'#B91C1C'};
+var CAND_STAGES=['Shortlisted','Contacted','Screening','Submitted','Client Interview','Selected','Contracted','Rejected']; // #648
+var STAGE_COL={'Shortlisted':'#4B5563','Contacted':'#B45309','Screening':'#6B7280','Submitted':'#0E7490','Client Interview':'#7C3AED','Selected':'#047857','Contracted':'#065F46','Rejected':'#B91C1C'};
 function candStageCell(c){
-  var st=c.stage||'Screening';
+  var st=c.stage||'Shortlisted';
   var eng=c.engagedElsewhere?'<div title="Contracted on '+esc(c.engagedElsewhere.title||'another job')+' ('+esc(c.engagedElsewhere.company||'')+') since '+esc(String(c.engagedElsewhere.at||'').slice(0,10))+'" style="font-size:.5rem;color:#B45309">⚠ engaged elsewhere</div>':'';
   var rej=(st==='Rejected'&&c.stageReason)?'<div title="'+esc(c.stageReason)+'" style="font-size:.5rem;color:#B91C1C;max-width:14ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(c.stageReason)+'</div>':'';
   if(!CAP.canStatus)return '<span style="font-size:.58rem;font-weight:700;color:'+(STAGE_COL[st]||'#6B7280')+'">'+esc(st)+'</span>'+eng+rej;
