@@ -4891,17 +4891,28 @@ function runMatchJobs(page,noScore){
     if(d.error){st.innerHTML='⚠️ '+esc(d.error);return}
     if(d.moreToScore){
       st.textContent='⏳ Scoring jobs... ('+(d.totalMatches||0)+' matches so far)';
-      if(d.matches&&d.matches.length)renderMatchJobs(d);
+      if(d.matches&&d.matches.length)renderMatchJobs(mjMergeSaved(d));
       setTimeout(function(){runMatchJobs(page)},400);
       return;
     }
     mjState.force=false;  // #586: explicit Score-more run finished (cap reached or nothing left)
-    renderMatchJobs(d);
+    renderMatchJobs(mjMergeSaved(d));
   }).catch(function(e){
     mjState.force=false;
     if(btn){btn.disabled=false;btn.style.opacity='1'}
     st.textContent='⚠️ '+e.message;
   });
+}
+// #649: a Find run returns only this run's matches; union them with everything already saved for
+// this consultant so earlier finds stay visible without closing and reopening the popup.
+function mjMergeSaved(d){
+  if(!d||!d.savedMatches||!d.savedMatches.length)return d;
+  var seen={},merged=(d.matches||[]).slice();
+  merged.forEach(function(m){seen[m.jobId]=1});
+  d.savedMatches.forEach(function(m){if(!seen[m.jobId]){seen[m.jobId]=1;merged.push(m)}});
+  d.newMatches=d.totalMatches||0;
+  d.matches=merged;d.totalMatches=merged.length;
+  return d;
 }
 function mjNextPage(){mjState.evalCap=(mjState.evalCap||50)+50;runMatchJobs(mjState.page+1)}
 function mjScoreMore(){mjState.evalCap=(mjState.evalCap||50)+50;mjState.force=true;runMatchJobs(mjState.page||0)}  // #586: force past page-full stop
@@ -5045,7 +5056,7 @@ function renderMatchJobs(d){
   var box=document.getElementById('mjResults');
   if(!box)return;
   if(st&&!d.saved){
-    st.innerHTML='Evaluated '+(d.evaluated||0)+' of '+(d.jobsInWindow||0)+' contract job'+((d.jobsInWindow||0)===1?'':'s')+' in the last '+(d.days||7)+' days — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'
+    st.innerHTML='Evaluated '+(d.evaluated||0)+' of '+(d.jobsInWindow||0)+' contract job'+((d.jobsInWindow||0)===1?'':'s')+' in the last '+(d.days||7)+' days — '+(typeof d.newMatches==='number'?(d.newMatches+' match'+(d.newMatches===1?'':'es')+' ≥60% this run · '+(d.totalMatches||0)+' saved in total.'):((d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60%.'))
       +((d.canScoreMore&&d.unscoredLeft>0)?' <button onclick="mjScoreMore()" style="padding:.1rem .45rem;background:#fff;color:#6C3FBF;border:1px solid #C4B5FD;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Score '+Math.min(50,d.unscoredLeft)+' more</button>':'');
   }
   var list=(d.matches||[]).slice().sort(function(a,b){

@@ -1875,6 +1875,8 @@ exports.handler = async function (event) {
         }),
         page: page, hasMore: all.length > start + PAGE,
         totalMatches: all.length, evaluated: evaluatedTotal,
+        // #649: full saved list (this run merged with earlier runs) so the popup can show old + new without reopening
+        savedMatches: (typeof mergedList !== 'undefined' ? mergedList : []), savedTotal: (typeof mergedList !== 'undefined' ? mergedList.length : 0),
         jobsInWindow: candidateJobs.length, unscoredLeft: unscoredLeft > 0 ? unscoredLeft : 0,
         period: body.period || '1w', days: days,
         moreToScore: keepScoring,
