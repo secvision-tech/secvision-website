@@ -2152,6 +2152,45 @@ async function jaAddComment(){
 }
 
 // ===== #613: Save Job — formatted PDF of the job profile (details table, requirements, JD, matched candidates) =====
+// #654: consultant profile as PDF (same look as Save Job). No identity documents or Aadhaar/PAN data are included.
+async function saveProfilePdf(){
+  var c=manageProfileData;if(!c){alert('Profile not loaded');return}
+  var doc=new jspdf.jsPDF({orientation:'portrait',unit:'pt',format:'a4'});
+  var W=doc.internal.pageSize.getWidth(),M=40,y=44;
+  var arr=function(v){return Array.isArray(v)?v.filter(Boolean).join(', '):String(v||'')};
+  var val=function(v){v=arr(v);return v?v:'—'};
+  doc.setFillColor(14,116,144);doc.rect(0,0,W,32,'F');
+  doc.setTextColor(255,255,255);doc.setFontSize(10);doc.setFont('helvetica','bold');doc.text('SecVision Technologies LLP  ·  Business Hunt — Consultant Profile',M,19);
+  doc.setTextColor(30,41,59);doc.setFontSize(18);doc.text(String(c.name||'Consultant'),M,y+14,{maxWidth:W-2*M});y+=34;
+  doc.setFontSize(11.5);doc.setFont('helvetica','normal');doc.setTextColor(71,85,105);
+  doc.text([enRole(c),enLoc(c)].filter(Boolean).join('  ·  '),M,y+6,{maxWidth:W-2*M});y+=20;
+  var kv=function(title,rows){
+    rows=rows.filter(function(r){return r[1]&&r[1]!=='—'});if(!rows.length)return;
+    doc.autoTable({startY:y,head:[[{content:title,colSpan:2,styles:{fillColor:[14,116,144],textColor:255,fontStyle:'bold',fontSize:11}}]],body:rows,theme:'grid',
+      styles:{fontSize:10,cellPadding:5,valign:'top',textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:140,fontStyle:'bold',fillColor:[248,250,252]},1:{cellWidth:W-2*M-140}},margin:{left:M,right:M}});
+    y=doc.lastAutoTable.finalY+10;
+  };
+  var scs=Array.isArray(c.screenings)?c.screenings:[];
+  kv('Consultant',[
+    ['Consultant ID',String(c._id||'')],['Current role',val(enRole(c))],['Company',val(c.currentCompany)],['Location',val(enLoc(c))],['Country',val(c.country)],
+    ['Experience',c.yearsExperience?c.yearsExperience+' yrs':'—'],['Engagement type',val(c.engagementType||(c.contractorSignal&&c.contractorSignal.likely?'Contractor (likely)':''))],
+    ['Availability',val(c.availability)],['Pipeline',val(PIPELINE_LABELS[c.pipelineStatus]||c.pipelineStatus)],['Rate expectation',val(c.rateExpectation)],['Work authorisation',val(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')],
+    ['Email',val(c.email)],['Phone',val(c.phone)],['LinkedIn',val(c.linkedinUrl)],['Source',val(c.source)]
+  ]);
+  kv('Capabilities',[['Skills',val(c.skills)],['Certifications',val(c.certifications)],['Compliance / frameworks',val(c.compliance)],['Languages',val(c.languages)]]);
+  if(c.summary){doc.autoTable({startY:y,head:[['Summary']],body:[[String(c.summary).slice(0,3000)]],theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:11},styles:{fontSize:10,cellPadding:5,textColor:[30,41,59],lineColor:[226,232,240]},margin:{left:M,right:M}});y=doc.lastAutoTable.finalY+10}
+  var exp=Array.isArray(c.experience)?c.experience:[];
+  if(exp.length){doc.autoTable({startY:y,head:[['Title','Company','Duration','Location']],body:exp.slice(0,15).map(function(e){return [e.title||'',e.company||'',e.duration||'',e.location||'']}),theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:10.5},styles:{fontSize:9.5,cellPadding:4,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:170},2:{cellWidth:100}},margin:{left:M,right:M}});y=doc.lastAutoTable.finalY+10}
+  var edu=Array.isArray(c.education)?c.education.filter(function(e){return e.school||e.degree}):[];
+  if(edu.length){doc.autoTable({startY:y,head:[['School','Degree','Field']],body:edu.map(function(e){return [e.school||'',e.degree||'',e.field||'']}),theme:'grid',headStyles:{fillColor:[14,116,144],textColor:255,fontSize:10.5},styles:{fontSize:9.5,cellPadding:4,textColor:[30,41,59],lineColor:[226,232,240]},margin:{left:M,right:M}});y=doc.lastAutoTable.finalY+10}
+  if(scs.length){doc.autoTable({startY:y,head:[['SecVision screening','Score','Date','Notes']],body:scs.map(function(x){return [x.skillArea||'',(x.pct!=null?x.pct+'%':(x.score!=null?x.score+'/'+(x.maxScore||''):'')),String(x.date||'').slice(0,10),String(x.notes||'').slice(0,200)]}),theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:10.5},styles:{fontSize:9.5,cellPadding:4,textColor:[30,41,59],lineColor:[226,232,240]},margin:{left:M,right:M}});y=doc.lastAutoTable.finalY+10}
+  var mj=Array.isArray(c.matchedJobs)?c.matchedJobs.slice().sort(function(a,b){return (b.overall||0)-(a.overall||0)}).slice(0,25):[];
+  if(mj.length){doc.autoTable({startY:y,head:[['#','Matched job','Company','Location','Match','Reason']],body:mj.map(function(m,k){return [k+1,m.title||'',m.company||'',m.location||m.country||'',(m.overall||0)+'%',String(m.reason||'').slice(0,160)]}),theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:10},styles:{fontSize:8.5,cellPadding:3.5,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:22},4:{cellWidth:42},5:{cellWidth:170}},margin:{left:M,right:M}});y=doc.lastAutoTable.finalY+10}
+  var pg=doc.internal.getNumberOfPages();
+  for(var k=1;k<=pg;k++){doc.setPage(k);doc.setFontSize(8);doc.setTextColor(120,120,120);doc.text('Confidential — SecVision Technologies LLP · generated '+new Date().toISOString().slice(0,10)+' · page '+k+' of '+pg,M,doc.internal.pageSize.getHeight()-16)}
+  var fname='SecVision_Consultant_'+String(c.name||'profile').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_|_$/g,'')+'_'+new Date().toISOString().slice(0,10)+'.pdf';
+  doc.save(fname);
+}
 async function saveJobPdf(i){
   var j=allJobs[i];if(!j){alert('Job not loaded');return}
   var doc=new jspdf.jsPDF({orientation:'portrait',unit:'pt',format:'a4'});
@@ -4775,7 +4814,7 @@ function manageProfileHtml(){
   return '<div id="manageProfilePopup" style="display:none;position:fixed;inset:0;background:rgba(10,20,40,.85);z-index:1200;justify-content:center;align-items:center">'
     +'<div style="background:#fff;border-radius:8px;width:96%;max-width:640px;max-height:90vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)">'
     +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.6rem;gap:.5rem">'
-    +'<button onclick="mpNav(-1)" id="mpPrevBtn" title="Previous consultant" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin-right:.4rem">‹</button><h3 id="mpTitle" style="margin:0;font-size:.85rem;color:var(--pri);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Manage Profile</h3><button onclick="mpNav(1)" id="mpNextBtn" title="Next consultant" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin:0 .4rem">›</button>'
+    +'<button onclick="mpNav(-1)" id="mpPrevBtn" title="Previous consultant" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin-right:.4rem">‹</button><h3 id="mpTitle" style="margin:0;font-size:.85rem;color:var(--pri);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Manage Profile</h3><button onclick="saveProfilePdf()" title="Save this consultant profile — summary, skills, certifications, experience, screenings and matched jobs — as a PDF" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.62rem;cursor:pointer;padding:.15rem .5rem;margin:0 .4rem;white-space:nowrap">💾 Save PDF</button><button onclick="mpNav(1)" id="mpNextBtn" title="Next consultant" style="border:1px solid var(--g100);background:#fff;border-radius:4px;font-size:.8rem;cursor:pointer;padding:.1rem .5rem;margin:0 .4rem">›</button>'
     +'<div id="mpNav" style="display:none;align-items:center;gap:.3rem;white-space:nowrap">'
     +'<button id="mpPrevBtn" onclick="candidateNavGo(-1)" style="padding:.2rem .5rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.58rem;cursor:pointer;font-weight:600">‹ Prev</button>'
     +'<span id="mpNavInfo" style="font-size:.55rem;color:var(--g5)"></span>'
@@ -5955,6 +5994,9 @@ async function saveDemand(){
 }
 // ===== #550 outreach drafts: client (job popup) + consultant (match rows) =====
 function _ctModal(title,subject,bodyText,mailto){
+  var ex0=document.getElementById('ctOverlay');
+  if(window._ctInPlace&&ex0){var sj0=document.getElementById('ctSubj'),pv0=document.getElementById('ctPreview');if(sj0)sj0.value=subject||'';if(pv0)pv0.innerHTML='<pre style="white-space:pre-wrap;font-family:inherit">'+String(bodyText).replace(/</g,'&lt;')+'</pre>';window._ctPlain=bodyText;var rb0=ex0.querySelector('button[title^="Discard"]');if(rb0){rb0.disabled=false;rb0.textContent='♻️ Regenerate'}return}
+  if(ex0)ex0.remove();
   var ov=document.createElement('div');ov.id='ctOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1600;display:flex;align-items:center;justify-content:center';
   ov.innerHTML='<div style="background:#fff;border-radius:10px;width:640px;max-width:95%;max-height:88vh;overflow:auto;padding:1rem">'
    +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">'+title+'</b><button onclick="document.getElementById(\'ctOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
@@ -5983,18 +6025,45 @@ async function _aiDraft(kind,job,profile,fallbackFn){
 }
 function _ctModalRich(title,subject,html,plain,mailto){
   window._ctHtml=html;window._ctPlain=plain;
+  var ex=document.getElementById('ctOverlay');
+  if(window._ctInPlace&&ex){   // #655
+    var sj=document.getElementById('ctSubj'),pv=document.getElementById('ctPreview');
+    if(sj)sj.value=subject||'';
+    if(pv)pv.innerHTML=html||('<pre style="white-space:pre-wrap;font-family:inherit">'+String(plain).replace(/</g,'&lt;')+'</pre>');
+    var rb=ex.querySelector('button[title^="Discard"]');if(rb){rb.disabled=false;rb.textContent='♻️ Regenerate'}
+    return;
+  }
+  if(ex)ex.remove();
   var ov=document.createElement('div');ov.id='ctOverlay';ov.style.cssText='position:fixed;inset:0;background:rgba(15,35,65,.55);z-index:1600;display:flex;align-items:center;justify-content:center';
   ov.innerHTML='<div style="background:#fff;border-radius:10px;width:720px;max-width:96%;max-height:90vh;overflow:auto;padding:1rem">'
    +'<div style="display:flex;justify-content:space-between;align-items:center"><b style="font-size:.9rem;color:var(--pri)">'+title+'</b><button onclick="document.getElementById(\'ctOverlay\').remove()" style="background:none;border:none;font-size:1rem;cursor:pointer">×</button></div>'
    +'<input id="ctSubj" value="'+String(subject).replace(/"/g,'&quot;')+'" style="width:100%;padding:.35rem .45rem;font-size:.72rem;border:1px solid var(--g100);border-radius:4px;margin-bottom:.4rem">'
    +'<div id="ctPreview" contenteditable="true" style="border:1px solid var(--g100);border-radius:6px;padding:.6rem;max-height:52vh;overflow:auto;font-size:.72rem">'+(html||('<pre style="white-space:pre-wrap;font-family:inherit">'+String(plain).replace(/</g,'&lt;')+'</pre>'))+'</div>'
    +'<div style="display:flex;gap:.5rem;margin-top:.5rem;flex-wrap:wrap">'
-   +'<button onclick="window._ctForce=true;document.getElementById(\'ctOverlay\').remove();(_ctCtx.kind===\'client\'?contactClient():(_ctCtx.kind===\'partner\'?partnerPitch():contactConsultant(_ctCtx.profile&&_ctCtx.profile.sourceId)))" title="Discard the stored draft and generate a fresh one with AI" style="padding:.35rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">♻️ Regenerate</button>'
+   +'<button onclick="ctRegenerate(this)" title="Discard the stored draft and generate a fresh one with AI" style="padding:.35rem .8rem;background:#7C3AED;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">♻️ Regenerate</button>'
    +'<button onclick="ctCopyRich(this)" style="padding:.35rem .8rem;background:#0E7490;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📋 Copy (rich — Outlook/Gmail)</button>'
    +'<button onclick="navigator.clipboard.writeText(window._ctPlain);this.textContent=\'✅ Copied plain\'" style="padding:.35rem .8rem;background:#0A66C2;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📋 Copy plain (LinkedIn)</button>'
    +(mailto?'<button onclick="window.location.href=\'mailto:'+mailto+'?subject=\'+encodeURIComponent(document.getElementById(\'ctSubj\').value)+\'&body=\'+encodeURIComponent(window._ctPlain)" style="padding:.35rem .8rem;background:#047857;color:#fff;border:none;border-radius:4px;font-size:.72rem;cursor:pointer;font-weight:600">📧 Open in Email (plain)</button>':'')
    +'</div></div>';
   document.body.appendChild(ov);
+}
+// #655: regenerate without closing the popup — show a working state, then swap the content in place
+async function ctRegenerate(btn){
+  var ov=document.getElementById('ctOverlay');if(!ov)return;
+  var prev=document.getElementById('ctPreview');
+  var oldHtml=prev?prev.innerHTML:'';
+  btn.disabled=true;btn.textContent='⏳ Regenerating…';
+  if(prev)prev.innerHTML='<div style="padding:1.2rem;text-align:center;color:var(--g5);font-size:.72rem">🤖 Generating a fresh draft with AI…</div>';
+  window._ctForce=true;window._ctInPlace=true;
+  try{
+    if(_ctCtx.kind==='client')await contactClient();
+    else if(_ctCtx.kind==='partner')await partnerPitch();
+    else await contactConsultant(_ctCtx.profile&&_ctCtx.profile.sourceId);
+  }catch(e){}
+  window._ctInPlace=false;
+  // if the draft failed, restore what was there
+  var p2=document.getElementById('ctPreview');
+  if(p2&&/Generating a fresh draft/.test(p2.innerHTML)){p2.innerHTML=oldHtml;var b2=ov.querySelector('button[title^="Discard"]');if(b2){b2.disabled=false;b2.textContent='♻️ Regenerate'}}
 }
 async function ctCopyRich(btn){
   var el=document.getElementById('ctPreview');
