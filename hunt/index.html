@@ -6169,8 +6169,10 @@ async function contactConsultant(sid){
   var jobUS=/united states|usa/i.test((j.detectedCountry||j.country||''));
   var asks=['your current availability and notice period'];
   if(!p.rateExpectation)asks.push('your expected rate (USD/hr, contract)');
-  if(consIndia&&jobUS)asks.push('your flexibility for US-hours overlap (evening/night shift IST)');
-  else asks.push('your flexibility for working-hours overlap with the client\'s time zone');
+  var _jc=String(j.detectedCountry||j.country||'').toLowerCase().replace(/^(usa|us)$/,'united states'),_cc=String(p.country||'').toLowerCase().replace(/^(usa|us)$/,'united states');
+  var sameCountry=!!(_jc&&_cc&&(_jc===_cc||_jc.indexOf(_cc)>=0||_cc.indexOf(_jc)>=0));   // #653
+  if(!sameCountry){if(consIndia&&jobUS)asks.push('your flexibility for US-hours overlap (evening/night shift IST)');else asks.push('your flexibility for working-hours overlap with the client\'s time zone')}
+  else if(jobWorkMode(j)==='onsite'||jobWorkMode(j)==='hybrid')asks.push('your availability to work '+jobWorkMode(j)+' at '+(j.location||'the client location'));
   var wm=jobWorkMode(j);   // #652: say remote only when the seat is remote
   var intro=wm==='remote'
     ?(consIndia?'SecVision Technologies places India-based security consultants on remote US/EU contract engagements.':'SecVision Technologies engages independent security consultants worldwide for remote contract engagements with US/EU clients.')
