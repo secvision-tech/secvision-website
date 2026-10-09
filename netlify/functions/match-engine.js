@@ -1597,6 +1597,8 @@ exports.handler = async function (event) {
           stage: c.stage || 'Shortlisted', stageAt: c.stageAt || null, stageReason: c.stageReason || '', engagedElsewhere: c.engagedElsewhere || null,
           screening: best ? { pct: best.pct, skillArea: best.skillArea, date: String(best.date || '').slice(0, 10) } : null,
           stale: !!(mc && reqL && mc.reqHash && mc.reqHash !== reqL.reqHash),
+          // #650: score breakdown (as shown in Match Profiles) for the job popup and exports
+          dimensions: (mc && mc.dimensions) || null, reason: (mc && mc.reason) || '', flags: (mc && mc.flags) || [],
           name: p.name || '(profile removed)', currentRole: p.currentRole || p.headline || '',
           currentRoleEn: p.currentRoleEn || p.headlineEn || '', locationEn: p.locationEn || '',   // #595b
           yearsExperience: (p.yearsExperience === undefined || p.yearsExperience === null) ? null : p.yearsExperience,

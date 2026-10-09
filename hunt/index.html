@@ -2191,9 +2191,16 @@ async function saveJobPdf(i){
     var cr=await authFetch('/.netlify/functions/match-engine',{method:'POST',body:JSON.stringify({action:'listCandidates',jobId:j._id||j.jobId})});
     var cd=await cr.json();var cands=(cd.candidates||[]);
     if(cands.length){
-      doc.autoTable({startY:y,head:[['#','Candidate','Role','Location','Match','Stage','Screening']],
-        body:cands.sort(function(a,b){return (b.overall||0)-(a.overall||0)}).map(function(c,k){return [k+1,c.name||'',(c.currentRoleEn||c.currentRole||''),(c.locationEn||c.location||c.country||''),(c.overall||0)+'%',c.stage||'Shortlisted',c.screening?(c.screening.pct+'% '+(c.screening.skillArea||'')):'—']}),
-        theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:10.5},styles:{fontSize:9.5,cellPadding:4,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:26},4:{cellWidth:48},5:{cellWidth:80}},margin:{left:M,right:M}});
+      doc.autoTable({startY:y,head:[['#','Candidate','Role','Location','Match','Score breakdown','Stage','Screening']],
+        body:cands.sort(function(a,b){return (b.overall||0)-(a.overall||0)}).map(function(c,k){return [k+1,c.name||'',(c.currentRoleEn||c.currentRole||''),(c.locationEn||c.location||c.country||''),(c.overall||0)+'%',dimsText(c.dimensions)||'—',c.stage||'Shortlisted',c.screening?(c.screening.pct+'% '+(c.screening.skillArea||'')):'—']}),
+        theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:9.5},styles:{fontSize:8.5,cellPadding:3.5,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:22},4:{cellWidth:42},5:{cellWidth:120},6:{cellWidth:62}},margin:{left:M,right:M}});
+      y=doc.lastAutoTable.finalY+6;
+      // #650: match rationale per candidate (same text as Match Profiles)
+      var withReason=cands.filter(function(c){return c.reason});
+      if(withReason.length){
+        doc.autoTable({startY:y,head:[['Candidate','Match rationale']],body:withReason.map(function(c){return [c.name||'',String(c.reason).slice(0,400)+((c.flags&&c.flags.length)?'  ⚑ '+c.flags.join(' · '):'')]}),
+          theme:'grid',headStyles:{fillColor:[108,63,191],textColor:255,fontSize:9.5},styles:{fontSize:8.5,cellPadding:3.5,textColor:[30,41,59],lineColor:[226,232,240]},columnStyles:{0:{cellWidth:120}},margin:{left:M,right:M}});
+      }
       y=doc.lastAutoTable.finalY+10;
     }
   }catch(e){}
@@ -6903,6 +6910,18 @@ function autoTranslateProfiles(list,onDone){
     if(n&&onDone)onDone();
   }).catch(function(){});
 }
+// #650: compact score breakdown for the job popup and exports (same dimensions as Match Profiles)
+var DIM_ORDER=[['skills','Skills'],['certifications','Certs'],['compliance','Compliance'],['role','Role fit'],['experience','Experience'],['rate','Rate'],['education','Education']];
+function dimsText(d,short){if(!d)return '';return DIM_ORDER.filter(function(x){return d[x[0]]!=null}).map(function(x){return (short?x[1].slice(0,2):x[1])+' '+Math.round(d[x[0]])}).join(short?' · ':', ')}
+function candDetailRow(c,cols){
+  var d=c.dimensions;if(!d&&!c.reason)return '';
+  var bar=function(label,val){val=Math.round(val||0);var col=val>=80?'#047857':(val>=60?'#0891B2':(val>=40?'#B45309':'#B91C1C'));return '<div style="display:flex;align-items:center;gap:.4rem;font-size:.6rem;margin:.1rem 0"><span style="width:9ch;color:var(--g5)">'+label+'</span><div style="flex:1;background:#F1F5F9;border-radius:3px;height:7px;max-width:220px"><div style="width:'+val+'%;height:100%;background:'+col+';border-radius:3px"></div></div><span style="width:3ch;text-align:right;font-weight:700;color:'+col+'">'+val+'</span></div>'};
+  var bars=d?DIM_ORDER.filter(function(x){return d[x[0]]!=null}).map(function(x){return bar(x[1],d[x[0]])}).join(''):'';
+  return '<tr class="cand-detail" data-for="'+esc(c.sourceId)+'" style="display:none;background:#FAFAFA"><td colspan="'+cols+'" style="padding:.4rem .8rem .5rem 2.5rem">'
+    +'<div style="display:flex;gap:1.2rem;flex-wrap:wrap"><div style="min-width:280px">'+bars+'</div>'
+    +'<div style="flex:1;min-width:240px;font-size:.62rem;color:#374151">'+(c.reason?'<b>Reason:</b> '+esc(c.reason):'')+((c.flags&&c.flags.length)?'<div style="color:#92400E;margin-top:.2rem">⚑ '+c.flags.map(esc).join(' · ')+'</div>':'')+'</div></div></td></tr>';
+}
+function candToggleDetail(sid,btn){var r=document.querySelector('tr.cand-detail[data-for="'+sid+'"]');if(!r)return;var open=r.style.display==='none';r.style.display=open?'':'none';btn.textContent=open?'▾':'▸'}
 async function loadJobCandidates(){
   var wrap=document.getElementById('jobCandidates');if(!wrap||!jobCandidatesJobId)return;
   wrap.innerHTML='<div style="font-size:.62rem;color:var(--g5)">Loading matched candidates...</div>';
@@ -6952,7 +6971,7 @@ async function loadJobCandidates(){
       var selCls=_selectedCandidates[c.sourceId]?' class="row-hl"':'';
       h+='<tr'+selCls+' data-sid="'+esc(c.sourceId)+'" style="border-bottom:1px solid var(--g1)">'
         +'<td style="color:var(--g4);font-weight:600;text-align:right">'+(i+1)+'</td>'
-        +'<td style="text-align:right"><span style="font-weight:700;color:'+col+'">'+pct+'%</span>'+(c.stale?'<span title="Requirement changed since this score — re-evaluate" style="font-size:.5rem;background:#FEF3C7;color:#92400E;border-radius:3px;padding:0 .2rem;margin-left:.2rem">stale</span>':'')+(c.screening?'<div title="SecVision screening: '+esc(c.screening.skillArea)+' on '+esc(c.screening.date)+'" style="font-size:.52rem;color:#047857;font-weight:700">✓ test '+c.screening.pct+'%</div>':'')+'</td>'
+        +'<td style="text-align:right">'+((c.dimensions||c.reason)?'<button onclick="candToggleDetail(\''+esc(c.sourceId)+'\',this)" title="Score breakdown: '+esc(dimsText(c.dimensions))+'" style="border:none;background:none;cursor:pointer;font-size:.6rem;color:var(--g5);padding:0 .15rem">▸</button>':'')+'<span style="font-weight:700;color:'+col+'" title="'+esc(dimsText(c.dimensions))+'">'+pct+'%</span>'+(c.stale?'<span title="Requirement changed since this score — re-evaluate" style="font-size:.5rem;background:#FEF3C7;color:#92400E;border-radius:3px;padding:0 .2rem;margin-left:.2rem">stale</span>':'')+(c.screening?'<div title="SecVision screening: '+esc(c.screening.skillArea)+' on '+esc(c.screening.date)+'" style="font-size:.52rem;color:#047857;font-weight:700">✓ test '+c.screening.pct+'%</div>':'')+'</td>'
         +'<td style="font-weight:600" title="'+esc(c.name)+'">'+esc(c.name)+nearIcon(c)+(c.linkedinUrl?' <a href="'+normUrl(c.linkedinUrl)+'" target="_blank" style="font-size:.55rem;color:#0A66C2">↗</a>':'')+certMarker(c.certifications)+'</td>'
         +'<td style="color:var(--g5)" title="'+esc((c.currentRoleEn&&c.currentRole&&c.currentRoleEn!==c.currentRole)?c.currentRole+' → '+c.currentRoleEn:enRole(c))+'">'+esc(enRole(c)||'—')+(c.currentRoleEn?' <span title="Translated to English" style="font-size:.5rem;color:var(--g4)">🌐</span>':'')+'</td>'
         +'<td style="color:var(--g5);text-align:right" title="Years of experience">'+(c.yearsExperience?c.yearsExperience+'y':'—')+'</td>'
@@ -6963,7 +6982,7 @@ async function loadJobCandidates(){
         +((c._id&&!mjFromConsultant)?'<button class="vb" onclick="openManageProfileFromJob(\''+c._id+'\')" style="font-size:.58rem">'+(CAP.canStatus?'Manage':'View')+'</button> ':'')
         +(CAP.canContacts?'<button class="vb" onclick="contactConsultant(\''+esc(c.sourceId)+'\')" title="Draft an outreach email/LinkedIn message for this consultant about this job" style="font-size:.58rem;background:#047857;color:#fff">✉️</button> ':'')
         +((CAP.canStatus&&!mjFromConsultant)?'<button class="cand-del" data-sid="'+esc(c.sourceId)+'" data-name="'+esc(c.name)+'" style="padding:.15rem .5rem;background:#DC2626;color:#fff;border:none;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">Delete</button>':'')
-        +'</td></tr>';
+        +'</td></tr>'+candDetailRow(c,9);
     });
     h+='</tbody></table></div>';
     if(list.length>CAND_PER){h+='<div style="display:flex;gap:.4rem;align-items:center;margin-top:.4rem;font-size:.58rem">'
