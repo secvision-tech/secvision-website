@@ -6150,6 +6150,7 @@ async function contactClient(){
    +'\nWe can share matched consultant profiles as soon as these are confirmed. Beyond this requirement, we would value building a long-term partnership with '+(j.company||'your team')+' — so you have a reliable bench partner for future security staffing needs as well.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com';
   _ctModal('✉️ Contact Client — '+(j.company||''),'RE: '+(j.title||'Requirement')+' — clarifications to propose the right consultants',body,'');
 }
+function jobWorkMode(j){var w=String(j.workMode||'').toLowerCase();if(w==='remote'||w==='hybrid'||w==='onsite')return w;if(/^(yes|true|remote)$/i.test(String(j.remote||'')))return 'remote';if(/hybrid/i.test(j.location||''))return 'hybrid';if(/\bremote\b/i.test(j.location||''))return 'remote';return 'unknown'}
 async function contactConsultant(sid){
   var j=window._currentJobDoc||{};
   var pv=(window._mcProfiles&&_mcProfiles[sid])||{};
@@ -6162,7 +6163,7 @@ async function contactConsultant(sid){
   for(var q=0;q<list.length;q++)if(list[q].sourceId===sid)meta=list[q];
   var p=window._mcProfiles&&_mcProfiles[sid]?_mcProfiles[sid]:meta||{};
   var em=p.email||'';
-  var reqRows=[['Role',j.title],['Technology',j.tools],['Skills',j.skills],['Experience',j.experience],['Certifications',j.certifications],['Compliance',j.compliance]]
+  var reqRows=[['Role',j.title],['Location / work mode',(j.location||'')+(jobWorkMode(j)!=='unknown'?' ('+jobWorkMode(j)+')':'')],['Technology',j.tools],['Skills',j.skills],['Experience',j.experience],['Certifications',j.certifications],['Compliance',j.compliance]]
     .filter(function(r){return r[1]&&!/^see details$/i.test(String(r[1]).trim())});
   var consIndia=/india/i.test(p.country||'');
   var jobUS=/united states|usa/i.test((j.detectedCountry||j.country||''));
@@ -6170,14 +6171,15 @@ async function contactConsultant(sid){
   if(!p.rateExpectation)asks.push('your expected rate (USD/hr, contract)');
   if(consIndia&&jobUS)asks.push('your flexibility for US-hours overlap (evening/night shift IST)');
   else asks.push('your flexibility for working-hours overlap with the client\'s time zone');
-  var intro=consIndia
-    ?'SecVision Technologies places India-based security consultants on remote US/EU contract engagements.'
-    :'SecVision Technologies engages independent security consultants worldwide for remote contract engagements with US/EU clients.';
+  var wm=jobWorkMode(j);   // #652: say remote only when the seat is remote
+  var intro=wm==='remote'
+    ?(consIndia?'SecVision Technologies places India-based security consultants on remote US/EU contract engagements.':'SecVision Technologies engages independent security consultants worldwide for remote contract engagements with US/EU clients.')
+    :'SecVision Technologies places security consultants on contract engagements with US/EU clients; this one is '+(wm==='hybrid'?'hybrid':'on-site')+' in '+(j.location||'the client location')+'.';
   var body='Hello'+(p.name?' '+String(p.name).split(' ')[0]:'')+',\n\n'+intro+' We have a live requirement that matches your profile:\n\n'
    +reqRows.map(function(r){return '\u2022 '+r[0]+': '+r[1]}).join('\n')
    +'\n\nIf this interests you, could you please share:\n'+asks.map(function(a,i){return (i+1)+'. '+a.charAt(0).toUpperCase()+a.slice(1)}).join('\n')
    +'\n\nNo fees to you at any stage; engagement-by-engagement, non-exclusive.\n\nBest regards,\nSunil Shilimkar\nBusiness Head, SecVision Technologies LLP\nsunil@secvisiontech.com | www.secvisiontech.com\nPune, India';
-  _ctModal('✉️ Contact Consultant'+(p.name?' — '+p.name:''),'Contract opportunity: '+(j.title||'Security role')+' (remote, US client)',body,em);
+  _ctModal('✉️ Contact Consultant'+(p.name?' — '+p.name:''),'Contract opportunity: '+(j.title||'Security role')+' ('+(wm==='remote'?'remote':(wm==='hybrid'?'hybrid':'on-site')+(j.location?', '+j.location:''))+(jobUS?', US client':'')+')',body,em);
 }
 var _rvList=[],_rvSort='new';
 async function openReviewPending(){
@@ -6897,7 +6899,9 @@ function candFilterInput(v){
 // #595b: profiles harvested in other languages — show the English rendering when we have it, and ask the
 // server to translate (Haiku, cached on the profile) the ones that still contain non-Latin script.
 var NONLATIN_RE=/[^\u0000-\u024F\u1E00-\u1EFF\u2000-\u206F\u20A0-\u20CF\u2100-\u214F\u2190-\u21FF\u2600-\u27BF]/;
-function enRole(c){return c.currentRoleEn||c.headlineEn||c.currentRole||c.headline||''}
+var LI_JUNK_RE=/verif(?:y|ied|ication|icaciones|ications|iche)|επαληθε|vérification|verifizierung|verificaç|verificatie|verifiering|verifikation|認証|验证|検証|doğrulama|weryfikac/i;
+function cleanHl(h,name){h=String(h||'').trim();if(!h)return '';var f=String(name||'').trim().split(/\s+/)[0]||'';if(LI_JUNK_RE.test(h)&&(!f||h.indexOf(f)>=0||/^(view|προβολή|ver|voir|visualizza|anzeigen)/i.test(h)))return '';return h}   // #651
+function enRole(c){return cleanHl(c.currentRoleEn,c.name)||cleanHl(c.headlineEn,c.name)||cleanHl(c.currentRole,c.name)||cleanHl(c.headline,c.name)||''}
 function enLoc(c){return c.locationEn||c.location||c.country||''}
 var _translating={};
 function autoTranslateProfiles(list,onDone){
@@ -7108,7 +7112,7 @@ function matchCard(m,rank){
   return '<div style="border:1px solid #e5e7eb;border-radius:6px;padding:.6rem;margin-bottom:.5rem;background:#fff">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">'
     +'<div style="flex:1"><div style="font-size:.72rem;font-weight:700;color:var(--pri)">'+rank+'. '+esc(m.name)+nearIcon(m)+matchAvailBadge(m)+(m.linkedinUrl?' <a href="'+normUrl(m.linkedinUrl)+'" target="_blank" style="font-size:.55rem;color:#0A66C2">LinkedIn ↗</a>':'')+(m.contractorLikely?' <span style="font-size:.5rem;background:#FEF3C7;color:#92400E;padding:.05rem .3rem;border-radius:3px;font-weight:600">CONTRACTOR</span>':'')+'</div>'
-    +'<div style="font-size:.6rem;color:var(--g5)" title="'+esc(m.headline||m.currentRole||'')+'">'+esc(m.headlineEn||m.currentRoleEn||m.headline||m.currentRole||'')+((m.headlineEn||m.currentRoleEn)?' <span title="Translated to English" style="font-size:.5rem;color:var(--g4)">🌐</span>':'')+'</div>'
+    +'<div style="font-size:.6rem;color:var(--g5)" title="'+esc(cleanHl(m.headline,m.name)||cleanHl(m.currentRole,m.name)||'')+'">'+esc(cleanHl(m.headlineEn,m.name)||cleanHl(m.currentRoleEn,m.name)||cleanHl(m.headline,m.name)||cleanHl(m.currentRole,m.name)||'')+((m.headlineEn||m.currentRoleEn)?' <span title="Translated to English" style="font-size:.5rem;color:var(--g4)">🌐</span>':'')+'</div>'
     +'<div style="font-size:.55rem;color:var(--g4)" title="'+esc(m.location||'')+'">'+esc(m.locationEn||m.location||'')+(m.yearsExperience?' · '+m.yearsExperience+'y exp':'')+'</div></div>'
     +'<div style="text-align:center;flex-shrink:0"><div style="font-size:1.3rem;font-weight:800;color:'+col+';line-height:1">'+m.overall+'%</div><div style="font-size:.5rem;color:var(--g4)">match</div></div>'
     +'</div>'

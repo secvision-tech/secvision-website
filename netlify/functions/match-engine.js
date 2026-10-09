@@ -212,6 +212,17 @@ const LOCATION_TERM_MAP = {
 // Longest keys first so multi-word terms win over their prefixes.
 const LOCATION_TERM_KEYS = Object.keys(LOCATION_TERM_MAP).sort(function (a, b) { return b.length - a.length; });
 
+
+// #651: LinkedIn sometimes returns its own UI string ("View X's verifications" — in the scraper's locale,
+// e.g. Greek "Προβολή επαληθεύσεων του χρήστη X") in place of the headline. Drop it rather than store it.
+var LI_JUNK_RE = /verif(?:y|ied|ication|icaciones|ications|iche|ications)|επαληθε|vérification|verifizierung|verificaç|verificatie|verifiering|verifikation|認証|验证|検証|doğrulama|weryfikac/i;
+function cleanHeadline(h, name) {
+  h = String(h || '').trim();
+  if (!h) return '';
+  var first = String(name || '').trim().split(/\s+/)[0] || '';
+  if (LI_JUNK_RE.test(h) && (!first || h.indexOf(first) >= 0 || /^(view|προβολή|ver|voir|visualizza|anzeigen)/i.test(h))) return '';
+  return h.replace(/\s*·\s*\d(?:st|nd|rd|th)\+?\s*$/, '').trim();   // "· 3rd+" degree marker
+}
 function normalizeLocationToEnglish(loc) {
   if (!loc) return loc;
   var parts = String(loc).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
@@ -340,7 +351,7 @@ function normalizeApifyProfile(p) {
     sourceId: p.vanityName || p.urn || p.linkedinUrl || '',
     linkedinUrl: p.linkedinUrl || '',
     name: ((p.firstName || '') + ' ' + (p.lastName || '')).trim() || p.vanityName || 'Unknown',
-    headline: p.headline || '',
+    headline: cleanHeadline(p.headline, ((p.firstName || '') + ' ' + (p.lastName || ''))),
     location: normalizeLocationToEnglish(p.location || ''),
     industry: p.industry || '',
     profilePicture: p.profilePictureUrl || '',
