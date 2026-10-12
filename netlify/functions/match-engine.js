@@ -784,11 +784,13 @@ const COUNTRY_ALIASES = {
 // LinkedIn geoUrn IDs: the bebity actor's location autocomplete fails on plain country names
 // ("Couldn't look up location \"India\""), but its docs accept raw geo IDs, which skip the
 // broken lookup entirely. These are LinkedIn's stable country geoUrn values.
-const COUNTRY_GEO_IDS = {
-  'india': '102713980',
-  'united states': '103644278',
-  'united kingdom': '101165590',
-  'canada': '101174742'
+const COUNTRY_GEO_IDS = {   // #659: LinkedIn geoUrn IDs — the actor's own place-name lookup fails for bare country names
+  'india': '102713980', 'united states': '103644278', 'united kingdom': '101165590', 'canada': '101174742',
+  'australia': '101452733', 'new zealand': '105490917', 'ireland': '104738515', 'germany': '101282230', 'france': '105015875',
+  'netherlands': '102890719', 'belgium': '100565514', 'switzerland': '106693272', 'sweden': '105117694', 'denmark': '104514075',
+  'norway': '103819153', 'spain': '105646813', 'italy': '103350119', 'poland': '105072130', 'singapore': '102454443',
+  'united arab emirates': '104305776', 'saudi arabia': '100459316', 'qatar': '104170880', 'south africa': '104035573',
+  'japan': '101355337', 'malaysia': '106808692', 'philippines': '103121230', 'mexico': '103323778', 'brazil': '106057199'
 };
 const COUNTRY_CITY_HINTS = {
   'india': /\b(bengaluru|bangalore|mumbai|pune|hyderabad|chennai|new delhi|delhi|noida|gurgaon|gurugram|kolkata|ahmedabad|kochi|coimbatore|thiruvananthapuram|jaipur|chandigarh|indore|nagpur)\b/i,
@@ -1371,7 +1373,7 @@ exports.handler = async function (event) {
 
       // Pull a set of finished runs' datasets into the cache. Idempotent: profiles are
       // upserted by {source,sourceId}, so harvesting the same run twice is harmless.
-      var rejectedOffCountry = 0, rejectedJunk = 0;
+      var rejectedOffCountry = 0, rejectedJunk = 0, replacedRuns = [];   // #659
       async function harvestRuns(runList) {
         var allNormalized = [];
         for (var rj = 0; rj < runList.length; rj++) {
@@ -1379,6 +1381,20 @@ exports.handler = async function (event) {
           try {
             var rResp = await fetchWithTimeout('https://api.apify.com/v2/datasets/' + runList[rj].datasetId + '/items?token=' + APIFY_TOKEN + '&format=json', {}, 12000);
             var raw = await rResp.json();
+            // #659: the actor reports an unresolvable location as a single status row instead of profiles.
+            // Retry that keyword once with the country baked into the keyword and no location filter.
+            if (Array.isArray(raw) && raw.length === 1 && raw[0] && raw[0].status === 'NOT_FOUND' && /LOCATION_UNRESOLVED/i.test(String(raw[0].reason || '')) && !runList[rj].retried) {
+              try {
+                var rk = (runList[rj].keyword || '') + (runList[rj].country ? ' ' + runList[rj].country : '');
+                var rr = await fetch('https://api.apify.com/v2/acts/' + PROFILE_ACTOR_ID + '/runs?token=' + APIFY_TOKEN, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'get-profiles', keywords: [rk], limit: runList[rj].limit || 10, profileFields: ['about', 'experience', 'skills', 'languages', 'organizations'] }) });
+                var rrun = await rr.json();
+                if (rrun.data && rrun.data.id) {
+                  replacedRuns.push({ index: rj, runId: rrun.data.id, datasetId: rrun.data.defaultDatasetId, keyword: runList[rj].keyword, limit: runList[rj].limit, country: runList[rj].country || '', retried: true });
+                }
+              } catch (eRetry) {}
+              continue;
+            }
             var norm = (raw || []).map(normalizeApifyProfile).filter(function (p) { return p.sourceId; });
             // Junk guard: the actor sometimes returns UI artifacts as "profiles"
             // (e.g. name "Add cover image", headline "Create a slideshow with").
@@ -1485,6 +1501,12 @@ exports.handler = async function (event) {
 
       // All runs finished — harvest every successful dataset (shared, idempotent helper)
       var fetchedCount = await harvestRuns(runs);
+      // #659: a run that failed on an unresolvable location was re-started without the location filter —
+      // hand the replacement back so the client keeps polling instead of finishing with zero profiles.
+      if (replacedRuns.length) {
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ done: false, replacedRuns: replacedRuns, fetched: fetchedCount,
+          statuses: replacedRuns.map(function (r) { return { keyword: r.keyword, status: 'RETRYING without location filter' }; }) }) };
+      }
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
         done: true, fetched: fetchedCount, failedRuns: anyFailed,
