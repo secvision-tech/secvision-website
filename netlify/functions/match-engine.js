@@ -681,7 +681,7 @@ async function scoreJobsForConsultant(consultant, jobs, weights) {
     var resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: SCORING_MODEL, max_tokens: 3600, messages: [{ role: 'user', content: prompt }] })   // #660: 2000 truncated 16-job batches
+      body: JSON.stringify({ model: SCORING_MODEL, max_tokens: 1200, messages: [{ role: 'user', content: prompt }] })   // #664b: same Sonnet model as the job side; batch of 4 keeps the reply inside the 22 s window
     });
     if (!resp.ok) throw new Error('Anthropic ' + resp.status);
     var data = await resp.json();
@@ -1732,7 +1732,7 @@ exports.handler = async function (event) {
       var PAGE = 10;
       var EVAL_CAP = body.noScore ? 0 : Math.min(parseInt(body.evalCap) || 50, 3000);   // #491c: noScore returns cached matches only  // #642: ceiling 3000
       var NEED = (page + 1) * PAGE;
-      var SCORE_CAP = 8;    // #664: 16 jobs × longer replies overran the 22 s window ('operation was aborted'); 8 fits comfortably
+      var SCORE_CAP = 4;    // #664b: Sonnet needs ~10 s for 4 jobs; 8 and 16 overran the 22 s window ('operation was aborted')
 
       var jobsCol = db.collection('jobs');
       // Candidate jobs: in the window, with something to score against. Newest first.
