@@ -681,16 +681,26 @@ async function scoreJobsForConsultant(consultant, jobs, weights) {
     var resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST', signal: ctrl.signal,
       headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: SCORING_MODEL, max_tokens: 2000, messages: [{ role: 'user', content: prompt }] })
+      body: JSON.stringify({ model: SCORING_MODEL, max_tokens: 3600, messages: [{ role: 'user', content: prompt }] })   // #660: 2000 truncated 16-job batches
     });
     if (!resp.ok) throw new Error('Anthropic ' + resp.status);
     var data = await resp.json();
     var txt = (data.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('').trim();
     txt = txt.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/, '').trim();
-    scores = JSON.parse(txt);
+    try { scores = JSON.parse(txt); }
+    catch (pe) {
+      // #660: salvage complete objects from a truncated / slightly malformed array instead of failing the whole batch
+      scores = [];
+      var re = /\{[^{}]*"i"\s*:\s*(\d+)[^{}]*\}/g, m;
+      while ((m = re.exec(txt))) { try { scores.push(JSON.parse(m[0])); } catch (e2) {} }
+      if (!scores.length) throw new Error('Scoring response could not be parsed (' + txt.slice(0, 80) + ')');
+    }
   } finally { clearTimeout(tmo); }
 
-  return jobs.map(function (j, i) {
+  // #660: jobs the model did not return are left unscored (not cached) so they are retried next time
+  var kept = jobs.map(function (j, i) { return { j: j, i: i }; }).filter(function (p) { return (scores || []).some(function (x) { return x.i === p.i; }); });
+  return kept.map(function (p) {
+    var j = p.j, i = p.i;
     var s = (scores || []).find(function (x) { return x.i === i; }) || {};
     var dims = {
       skills: clamp(s.skills), certifications: clamp(s.certifications),
