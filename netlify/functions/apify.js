@@ -39,6 +39,30 @@ function validateJwt(event) {
   } catch (e) { return null; }
 }
 
+
+// #663: a phone number is accepted only when it looks like one AND (when the resume text is available)
+// the same digit sequence actually appears in the document. Years, date ranges, zip codes, IDs and
+// hallucinated numbers are dropped so the form field stays empty rather than wrong.
+function sanePhone(raw, text) {
+  var v = String(raw || '').trim();
+  if (!v) return '';
+  var digits = v.replace(/\D/g, '');
+  if (digits.length < 8 || digits.length > 15) return '';
+  if (/^(\d)\1+$/.test(digits)) return '';                                 // 0000000000
+  if (/^(19|20)\d{2}(19|20)\d{2}$/.test(digits)) return '';                // 2019 2023 (a date range)
+  if (/^(19|20)\d{2}[01]\d[0-3]\d$/.test(digits)) return '';              // 20190315 (a date)
+  if (!/^\+?[\d\s().-]{8,}$/.test(v)) return '';                          // letters or odd symbols
+  if (text) {
+    var t = String(text).replace(/\D/g, '');
+    var core = digits.slice(-8);                                             // last 8 digits must occur in the document
+    if (t.indexOf(core) < 0) return '';
+    var ctx = String(text).replace(/[\s().-]/g, '');
+    var i = ctx.indexOf(digits.slice(-8)); // crude: ensure not glued inside a longer digit run (e.g. an ID)
+    if (i > 0 && /\d/.test(ctx.charAt(i - (digits.length - 8) - 1) || '')) return '';
+  }
+  return v.replace(/\s{2,}/g, ' ');
+}
+
 exports.handler = async function(event) {
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: hdrs, body: '' };
   if (event.httpMethod !== 'POST') return { statusCode: 405, headers: hdrs, body: 'Method not allowed' };
@@ -515,7 +539,11 @@ exports.handler = async function(event) {
         var rTxtOut = (rj2.content || []).filter(function (b) { return b.type === 'text'; }).map(function (b) { return b.text; }).join('');
         var rm2 = rTxtOut.match(/\{[\s\S]*\}/);
         if (!rm2) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'AI returned no JSON' }) };
-        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ parsed: JSON.parse(rm2[0]) }) };
+        var parsedR = JSON.parse(rm2[0]);
+        // #663: only keep a phone number we are confident in — otherwise leave the field empty for the user to fill
+        parsedR.phone = sanePhone(parsedR.phone, rTxt);
+        if (parsedR.email && !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(parsedR.email).trim())) parsedR.email = '';
+        return { statusCode: 200, headers: hdrs, body: JSON.stringify({ parsed: parsedR }) };
       } catch (re2) { return { statusCode: 200, headers: hdrs, body: JSON.stringify({ error: 'Resume parse error: ' + re2.message }) }; }
     }
     // ============ #526 FETCH ANY PUBLIC JOB-PAGE URL -> text -> same AI parse ============

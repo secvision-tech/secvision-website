@@ -670,7 +670,7 @@ async function scoreJobsForConsultant(consultant, jobs, weights) {
     + 'JOBS (JSON array):\n' + JSON.stringify(compact) + '\n\n'
     + 'For EACH job return 0-100 scores for how well THIS consultant fits THAT job: '
     + 'skills, certifications, compliance, role, experience, rate (50 if unknown). '
-    + 'Also a one-sentence "reason".\n'
+    + 'Also a short "reason" (max 18 words).\n'
     + 'Respond with ONLY a JSON array: [{"i":0,"skills":..,"certifications":..,"compliance":..,'
     + '"role":..,"experience":..,"rate":..,"reason":".."}, ...]. No prose, no code fences.';
 
@@ -1732,7 +1732,7 @@ exports.handler = async function (event) {
       var PAGE = 10;
       var EVAL_CAP = body.noScore ? 0 : Math.min(parseInt(body.evalCap) || 50, 3000);   // #491c: noScore returns cached matches only  // #642: ceiling 3000
       var NEED = (page + 1) * PAGE;
-      var SCORE_CAP = 16;   // #540: fewer clicks to verdicts
+      var SCORE_CAP = 8;    // #664: 16 jobs × longer replies overran the 22 s window ('operation was aborted'); 8 fits comfortably
 
       var jobsCol = db.collection('jobs');
       // Candidate jobs: in the window, with something to score against. Newest first.
