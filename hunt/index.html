@@ -280,7 +280,7 @@ body.role-viewer .edit-btn{display:none!important}
         </div>
         <div style="display:flex;gap:1rem;align-items:center;margin-top:.35rem">
           <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem;cursor:pointer" title="Only jobs classified as Corp-to-Corp / vendor-friendly (explicit C2C wording, or contract roles posted by staffing firms / C2C boards)"><input type="checkbox" id="dbC2cOnly" onchange="searchDb()" style="cursor:pointer"> 🤝 C2C / vendor-friendly only</label>
-          <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem" title="#628 — based on the engagement classifier: 'Possible' hides jobs marked US-only (clearance, visa-independent, state/federal, onsite-only)">🌏 Offshore: <select id="dbOffshore" onchange="searchDb()" style="font-size:.6rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px"><option value="possible" selected>Possible (not US-only)</option><option value="any">Any</option><option value="yes">Confirmed yes</option><option value="no">Not possible (US-only)</option></select></label>
+          <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem" title="#628 — based on the engagement classifier: 'Possible' hides jobs marked US-only (clearance, visa-independent, state/federal, onsite-only)">🌏 Offshore: <select id="dbOffshore" onchange="searchDb()" style="font-size:.6rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px"><option value="any" selected>Any</option><option value="possible">Possible (not US-only)</option><option value="yes">Confirmed yes</option><option value="no">Not possible (US-only)</option></select></label>
         </div>
         <div id="dbCustomDates" style="display:none;gap:.6rem;margin-top:.4rem;align-items:end">
           <div class="sg"><label>From</label><input type="date" id="dbDateFrom"></div>
@@ -979,6 +979,7 @@ async function searchDb(){
   try{
     var c2cOnly=!!(document.getElementById('dbC2cOnly')&&document.getElementById('dbC2cOnly').checked);   // #592
     var offshore=(document.getElementById('dbOffshore')||{}).value||'any';   // #628
+  try{localStorage.setItem('huntDbOffshore',offshore)}catch(e){}   // #666: remember the last choice
     lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly,offshore:offshore};
     loadedBlocks=1;
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
@@ -4001,6 +4002,7 @@ function loadSettings(){
   var gs=localStorage.getItem('huntGlobalSettings');
   if(gs){try{Object.assign(GLOBAL_SETTINGS,JSON.parse(gs))}catch(e){}}
   // Load user prefs
+  try{var _offs=localStorage.getItem('huntDbOffshore');var _offEl=document.getElementById('dbOffshore');if(_offs&&_offEl&&[].some.call(_offEl.options,function(o){return o.value===_offs}))_offEl.value=_offs}catch(e){}   // #666
   var up=localStorage.getItem('huntUserPrefs');
   if(up){try{Object.assign(USER_PREFS,JSON.parse(up))}catch(e){}}
   // #351: US defaults (MM/DD/YYYY, America/New_York, 12h) are the app baseline.
@@ -5379,7 +5381,7 @@ function renderManageProfile(){
   if(c.claimedBy){h+='<div style="background:#FEF3C7;border:1px solid #FCD34D;border-radius:5px;padding:.4rem .72rem;margin-bottom:.72rem;font-size:.84rem;color:#92400E">🔒 Being worked by <strong>'+esc(c.claimedBy)+'</strong>'+(c.claimedAt?' since '+fmtDate(c.claimedAt):'')+'</div>'}
   // #661: profile toolbar (same style as the job popup's action buttons)
   h+='<div style="display:flex;justify-content:flex-end;gap:.4rem;margin-bottom:.5rem">'
-    +'<button onclick="saveProfilePdf()" class="dm-apply" style="background:#0E7490;border:none;cursor:pointer;font-size:.66rem;padding:.3rem .7rem" title="Save this consultant profile — summary, skills, certifications, experience, screenings and matched jobs — as a PDF">💾 Save Profile</button>'
+    +'<button onclick="saveProfilePdf()" class="dm-apply" style="background:#0E7490;border:none;cursor:pointer;font-size:.66rem;padding:.3rem .7rem" title="Download this consultant profile — summary, skills, certifications, experience, screenings and matched jobs — as a PDF file">📄 Export PDF</button>'
     +'</div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:.4rem;margin-bottom:.84rem;padding:.72rem;background:var(--g1);border-radius:6px">';
   h+=fld('Name',esc(c.name)+' <a href="#" onclick="editConsField(\''+c._id+'\',\'name\',\'Name\',\''+esc(c.name||'').replace(/'/g,'')+'\',false);return false" title="Edit name" style="font-size:.66rem;text-decoration:none">✏️</a>'+(c.linkedinUrl?' <a href="'+normUrl(c.linkedinUrl)+'" target="_blank" style="color:#0A66C2;font-size:.68rem">LinkedIn ↗</a>'
