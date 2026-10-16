@@ -5010,8 +5010,12 @@ function mjHeaderClick(col,e){
   if(mjSortCol===col){mjSortDir*=-1}else{mjSortCol=col;mjSortDir=(col==='title'||col==='company'||col==='location')?1:-1}
   if(mjLastData)renderMatchJobs(mjLastData);
 }
+// #669: work-mode label for the Remote column (saved rows before #669 fall back to the location text)
+function mjRemoteLabel(m){var w=jobWorkMode(m);if(w==='unknown'&&/\bremote\b/i.test(m.location||''))w='remote';return w==='remote'?'Remote':(w==='hybrid'?'Hybrid':(w==='onsite'?'Onsite':'—'))}
+function mjRemoteCell(m){var l=mjRemoteLabel(m);var c=l==='Remote'?'#047857':(l==='Hybrid'?'#B45309':(l==='Onsite'?'#6B7280':'var(--g3)'));return '<span style="color:'+c+';font-weight:'+(l==='—'?400:600)+'">'+l+'</span>'}
 function mjSortValue(m,col){
   if(col==='overall')return m.overall||0;
+  if(col==='remote')return mjRemoteLabel(m).toLowerCase();
   if(col==='datePosted')return m.datePosted?new Date(m.datePosted).getTime():0;
   if(col==='duration')return m.contractDuration||'';
   if(col==='tech')return mjTech(m).toLowerCase();
@@ -5026,7 +5030,7 @@ function mjTech(m){
   return out.join(', ');
 }
 // #587: column filters — applied in place (rows hidden/shown) so typing never rebuilds the table or loses focus
-var _mjFlt={title:'',company:'',location:'',tech:'',min:''};
+var _mjFlt={title:'',company:'',location:'',remote:'',tech:'',min:''};   // #669: remote filter
 var _mjLocalPage=1,MJ_PER_PAGE=25;   // #612
 function mjGoLocalPage(p){_mjLocalPage=p;_mjRenderSig='';if(mjLastData)renderMatchJobs(mjLastData)}
 function mjFilterInput(el){var k=el.getAttribute('data-f');_mjFlt[k]=el.value.trim().toLowerCase();_mjLocalPage=1;var pos=el.selectionStart;_mjRenderSig='';if(mjLastData)renderMatchJobs(mjLastData);var again=document.querySelector('.mjFlt[data-f="'+k+'"]');if(again){again.focus();try{again.setSelectionRange(pos,pos)}catch(e){}}}
@@ -5036,6 +5040,7 @@ function mjRowPasses(m){
   if(f.title&&String(m.title||'').toLowerCase().indexOf(f.title)<0)return false;
   if(f.company&&String(m.company||'').toLowerCase().indexOf(f.company)<0)return false;
   if(f.location&&String((m.location||m.country||'')).toLowerCase().indexOf(f.location)<0)return false;
+  if(f.remote&&mjRemoteLabel(m).toLowerCase().indexOf(f.remote)<0)return false;   // #669
   if(f.tech){var t=mjTech(m).toLowerCase();if(!f.tech.split(/\s+/).every(function(w){return t.indexOf(w)>=0}))return false}
   return true;
 }
@@ -5045,11 +5050,11 @@ function mjApplyFilters(){
   document.querySelectorAll('#mjTable tbody tr[data-mjrow]').forEach(function(tr){var m=byId[tr.getAttribute('data-mjrow')];var ok=!m||mjRowPasses(m);tr.style.display=ok?'':'none';if(ok){shown++;tr.cells[0].textContent=shown}});
   var c=document.getElementById('mjFltCount');if(c){var tot=document.querySelectorAll('#mjTable tbody tr[data-mjrow]').length;c.textContent=shown===tot?'':(shown+' of '+tot+' shown')}
 }
-function mjClearFilters(){_mjFlt={title:'',company:'',location:'',tech:'',min:''};_mjLocalPage=1;_mjRenderSig='';if(mjLastData)renderMatchJobs(mjLastData)}
+function mjClearFilters(){_mjFlt={title:'',company:'',location:'',remote:'',tech:'',min:''};_mjLocalPage=1;_mjRenderSig='';if(mjLastData)renderMatchJobs(mjLastData)}
 // #587: export the visible (filtered + sorted) matching jobs — CSV / Excel / PDF / Word
 function mjExportRows(){
   var list=((mjLastData&&mjLastData.matches)||[]).slice().sort(function(a,b){var va=mjSortValue(a,mjSortCol),vb=mjSortValue(b,mjSortCol);if(va<vb)return -1*mjSortDir;if(va>vb)return 1*mjSortDir;return 0}).filter(mjRowPasses);
-  return list.map(function(m,i){return {'#':i+1,'Match %':m.overall,'Posted':m.datePosted?fmtDate(m.datePosted):'','Role':m.title||'','Company':m.company||'','Location':m.location||m.country||'','Duration':m.contractDuration||(/contract/i.test(m.jobType||'')?'Contract':''),'Skills / Technology':mjTech(m),'Rate / Salary':m.salary||'','Source':m.source||'','Reason':m.reason||'','Apply Link':m.applyLink||''}});
+  return list.map(function(m,i){return {'#':i+1,'Match %':m.overall,'Posted':m.datePosted?fmtDate(m.datePosted):'','Role':m.title||'','Company':m.company||'','Location':m.location||m.country||'','Remote':mjRemoteLabel(m),'Duration':m.contractDuration||(/contract/i.test(m.jobType||'')?'Contract':''),'Skills / Technology':mjTech(m),'Rate / Salary':m.salary||'','Source':m.source||'','Reason':m.reason||'','Apply Link':m.applyLink||''}});
 }
 function mjExportName(ext){var c=manageProfileData||{};return 'SecVision_MatchingJobs_'+String(c.name||'consultant').replace(/[^\w]+/g,'_')+'_'+new Date().toISOString().slice(0,10)+'.'+ext}
 function mjExportTitle(){var c=manageProfileData||{};return 'Matching jobs — '+(c.name||'')+(c.currentRole?' · '+c.currentRole:'')}
@@ -5071,7 +5076,7 @@ function mjExport(kind){
     doc.setFontSize(8);doc.text(d.length+' jobs · SecVision Business Hunt · '+fmtDate(new Date()),40,46);
     var cols=keys.filter(function(k){return k!=='Apply Link'&&k!=='Reason'});
     var rows=d.map(function(r){return cols.map(function(k){return String(r[k]==null?'':r[k])})});
-    doc.autoTable({head:[cols],body:rows,startY:56,styles:{fontSize:6.5,cellPadding:2.5,overflow:'linebreak'},headStyles:{fillColor:[108,63,191],fontSize:7},columnStyles:{0:{cellWidth:18},1:{cellWidth:36},2:{cellWidth:52},3:{cellWidth:150},4:{cellWidth:100},5:{cellWidth:90},6:{cellWidth:50},7:{cellWidth:170},8:{cellWidth:60},9:{cellWidth:48}},margin:{left:30,right:30}});
+    doc.autoTable({head:[cols],body:rows,startY:56,styles:{fontSize:6.5,cellPadding:2.5,overflow:'linebreak'},headStyles:{fillColor:[108,63,191],fontSize:7},columnStyles:{0:{cellWidth:18},1:{cellWidth:36},2:{cellWidth:52},3:{cellWidth:146},4:{cellWidth:96},5:{cellWidth:86},6:{cellWidth:42},7:{cellWidth:48},8:{cellWidth:166},9:{cellWidth:58},10:{cellWidth:46}},margin:{left:30,right:30}});
     doc.save(mjExportName('pdf'));return;
   }
   if(kind==='docx'){mjExportDocx(d,keys)}
@@ -5085,7 +5090,7 @@ async function mjExportDocx(d,keys){
     await mjLoadDocxLib();
     var D=window.docx;
     var cols=keys.filter(function(k){return k!=='Apply Link'&&k!=='Reason'});
-    var widths={'#':500,'Match %':800,'Posted':1100,'Role':2800,'Company':2000,'Location':1800,'Duration':1000,'Skills / Technology':3200,'Rate / Salary':1300,'Source':1000};
+    var widths={'#':500,'Match %':800,'Posted':1100,'Role':2800,'Company':2000,'Location':1800,'Remote':900,'Duration':1000,'Skills / Technology':3200,'Rate / Salary':1300,'Source':1000};
     var cell=function(txt,opts){opts=opts||{};return new D.TableCell({width:{size:opts.w||1500,type:D.WidthType.DXA},shading:opts.head?{fill:'6C3FBF'}:undefined,margins:{top:60,bottom:60,left:80,right:80},children:[new D.Paragraph({children:[new D.TextRun({text:String(txt==null?'':txt),bold:!!opts.head,color:opts.head?'FFFFFF':undefined,size:opts.head?15:14})]})]})};
     var rows=[new D.TableRow({tableHeader:true,children:cols.map(function(k){return cell(k,{head:true,w:widths[k]})})})];
     d.forEach(function(r){rows.push(new D.TableRow({children:cols.map(function(k){return cell(r[k],{w:widths[k]})})}))});
@@ -5126,7 +5131,7 @@ function renderMatchJobs(d){
   if(sig===_mjRenderSig&&document.getElementById('mjTable'))return;   // #438: no identical rebuilds
   _mjRenderSig=sig;
   var arrow=function(col){return mjSortCol===col?(mjSortDir===1?' ▲':' ▼'):''};
-  var cols=[['overall','Match',6],['datePosted','Posted',9],['title','Role',22],['company','Company',15],['location','Location',13],['duration','Duration',8],['tech','Skills / Tech',24]];   // #587: technology column
+  var cols=[['overall','Match',6],['datePosted','Posted',9],['title','Role',22],['company','Company',15],['location','Location',13],['remote','Remote',8],['duration','Duration',8],['tech','Skills / Tech',24]];   // #587: technology column · #669: Remote column
   var h='<div style="overflow-x:auto"><table id="mjTable" style="width:100%;border-collapse:collapse;font-size:.62rem;table-layout:fixed;min-width:132ch"><thead><tr style="background:var(--g1)">';
   // #441: checkbox column removed — selection is row-click, shown by row highlight.
   // #420: rank column
@@ -5137,7 +5142,7 @@ function renderMatchJobs(d){
   h+='<th style="padding:.3rem .4rem;text-align:center;width:13ch">Action</th></tr>';
   // #587: filter row (in-place filtering; see mjApplyFilters)
   var fi=function(key,ph,type){var FI='width:100%;box-sizing:border-box;font-size:.58rem;padding:.12rem .25rem;border:1px solid var(--g2);border-radius:3px;font-family:inherit;text-transform:none;letter-spacing:0;font-weight:400;color:var(--tx)';return '<th style="padding:.15rem .25rem"><input class="mjFlt" data-f="'+key+'" type="'+(type||'text')+'" placeholder="'+ph+'" value="'+esc(_mjFlt[key]||'')+'" oninput="mjFilterInput(this)" onclick="event.stopPropagation()" style="'+FI+'"></th>'};
-  h+='<tr style="background:#FAFAFA"><th></th>'+fi('min','≥ %','number')+'<th></th>'+fi('title','filter role')+fi('company','filter company')+fi('location','filter location')+'<th></th>'+fi('tech','e.g. splunk sentinel')
+  h+='<tr style="background:#FAFAFA"><th></th>'+fi('min','≥ %','number')+'<th></th>'+fi('title','filter role')+fi('company','filter company')+fi('location','filter location')+fi('remote','remote / hybrid')+'<th></th>'+fi('tech','e.g. splunk sentinel')
     +'<th style="padding:.15rem .25rem;text-align:center;white-space:nowrap"><span id="mjFltCount" style="font-size:.52rem;color:var(--g5)"></span> <button onclick="mjClearFilters()" title="Clear filters" style="padding:.1rem .35rem;background:#fff;border:1px solid var(--g2);border-radius:3px;font-size:.52rem;cursor:pointer">✕</button></th></tr></thead><tbody>';
   list.forEach(function(m,ri){ri=pageStart+ri;
     var scoreColor=m.overall>=80?'#047857':(m.overall>=70?'#6C3FBF':'#B45309');
@@ -5154,6 +5159,7 @@ function renderMatchJobs(d){
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.title||'')+'">'+esc(m.title||'—')+'</td>'
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(m.company||'')+'">'+esc(m.company||'—')+'</td>'
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(loc)+'">'+esc(loc)+'</td>'
+      +'<td style="padding:.3rem .4rem;overflow:hidden;white-space:nowrap">'+mjRemoteCell(m)+'</td>'
       +'<td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden">'+dur+'</td>'
       +'<td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(mjTech(m))+'">'+(mjTech(m)?esc(mjTech(m)):'<span style="color:var(--g3)">—</span>')+'</td>'
       +'<td style="padding:.3rem .4rem;text-align:center;white-space:nowrap">'

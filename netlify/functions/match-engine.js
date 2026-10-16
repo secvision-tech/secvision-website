@@ -807,6 +807,20 @@ const COUNTRY_CITY_HINTS = {
   'united states': /\b(new york|san francisco|seattle|austin|dallas|chicago|boston|atlanta|denver|los angeles|washington dc)\b/i,
   'united kingdom': /\b(london|manchester|edinburgh|birmingham|leeds|glasgow)\b/i
 };
+// #670: Title-cased known country from a location string, or '' when the tail is just a city/region
+// ("Greater Melbourne Area"). Only values that resolve through COUNTRY_ALIASES count as countries.
+var KNOWN_COUNTRY_SET = {};
+Object.keys(COUNTRY_ALIASES).forEach(function (k) { KNOWN_COUNTRY_SET[COUNTRY_ALIASES[k]] = 1; });
+function knownCountryFromLocation(loc) {
+  var tail = String(loc || '').split(',').pop().trim();
+  var c = canonCountry(tail);
+  if (!c || !KNOWN_COUNTRY_SET[c]) {
+    c = '';
+    Object.keys(COUNTRY_CITY_HINTS).forEach(function (k) { if (!c && COUNTRY_CITY_HINTS[k].test(String(loc || ''))) c = k; });
+    if (!c && /\b(sydney|melbourne|brisbane|perth|adelaide|canberra|queensland|new south wales|tasmania)\b/i.test(String(loc || ''))) c = 'australia';
+  }
+  return c ? c.replace(/\b\w/g, function (ch) { return ch.toUpperCase(); }).replace(/\bOf\b/, 'of') : '';
+}
 function canonCountry(c) {
   var s = String(c || '').trim().toLowerCase();
   if (!s) return '';
@@ -1452,6 +1466,7 @@ exports.handler = async function (event) {
               update: {
                 $set: {
                   name: np.name, headline: np.headline, location: np.location, industry: np.industry,
+                  country: knownCountryFromLocation(np.location),   // #670: never leave country blank when the location names one
                   contractSignal: np.contractSignal || false,
                   linkedinUrl: np.linkedinUrl, profilePicture: np.profilePicture,
                   skills: np.skills, certifications: np.certifications, currentRole: np.currentRole,
@@ -1865,6 +1880,7 @@ exports.handler = async function (event) {
           applyLink: m.job.applyLink || m.job.jobUrl || '',
           source: m.job.source || '',
           skills: m.job.skills || '', tools: m.job.tools || '',   // #587: technology column / export
+          remote: m.job.remote || '', workMode: m.job.workMode || '',   // #669: Remote column
           overall: m.overall, reason: m.reason,
           locationFit: m.locationFit,
           matchedAt: new Date()

@@ -122,7 +122,11 @@ function deriveCountryFromLocation(loc) {
   // UK cities
   if (/\b(London|Manchester|Birmingham|Leeds|Glasgow|Edinburgh|Bristol|Swansea)\b/i.test(l)) return 'United Kingdom';
   // Australia
-  if (/\b(Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra)\b/i.test(l)) return 'Australia';
+  if (/\b(Sydney|Melbourne|Brisbane|Perth|Adelaide|Canberra|Queensland|Victoria|New South Wales|Tasmania)\b/i.test(l)) return 'Australia';
+  if (/\bnew zealand\b|\b(Auckland|Wellington|Christchurch)\b/i.test(l)) return 'New Zealand';
+  if (/\b(Switzerland|Sweden|Denmark|Norway|Finland|Belgium|Austria|Spain|Italy|Poland|Portugal|Philippines|Malaysia|Japan|Hong Kong|Qatar|South Africa|Mexico|Brazil|Pakistan|Bangladesh|Sri Lanka|Nigeria|Kenya|Egypt|Israel|Turkey|Indonesia|Vietnam|Thailand)\b/i.test(l)) {
+    return l.match(/\b(Switzerland|Sweden|Denmark|Norway|Finland|Belgium|Austria|Spain|Italy|Poland|Portugal|Philippines|Malaysia|Japan|Hong Kong|Qatar|South Africa|Mexico|Brazil|Pakistan|Bangladesh|Sri Lanka|Nigeria|Kenya|Egypt|Israel|Turkey|Indonesia|Vietnam|Thailand)\b/i)[1].replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
   return '';
 }
 
@@ -291,6 +295,8 @@ exports.handler = async function (event) {
       // Don't ship the heavy resume blob in the profile fetch; just flag presence + filename
       one.hasResume = !!(one.resume && one.resume.data);
       if (one.resume) { one.resumeFileName = one.resume.fileName; delete one.resume; }
+      // #670: harvested/adopted profiles may carry a location but no country — derive and persist
+      if (!one.country && one.location) { var dCtry = deriveCountryFromLocation(one.location); if (dCtry) { one.country = dCtry; try { await col.updateOne({ _id: one._id }, { $set: { country: dCtry } }); } catch (e) {} } }
       one._id = one._id.toString();
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ consultant: one }) };
     }
@@ -340,7 +346,7 @@ exports.handler = async function (event) {
           managed: true,
           engagementType: src.engagementType || (src.contractorSignal && src.contractorSignal.likely ? 'Contractor' : 'Unknown'),
           availability: src.availability && src.availability !== 'unknown' ? src.availability : 'available',
-          country: src.country || '',
+          country: src.country || deriveCountryFromLocation(src.location || ''),   // #670
           updatedAt: new Date(), adoptedBy: authUser.email, adoptedAt: new Date()
         }
       });
@@ -755,6 +761,7 @@ exports.handler = async function (event) {
         }
         await col.updateOne({ _id: pd._id }, { $set: {
           managed: true, availability: pd.availability || 'available', pipelineStatus: 'none',
+          country: pd.country || deriveCountryFromLocation(pd.location || ''),   // #670
           engagementType: pd.engagementType || (pd.source === 'upwork' ? 'Contractor' : 'Unknown'),
           promotedAt: new Date(), promotedBy: authUser.email } });
         promoted++;
