@@ -120,8 +120,9 @@ exports.handler = async function(event) {
       if (company) matchBody.organization_name = company;
       if (domain) matchBody.domain = domain;
 
-      // reveal_phone_number requires a webhook for async; personal emails are returned inline
-      var data = await apolloFetch('people/match?reveal_personal_emails=true&reveal_phone_number=true', matchBody);
+      // #668: Apollo now rejects reveal_phone_number without a webhook_url (SEARCH.VALIDATION.WEBHOOK_URL_REQUIRED).
+      // Phone reveal is async-only; we have no webhook, so request emails only (work + personal are returned inline).
+      var data = await apolloFetch('people/match?reveal_personal_emails=true', matchBody);
       var p = data.person || {};
       if (!p.id) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ found: false, detail: 'No Apollo record matched' }) };
 
