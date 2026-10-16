@@ -1285,6 +1285,21 @@ function detectCountryFromLocation(loc) {
   if (!loc) return 'Unknown';
   var l = loc.toLowerCase();
 
+  // #670b: an explicit country name in the location wins over every partial-word heuristic below —
+  // "Sydney, New South Wales, Australia" was landing on United Kingdom via the bare "wales" test.
+  var EXPLICIT = [['australia', 'Australia'], ['new zealand', 'New Zealand'], ['united states', 'United States'], ['canada', 'Canada'],
+    ['united kingdom', 'United Kingdom'], ['germany', 'Germany'], ['france', 'France'], ['india', 'India'], ['switzerland', 'Switzerland'],
+    ['netherlands', 'Netherlands'], ['singapore', 'Singapore'], ['ireland', 'Ireland'], ['united arab emirates', 'United Arab Emirates'],
+    ['saudi arabia', 'Saudi Arabia'], ['south africa', 'South Africa'], ['sweden', 'Sweden'], ['denmark', 'Denmark'], ['norway', 'Norway'],
+    ['finland', 'Finland'], ['belgium', 'Belgium'], ['austria', 'Austria'], ['spain', 'Spain'], ['italy', 'Italy'], ['poland', 'Poland'],
+    ['portugal', 'Portugal'], ['japan', 'Japan'], ['malaysia', 'Malaysia'], ['philippines', 'Philippines'], ['hong kong', 'Hong Kong'],
+    ['qatar', 'Qatar'], ['israel', 'Israel'], ['mexico', 'Mexico'], ['brazil', 'Brazil']];
+  for (var ei = 0; ei < EXPLICIT.length; ei++) {
+    if (new RegExp('\\b' + EXPLICIT[ei][0] + '\\b', 'i').test(l)) return EXPLICIT[ei][1];
+  }
+  if (/\b(new south wales|queensland|victoria|tasmania|western australia|south australia|northern territory|australian capital territory|nsw|qld|vic|tas|act)\b/i.test(l)
+      && !/\b(canada|british columbia|bc)\b/i.test(l)) return 'Australia';   // Victoria, BC stays Canada (handled below too)
+
   // Canadian provinces/territories are decisive — check BEFORE the US state codes,
   // because "CA" is ambiguous (California vs the ISO code for Canada) and several
   // Canadian job boards write locations as "Halifax, Nova Scotia, CA" or just "CA".
@@ -1304,7 +1319,7 @@ function detectCountryFromLocation(loc) {
   var US_STATE_NAMES = /\b(California|Texas|New York|Florida|Illinois|Virginia|Washington|Georgia|Massachusetts|Colorado|Arizona|Ohio|Michigan|Pennsylvania|Maryland|Minnesota|Oregon|Nevada|Utah|Missouri|Indiana|Wisconsin|Tennessee|Alabama|Connecticut|New Jersey|North Carolina|South Carolina|Kentucky|Louisiana|Oklahoma|Iowa|Kansas|Arkansas|Mississippi|Nebraska|Idaho|Hawaii|Maine|New Hampshire|Rhode Island|Montana|Delaware|South Dakota|North Dakota|Vermont|Wyoming|West Virginia|New Mexico)\b/i;
   if (US_STATES.test(loc) || US_STATE_NAMES.test(loc) || /united states|usa/i.test(loc)) return 'United States';
 
-  if (/united kingdom|england|scotland|wales/i.test(l)) return 'United Kingdom';
+  if (/united kingdom|\bengland\b|\bscotland\b|(?<!new south )\bwales\b/i.test(l)) return 'United Kingdom';   // #670b: not "New South Wales"
   if (/australia/i.test(l)) return 'Australia';
   if (/germany|deutschland/i.test(l)) return 'Germany';
   if (/france/i.test(l)) return 'France';

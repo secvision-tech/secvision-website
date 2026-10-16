@@ -99,8 +99,8 @@ function deriveCountryFromLocation(loc) {
   // explicit country name wins
   if (/\bunited states\b|\busa\b|\bu\.s\.\b/i.test(l)) return 'United States';
   if (/\bcanada\b/i.test(l)) return 'Canada';
-  if (/\bunited kingdom\b|\buk\b|\bengland\b|\bscotland\b|\bwales\b/i.test(l)) return 'United Kingdom';
-  if (/\baustralia\b/i.test(l)) return 'Australia';
+  if (/\baustralia\b/i.test(l)) return 'Australia';   // #670b: before the UK test — "New South Wales" must not match "wales"
+  if (/\bunited kingdom\b|\buk\b|\bengland\b|\bscotland\b|(?<!new south )\bwales\b/i.test(l)) return 'United Kingdom';
   if (/\bindia\b/i.test(l)) return 'India';
   if (/\bgermany\b/i.test(l)) return 'Germany';
   if (/\bfrance\b/i.test(l)) return 'France';
