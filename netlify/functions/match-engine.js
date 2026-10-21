@@ -735,11 +735,18 @@ async function scoreJobsForConsultant(consultant, jobs, weights) {
 //                          (work auth, payroll, on-site expectation) => heavy penalty.
 //   * REMOTE            -> out-of-country is workable => light penalty, so in-country
 //                          still ranks first but others remain visible.
+// #671: the on-site cross-country tier is the IMPLICIT EXCLUSION of the patent spec (FIG. 2, 230/235):
+// the weighted sum is normalised to 1, so a pair's best score is the tier value, and a tier below
+// MATCH_THRESHOLD can never be proposed. That only holds while tier < threshold, so the tier is
+// derived from the threshold (never above threshold - 5 points) instead of being an independent
+// constant — lowering MATCH_THRESHOLD can no longer silently re-admit cross-country on-site pairs.
+const LOC_ONSITE_OTHER = Math.min(0.55, (MATCH_THRESHOLD - 5) / 100);
 const LOC_PENALTY = {
-  onsite:  { sameCountry: 1.00, otherCountry: 0.55 },  // heavy: ~45% cut
-  remote:  { sameCountry: 1.00, otherCountry: 0.90 },  // light: ~10% cut
-  unknown: { sameCountry: 1.00, otherCountry: 0.75 }   // middle ground
+  onsite:  { sameCountry: 1.00, otherCountry: LOC_ONSITE_OTHER },  // heavy: below threshold => excluded by arithmetic
+  remote:  { sameCountry: 1.00, otherCountry: 0.90 },              // light: ~10% cut
+  unknown: { sameCountry: 1.00, otherCountry: 0.75 }               // middle ground
 };
+if (!(LOC_PENALTY.onsite.otherCountry * 100 < MATCH_THRESHOLD)) throw new Error('#671 invariant: on-site cross-country location tier must stay below MATCH_THRESHOLD');
 
 function jobIsRemote(req) {
   // #572: the remote field itself is authoritative when it carries an explicit value —
@@ -1971,7 +1978,7 @@ exports.handler = async function (event) {
         var lcKeys = Object.keys(lcCache).filter(function (k) {
           var e = lcCache[k];
           if (!e) return false;
-          if (!(e.overall >= 60)) { lcDbg.skippedLow++; return false; }
+          if (!(e.overall >= MATCH_THRESHOLD)) { lcDbg.skippedLow++; return false; }   // #671: single source of truth for the threshold
           if (lcRemoved[k]) { lcDbg.skippedRemoved++; return false; }
           if (lcHave[k]) { lcDbg.skippedHave++; return false; }
           return true;
