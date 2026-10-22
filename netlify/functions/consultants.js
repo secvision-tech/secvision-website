@@ -216,6 +216,11 @@ exports.handler = async function (event) {
       if (body.engagementType && body.engagementType !== 'all') filter.engagementType = body.engagementType;
       if (body.availability && body.availability !== 'all') filter.availability = body.availability;
       if (body.pipelineStatus && body.pipelineStatus !== 'all') filter.pipelineStatus = body.pipelineStatus;
+      // #672: verification credential filter — a SecVision screening within the 12-month validity window (#581)
+      var vCut = new Date(Date.now() - 365 * 24 * 3600 * 1000);
+      if (body.verified === 'valid') filter.screenings = { $elemMatch: { date: { $gte: vCut } } };
+      else if (body.verified === 'none') filter.$and = (filter.$and || []).concat([{ $or: [{ screenings: { $exists: false } }, { screenings: { $size: 0 } }] }]);
+      else if (body.verified === 'expired') filter.$and = (filter.$and || []).concat([{ screenings: { $exists: true, $not: { $size: 0 } } }, { screenings: { $not: { $elemMatch: { date: { $gte: vCut } } } } }]);
       if (body.location) filter.location = { $regex: body.location.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
       // Country/region: a specific country (if chosen) wins; otherwise expand region to its countries
       if (body.country && body.country !== 'all') {
@@ -275,6 +280,15 @@ exports.handler = async function (event) {
         });
         p.matchedJobsCount = bCount;
         p.topJobMatch = bTop;
+        // #672: credential summary for the list badge — best screening still inside the 12-month window,
+        // else the most recent expired one (flagged) so the row can show a grey badge.
+        var vArr = Array.isArray(p.screenings) ? p.screenings : [];
+        if (vArr.length) {
+          var vNow = Date.now(), vValid = vArr.filter(function (x) { return new Date(x.date || 0).getTime() > vNow - 365 * 24 * 3600 * 1000; });
+          var vBest = (vValid.length ? vValid : vArr).slice().sort(function (a, b) { return (b.pct || 0) - (a.pct || 0) || (new Date(b.date || 0) - new Date(a.date || 0)); })[0];
+          p.verified = { pct: vBest.pct || 0, skillArea: vBest.skillArea || '', date: String(vBest.date ? new Date(vBest.date).toISOString() : '').slice(0, 10),
+            validTo: vBest.date ? new Date(new Date(vBest.date).getTime() + 365 * 24 * 3600 * 1000).toISOString().slice(0, 10) : '', expired: !vValid.length, count: vArr.length };
+        }
         if (p.matchedJobs) delete p.matchedJobs;
         if (p.matchCache) delete p.matchCache;
         if (p.jobMatchCache) delete p.jobMatchCache;
