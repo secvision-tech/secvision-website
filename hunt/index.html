@@ -1938,7 +1938,8 @@ async function _viewDetCore(i){
   // Status: editable by all except viewer (analyst+). Render as clickable only if canStatus.
   var statusInner=(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1);
   var statusHtml=(CAP.canStatus&&!mjFromConsultant)?'<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+statusInner+'</span>':'<span class="status-badge status-'+(j.status||'new')+'">'+statusInner+'</span>';
-  var h='<div class="dm-meta">'+'<div class="dm-mi" style="grid-column:1/-1"><span class="dm-ml">Job ID</span><span class="dm-mv">'+idChip(j._id||j.jobId)+'</span></div>'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',(j.remote||'N/A')+(CAP.canStatus?' <a href="#" onclick="editJobRemote();return false" title="Edit remote mode (Yes / No / Hybrid)" style="font-size:.66rem;text-decoration:none">✏️</a>':'')],['Experience',experienceHtml],['Salary',salaryHtml+(CAP.canStatus?' <a href="#" onclick="editJobSalary();return false" title="Edit the offered rate/budget (feeds the rate score)" style="font-size:.66rem;text-decoration:none">✏️</a>':'')],['Margin',esc(marginDisplay(j))+(CAP.canStatus?' <a href="#" onclick="editJobMargin();return false" title="SecVision margin — % of salary or absolute in the same unit; consultant rate is compared against Salary minus Margin" style="font-size:.66rem;text-decoration:none">✏️</a>':'')],['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]].map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+  var h='<div class="dm-meta">'+'<div class="dm-mi" style="grid-column:1/-1"><span class="dm-ml">Job ID</span><span class="dm-mv">'+idChip(j._id||j.jobId)+'</span></div>'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Company Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',(j.remote||'N/A')+(CAP.canStatus?' <a href="#" onclick="editJobRemote();return false" title="Edit remote mode (Yes / No / Hybrid)" style="font-size:.66rem;text-decoration:none">✏️</a>':'')],['Experience',experienceHtml],['Salary',salaryHtml+(CAP.canStatus?' <a href="#" onclick="editJobSalary();return false" title="Edit the offered rate/budget (feeds the rate score)" style="font-size:.66rem;text-decoration:none">✏️</a>':'')],].concat(isMarginRole()?[['Margin',esc(marginDisplay(j))+(CAP.canStatus?' <a href="#" onclick="editJobMargin();return false" title="SecVision margin — % of salary or absolute in the same unit; consultant rate is compared against Salary minus Margin" style="font-size:.66rem;text-decoration:none">✏️</a>':'')]]:[]).concat([   // #675: margin visible to admin / super admin only
+['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]]).map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links (only show section if user has access)
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
@@ -2217,11 +2218,11 @@ async function saveJobPdf(i){
   var eng=(j.engagementModel&&j.engagementModel!=='Unknown')?j.engagementModel+(j.workMode&&j.workMode!=='unknown'?' · '+j.workMode:'')+(j.offshoreOk==='yes'?' · offshore OK':(j.offshoreOk==='no'?' · not offshoreable':'')):'—';
   kv('Job details',[
     ['Job ID',String(j._id||j.jobId||'')],['Source ID',j._id&&j.jobId&&String(j.jobId)!==String(j._id)?String(j.jobId):'—'],['Posted',j.dateRaw||j.datePosted?fmtDate(j.dateRaw||j.datePosted):'—'],['Source',val(j.source)],
-    ['Company',val(j.company)],['Company type',val(j.companyType)],['Location',val(j.location)],['Country',val(j.detectedCountry)],
+    ['Company',val(j.company)],['Company type',val(j.companyType)],['Location',val(j.location)],['Company Country',val(j.detectedCountry)],
     ['Job type',val(j.jobType)],['Remote',val(j.remote)],['Contract duration',val(j.contractDuration)],['Engagement model',eng],
-    ['Salary / Rate',val(j.salary)],['Margin',j.margin!=null&&j.margin!==''?String(j.margin):'—'],['Experience',val(j.experience)],['Eligibility',val(j.eligibility)],
+    ['Salary / Rate',val(j.salary)]].concat(isMarginRole()?[['Margin',j.margin!=null&&j.margin!==''?String(j.margin):'20% (default)']]:[]).concat([['Experience',val(j.experience)],['Eligibility',val(j.eligibility)],
     ['Contact',val(j.contact)],['Status',val(j.status)],['Owner',j.assignedTo?(j.assignedTo.name||j.assignedTo.email):'—'],['Posting link',val(j.applyLink)]
-  ]);
+  ]));
   kv('Requirements',[['Key skills',val(j.skills)],['Technologies / tools',val(j.tools)],['Certifications',val(j.certifications)],['Compliance / frameworks',val(j.compliance)]]);
   var lists=[['Qualifications',j.qualifications],['Responsibilities',j.responsibilities],['Benefits',j.benefits]].filter(function(x){return Array.isArray(x[1])&&x[1].length});
   lists.forEach(function(x){
@@ -6114,11 +6115,12 @@ async function editJobSalary(){
     if(typeof currentViewIdx==='number'&&currentViewIdx>=0){try{viewDet(currentViewIdx)}catch(e){}}
   }catch(e){alert('⚠️ '+e.message)}
 }
+function isMarginRole(){return curUserRole==='admin'||curUserRole==='super_admin'}   // #675
 function marginDisplay(j){
   // #576: always show the margin as an absolute amount in the salary's unit
   var m=String(j.margin||'').trim();
   if(m&&!/%/.test(m))return m;                       // stored absolute — show as-is
-  var pct=m?(parseFloat(m)||25):25;
+  var pct=m?(parseFloat(m)||20):20;   // #675: default margin 20%
   var s=String(j.salary||'').replace(/(\d),(?=\d{3}\b)/g,'$1');   // #657: "2,500,000.00" → "2500000.00"
   var nums=(s.match(/\d+(?:\.\d+)?/g)||[]).map(parseFloat).filter(function(n){return n>0});
   if(!nums.length)return pct+'% of salary (set Salary first)';
@@ -6131,7 +6133,7 @@ function marginDisplay(j){
 async function editJobMargin(){
   var j=window._currentJobDoc;if(!j){alert('Open a job first');return}
   var cur=marginDisplay(j);
-  var v=await uiPrompt('SecVision margin — absolute amount in the SAME unit as Salary (e.g. $12/hr). Percentage like 25% also accepted:',/^\$|₹|€|£/.test(cur)?cur.replace(/ \(default 25%\)$/,''):'$10/hr');
+  var v=await uiPrompt('SecVision margin — absolute amount in the SAME unit as Salary (e.g. $12/hr). Percentage like 20% also accepted:',/^\$|₹|€|£/.test(cur)?cur.replace(/ \(20% default\)$/,''):'$10/hr');
   if(v===null)return;v=v.trim();if(!v)return;
   try{
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',body:JSON.stringify({action:'updateFieldByJobId',jobId:String(j.jobId||''),field:'margin',value:v})});

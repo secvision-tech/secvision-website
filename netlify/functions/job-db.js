@@ -347,9 +347,11 @@ exports.handler = async (event) => {
         .toArray();
 
       // #387: expose how many matched consultants are saved against each job (light payload)
+      var marginRole = (authRole === 'admin' || authRole === 'super_admin');   // #675
       jobs.forEach(function (j) {
         j.candidateCount = Array.isArray(j.candidateProfiles) ? j.candidateProfiles.length : 0;
         delete j.candidateProfiles;
+        if (!marginRole) delete j.margin;   // #675: margin is admin / super-admin only
       });
 
       // Hybrid sort: only for the first block / non-paginated requests. For block pagination
@@ -492,6 +494,7 @@ exports.handler = async (event) => {
       var { ObjectId } = require('mongodb');
       var allowed = ['jobType','salary','experience','location','remote','eligibility','margin'];
       if (allowed.indexOf(body.field) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Field not editable: ' + body.field }) };
+      if (body.field === 'margin' && !(authRole === 'admin' || authRole === 'super_admin')) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Margin can be set by admin / super admin only' }) };   // #675
       var upd = {}; upd[body.field] = body.value; upd[body.field + 'UpdatedAt'] = new Date();
       var result = await col.updateOne({ _id: new ObjectId(body.id) }, { $set: upd });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
@@ -506,6 +509,7 @@ exports.handler = async (event) => {
       var f = body.fields || {}, setU = {}, changed = [];
       UJ_FIELDS.forEach(function (k) {
         if (!Object.prototype.hasOwnProperty.call(f, k)) return;
+        if (k === 'margin' && !(authRole === 'admin' || authRole === 'super_admin')) return;   // #675: non-admin saves never touch margin
         var v = f[k];
         if (['qualifications', 'responsibilities', 'benefits'].indexOf(k) >= 0) { v = Array.isArray(v) ? v.map(String) : String(v || '').split('\n').map(function (x) { return x.trim(); }).filter(Boolean); }
         else v = (v == null) ? '' : String(v).slice(0, k === 'description' ? 60000 : 2000);
@@ -531,6 +535,7 @@ exports.handler = async (event) => {
     if (action === 'updateFieldByJobId') {
       var allowed = ['jobType','salary','experience','location','remote','eligibility','margin'];
       if (allowed.indexOf(body.field) === -1) return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Field not editable: ' + body.field }) };
+      if (body.field === 'margin' && !(authRole === 'admin' || authRole === 'super_admin')) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Margin can be set by admin / super admin only' }) };   // #675
       var upd = {}; upd[body.field] = body.value; upd[body.field + 'UpdatedAt'] = new Date();
       var result = await col.updateOne({ jobId: body.jobId }, { $set: upd });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ modified: result.modifiedCount }) };
@@ -1044,12 +1049,16 @@ exports.handler = async (event) => {
       contacts = contacts.slice(0, allowedNew);
       var ops = contacts.map(function(c) {
         var hasEmail = c.email && c.email !== 'N/A' && c.email !== '';
-        // Match on email when present (dedupe by email); otherwise match on name (dedupe by name)
+        if (hasEmail) c.email = String(c.email).trim().toLowerCase();
+        // #676: a person is the same contact unless they carry a DIFFERENT email.
+        //   incoming with email  -> matches an existing row with that email, OR the same name with no email yet (fills it in)
+        //   incoming without email -> matches the same name regardless of email (never creates a second row)
+        var nameRe = { $regex: '^\\s*' + String(c.name || '').trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+') + '\\s*$', $options: 'i' };
         var matchFilter = hasEmail
-          ? { company: compRe, email: c.email }
-          : { company: compRe, name: c.name };
+          ? { company: compRe, $or: [{ email: c.email }, { name: nameRe, $or: [{ email: { $in: ['', null, 'N/A'] } }, { email: { $exists: false } }] }] }
+          : { company: compRe, name: nameRe };
         return { updateOne: { filter: matchFilter,
-          update: { $set: { company: company, name: c.name, designation: c.designation || 'N/A', email: hasEmail ? c.email : '', linkedin: c.linkedin || '', source: c.source || 'Manual', updatedAt: new Date() },
+          update: { $set: Object.assign({ company: company, name: c.name, designation: c.designation || 'N/A', source: c.source || 'Manual', updatedAt: new Date() }, hasEmail ? { email: c.email } : {}, c.linkedin ? { linkedin: c.linkedin } : {}),   // #676: never overwrite a known email/linkedin with blank
             $setOnInsert: { createdAt: new Date() } }, upsert: true } };
       });
       var result = await contactsCol.bulkWrite(ops, { ordered: false });
@@ -1880,6 +1889,7 @@ exports.handler = async (event) => {
       var job = null;
       try { job = await col.findOne({ _id: new ObjectId(wantId) }); } catch (e) {}
       if (!job) { try { job = await col.findOne({ jobId: wantId }); } catch (e) {} }
+      if (job && !(authRole === 'admin' || authRole === 'super_admin')) delete job.margin;   // #675
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ job: job }) };
     }
 
