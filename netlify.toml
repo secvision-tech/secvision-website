@@ -1,28 +1,13 @@
 [build]
   publish = "."
 
-# Redirect bare domain to www
-[[redirects]]
-  from = "https://secvisiontech.com/*"
-  to = "https://www.secvisiontech.com/:splat"
-  status = 301
-  force = true
-
 # Redirect Netlify subdomain to custom domain
 [[redirects]]
   from = "https://secvisiontech.netlify.app/*"
   to = "https://www.secvisiontech.com/:splat"
   status = 301
   force = true
-
-# Custom 404
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-# #678 — daily demand automation. Netlify invokes auto-pipeline every 10 minutes from 00:00 to 04:50 UTC
-# (05:30–10:20 IST); the function itself starts today's run at the configured IST hour (default 06:00)
-# and advances it one bounded slice per invocation until done, then ignores the remaining ticks.
+# #678 — daily demand automation: every 10 minutes 00:00–04:50 UTC (05:30–10:20 IST);
+# the function starts today's run at the configured IST hour and advances it one slice per tick.
 [functions."auto-pipeline"]
   schedule = "*/10 0-4 * * *"
