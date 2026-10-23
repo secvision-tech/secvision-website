@@ -26,8 +26,8 @@ var DEFAULT_CONFIG = {
   roles: ['SOC Analyst', 'Security Engineer', 'Security Architect', 'Threat Hunter', 'Incident Responder', 'SIEM Engineer', 'Cloud Security Engineer',
           'Cybersecurity Analyst', 'SOC Consultant', 'Security Consultant', 'SIEM Consultant', 'Cybersecurity Contractor', 'Security Operations Consultant',
           'InfoSec Consultant', 'Cloud Security Consultant', 'Cyber Contractor'],
-  countries: ['us', 'ca', 'uk'],
-  datePosted: '3days',            // JSearch window; the run itself only counts jobs first seen today
+  countries: ['any', 'ca', 'uk', 'au', 'de', 'nl', 'ie', 'sg'],   // 'any' = the manual "Any (All Countries)" search (US index, no country name)
+  datePosted: 'today',            // JSearch last-24-hours window; the run itself only counts jobs first seen today
   workModes: ['remote'],          // automation scope today; hybrid / onsite can be ticked when a regional partner is live
   caps: { harvest: 100, eligible: 50, matches: 10, contacts: 10, reveals: 30, dailyBudgetInr: 800 },
   costInr: { aiClassify: 0.10, jsearchCall: 0.00 }   // estimates used by the cost meter; adjust from Settings
@@ -75,7 +75,7 @@ async function stepHarvest(db, run, cfg, deadline) {
     if (h.newJobs >= cfg.caps.harvest) { h.cappedAt = h.cursor; break; }
     var u = units[h.cursor];
     var ev = { httpMethod: 'POST', headers: {}, body: JSON.stringify({ roles: u.roles, pages: 1, datePosted: cfg.datePosted || '3days', employmentTypes: 'CONTRACTOR',
-      country: u.country, countryName: u.country === 'us' ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true }) };
+      country: u.country === 'any' ? 'us' : u.country, countryName: (u.country === 'us' || u.country === 'any') ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true }) };
     try {
       var before = await db.collection('jobs').countDocuments({ createdAt: { $gte: run.startedAt } });
       var r = await jobSearch.handler(ev);
@@ -206,7 +206,7 @@ exports.handler = async function (event) {
     var inc = body.config || {}, set = {};
     if (typeof inc.enabled === 'boolean') set.enabled = inc.enabled;
     if (Array.isArray(inc.roles)) set.roles = inc.roles.map(String).map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 40);
-    if (Array.isArray(inc.countries)) set.countries = inc.countries.map(function (s) { return String(s).toLowerCase().trim(); }).filter(function (s) { return COUNTRY_NAMES[s]; }).slice(0, 12);
+    if (Array.isArray(inc.countries)) set.countries = inc.countries.map(function (s) { return String(s).toLowerCase().trim(); }).filter(function (s) { return s === 'any' || COUNTRY_NAMES[s]; }).slice(0, 16);
     if (Array.isArray(inc.workModes)) set.workModes = inc.workModes.filter(function (m) { return ['remote', 'hybrid', 'onsite'].indexOf(m) >= 0; });
     if (inc.datePosted && ['today', '3days', 'week'].indexOf(inc.datePosted) >= 0) set.datePosted = inc.datePosted;
     if (inc.runHourIST != null) set.runHourIST = Math.min(23, Math.max(0, parseInt(inc.runHourIST) || 6));

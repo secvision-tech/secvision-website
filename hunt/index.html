@@ -4098,7 +4098,7 @@ async function loadAutomation(){
     document.getElementById('auHour').value=c.runHourIST!=null?c.runHourIST:6;
     document.getElementById('auRoles').value=(c.roles||[]).join('\n');
     document.getElementById('auCountries').value=(c.countries||[]).join(', ');
-    document.getElementById('auDate').value=c.datePosted||'3days';
+    document.getElementById('auDate').value=c.datePosted||'today';
     var wm=c.workModes||['remote'];document.getElementById('auWmRemote').checked=wm.indexOf('remote')>=0;document.getElementById('auWmHybrid').checked=wm.indexOf('hybrid')>=0;document.getElementById('auWmOnsite').checked=wm.indexOf('onsite')>=0;
     var cp=c.caps||{};document.getElementById('auCapHarvest').value=cp.harvest;document.getElementById('auCapEligible').value=cp.eligible;document.getElementById('auCapMatches').value=cp.matches;document.getElementById('auCapContacts').value=cp.contacts;document.getElementById('auCapReveals').value=cp.reveals;document.getElementById('auCapBudget').value=cp.dailyBudgetInr;
     document.getElementById('auCostAi').value=(c.costInr||{}).aiClassify;
@@ -7823,8 +7823,8 @@ function downloadFile(content,name,type){
       <div><label class="set-label">Automation</label><select id="auEnabled" class="set-input"><option value="true">Enabled</option><option value="false">Disabled (kill switch)</option></select></div>
       <div><label class="set-label">Run hour (IST, 0–23)</label><input id="auHour" type="number" min="0" max="23" class="set-input"></div>
       <div style="grid-column:1/-1"><label class="set-label">Roles (one per line)</label><textarea id="auRoles" class="set-input" rows="4" style="font-size:.62rem"></textarea></div>
-      <div><label class="set-label">Countries (codes, comma-separated: us, ca, uk, au, de…)</label><input id="auCountries" class="set-input"></div>
-      <div><label class="set-label">Posting window</label><select id="auDate" class="set-input"><option value="today">Today</option><option value="3days">Last 3 days</option><option value="week">Last week</option></select></div>
+      <div><label class="set-label">Countries (codes, comma-separated — <b>any</b> = the manual “Any (All Countries)” search; plus us, ca, uk, au, de, nl, ie, sg, fr, ch, se, ae, nz…; 4 JSearch calls per country per run)</label><input id="auCountries" class="set-input"></div>
+      <div><label class="set-label">Posting window</label><select id="auDate" class="set-input"><option value="today">Today (last 24 h)</option><option value="3days">Last 3 days</option><option value="week">Last week</option></select></div>
       <div style="grid-column:1/-1"><label class="set-label">Automation scope (work modes)</label>
         <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auWmRemote"> Remote</label>
         <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auWmHybrid"> Hybrid</label>
