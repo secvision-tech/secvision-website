@@ -9,5 +9,5 @@
   force = true
 # #678 — daily demand automation: every 10 minutes 00:00–04:50 UTC (05:30–10:20 IST);
 # the function starts today's run at the configured IST hour and advances it one slice per tick.
-[functions."auto-pipeline"]
+[functions."auto-pipeline-cron"]
   schedule = "*/10 0-4 * * *"

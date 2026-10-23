@@ -165,30 +165,31 @@ async function tick(db, run, cfg) {
   return run;
 }
 
+// ---- scheduled tick (called by auto-pipeline-cron.js): start today's run at/after the configured IST hour,
+// then advance it one slice per tick. A scheduled Netlify function cannot be invoked over HTTP in production,
+// so the schedule lives on a separate tiny function and the UI talks to this one.
+async function scheduledTick() {
+  var db = await getDb();
+  var runs = db.collection('automation_runs');
+  var cfg = await loadConfig(db);
+  if (!cfg.enabled) return { skipped: 'automation disabled' };
+  var today = istDate();
+  if (istHour() < (cfg.runHourIST || 6)) return { skipped: 'before run hour' };
+  var run = await runs.findOne({ date: today, by: 'schedule' });
+  if (run && run.status === 'done') return { skipped: 'today done' };
+  if (!run) { run = newRun(today, 'schedule'); await persist(db, run); }
+  run = await tick(db, run, cfg);
+  return { ok: true, step: run.step, status: run.status };
+}
+exports.scheduledTick = scheduledTick;
+
 exports.handler = async function (event) {
   var hdrs = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization', 'Content-Type': 'application/json' };
   if (event.httpMethod === 'OPTIONS') return { statusCode: 200, headers: hdrs, body: '' };
   var db = await getDb();
   var runs = db.collection('automation_runs');
   var body = {}; try { body = JSON.parse(event.body || '{}'); } catch (e) {}
-  // Netlify's scheduler invokes the function without an Authorization header (body carries next_run). In production a
-  // scheduled function is not reachable over HTTP, so an unauthenticated call can only be the scheduler; it can at most
-  // advance today's capped run, never change settings.
-  var authHdr = (event.headers || {}).authorization || (event.headers || {}).Authorization || '';
-  var scheduled = !authHdr.startsWith('Bearer ');
   var cfg = await loadConfig(db);
-
-  // ---- scheduled tick: start today's run at/after the configured IST hour, then advance it one slice per tick ----
-  if (scheduled) {
-    if (!cfg.enabled) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ skipped: 'automation disabled' }) };
-    var today = istDate();
-    if (istHour() < (cfg.runHourIST || 6)) return { statusCode: 200, headers: hdrs, body: JSON.stringify({ skipped: 'before run hour' }) };
-    var run = await runs.findOne({ date: today, by: 'schedule' });
-    if (run && run.status === 'done') return { statusCode: 200, headers: hdrs, body: JSON.stringify({ skipped: 'today done' }) };
-    if (!run) { run = newRun(today, 'schedule'); await persist(db, run); }
-    run = await tick(db, run, cfg);
-    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true, step: run.step, status: run.status }) };
-  }
 
   // ---- UI actions (JWT) ----
   var user = await authUserFromEvent(event, db);
