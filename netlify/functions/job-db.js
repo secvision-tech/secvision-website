@@ -314,6 +314,9 @@ exports.handler = async (event) => {
       if (body.offshore === 'possible') filter.offshoreOk = { $ne: 'no' };
       else if (body.offshore === 'yes') filter.offshoreOk = 'yes';
       else if (body.offshore === 'no') filter.offshoreOk = 'no';
+      // #678: automation filter — jobs the daily run queued, or skipped (with reason)
+      if (body.auto === 'queued') filter['autoQueue.status'] = 'queued';
+      else if (body.auto === 'skipped') filter.autoSkipReason = { $exists: true, $nin: [null, ''] };
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
       if (body.detectedCountry && body.detectedCountry !== 'all') filter.detectedCountry = body.detectedCountry;
       if (body.location) {

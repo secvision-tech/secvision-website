@@ -281,6 +281,7 @@ body.role-viewer .edit-btn{display:none!important}
         <div style="display:flex;gap:1rem;align-items:center;margin-top:.35rem">
           <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem;cursor:pointer" title="Only jobs classified as Corp-to-Corp / vendor-friendly (explicit C2C wording, or contract roles posted by staffing firms / C2C boards)"><input type="checkbox" id="dbC2cOnly" onchange="searchDb()" style="cursor:pointer"> 🤝 C2C / vendor-friendly only</label>
           <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem" title="#628 — based on the engagement classifier: 'Possible' hides jobs marked US-only (clearance, visa-independent, state/federal, onsite-only)">🌏 Offshore: <select id="dbOffshore" onchange="searchDb()" style="font-size:.6rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px"><option value="any" selected>Any</option><option value="possible">Possible (not US-only)</option><option value="yes">Confirmed yes</option><option value="no">Not possible (US-only)</option></select></label>
+          <label style="font-size:.6rem;color:var(--g5);display:flex;align-items:center;gap:.25rem" title="#678 — jobs picked up by the 06:00 automation run (contract + remote + offshore-possible)">🤖 Automation: <select id="dbAuto" onchange="searchDb()" style="font-size:.6rem;padding:.1rem .2rem;border:1px solid var(--g2);border-radius:3px"><option value="any" selected>Any</option><option value="queued">Auto-queued</option><option value="skipped">Skipped (see reason)</option></select></label>
         </div>
         <div id="dbCustomDates" style="display:none;gap:.6rem;margin-top:.4rem;align-items:end">
           <div class="sg"><label>From</label><input type="date" id="dbDateFrom"></div>
@@ -981,7 +982,8 @@ async function searchDb(){
     var c2cOnly=!!(document.getElementById('dbC2cOnly')&&document.getElementById('dbC2cOnly').checked);   // #592
     var offshore=(document.getElementById('dbOffshore')||{}).value||'any';   // #628
   try{localStorage.setItem('huntDbOffshore',offshore)}catch(e){}   // #666: remember the last choice
-    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly,offshore:offshore};
+    var autoF=(document.getElementById('dbAuto')||{}).value||'any';   // #678
+    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly,offshore:offshore,auto:autoF};
     loadedBlocks=1;
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(Object.assign({},lastSearchParams,{limit:BLOCK_SIZE,page:1}))});
@@ -1939,7 +1941,7 @@ async function _viewDetCore(i){
   var statusInner=(j.status||'new').charAt(0).toUpperCase()+(j.status||'new').slice(1);
   var statusHtml=(CAP.canStatus&&!mjFromConsultant)?'<span class="status-badge status-'+(j.status||'new')+'" onclick="cycleStatusInView('+i+')" style="cursor:pointer" title="Click to change status">'+statusInner+'</span>':'<span class="status-badge status-'+(j.status||'new')+'">'+statusInner+'</span>';
   var h='<div class="dm-meta">'+'<div class="dm-mi" style="grid-column:1/-1"><span class="dm-ml">Job ID</span><span class="dm-mv">'+idChip(j._id||j.jobId)+'</span></div>'+[['Company',companyHtml],['Company Type',companyTypeHtml],['Company Size',companySizeHtml],['Company LinkedIn',companyLinkedinHtml],['Job Location',locationHtml],['Company Country',countryHtml],['Posted',j.date],['Source',j.applyLink?'<a href="'+j.applyLink+'" target="_blank">'+j.source+'</a>':j.source],['Job Type',jobTypeHtml+(j.contractDuration?' <span style="color:#047857;font-size:.7rem;font-weight:600">('+j.contractDuration+')</span>':'')],['Remote',(j.remote||'N/A')+(CAP.canStatus?' <a href="#" onclick="editJobRemote();return false" title="Edit remote mode (Yes / No / Hybrid)" style="font-size:.66rem;text-decoration:none">✏️</a>':'')],['Experience',experienceHtml],['Salary',salaryHtml+(CAP.canStatus?' <a href="#" onclick="editJobSalary();return false" title="Edit the offered rate/budget (feeds the rate score)" style="font-size:.66rem;text-decoration:none">✏️</a>':'')],].concat(isMarginRole()?[['Margin',esc(marginDisplay(j))+(CAP.canStatus?' <a href="#" onclick="editJobMargin();return false" title="SecVision margin — % of salary or absolute in the same unit; consultant rate is compared against Salary minus Margin" style="font-size:.66rem;text-decoration:none">✏️</a>':'')]]:[]).concat([   // #675: margin visible to admin / super admin only
-['Eligibility',j.eligibility],['Status',statusHtml],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]]).map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
+['Eligibility',j.eligibility],['Status',statusHtml],['Automation',(j.autoQueue&&j.autoQueue.status?'<span style="color:#047857;font-weight:600">🤖 Auto-queued '+esc(j.autoQueue.date||'')+'</span>':(j.autoSkipReason?'<span style="color:#92400E">Skipped — '+esc(j.autoSkipReason)+'</span>':'—'))],['Certifications',addTooltips(j.certifications)],['Compliance',addTooltips(j.compliance)],['Technologies/Tools',addTooltips(j.tools)]]).map(function(x){return'<div class="dm-mi"><span class="dm-ml">'+x[0]+'</span><span class="dm-mv">'+(x[1]||'N/A')+'</span></div>'}).join('')+'</div>';
   // Fetch contacts from DB with LinkedIn links (only show section if user has access)
   if(canContact){
     h+='<div class="dm-sec"><h4>Contacts</h4><div id="viewContacts" style="font-size:.75rem;color:var(--tl)">Loading contacts...</div>';
@@ -4084,14 +4086,86 @@ function initSettingsPage(){
   }
 }
 
+// ---- #678 Automation (daily demand run) ----
+var _auCfg=null,_auRunning=null;
+async function loadAutomation(){
+  var st=document.getElementById('auStatus');st.textContent='Loading…';
+  try{
+    var r=await authFetch('/.netlify/functions/auto-pipeline',{method:'POST',body:JSON.stringify({action:'getConfig'})});var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}
+    _auCfg=d.config;var c=d.config;
+    document.getElementById('auEnabled').value=String(c.enabled!==false);
+    document.getElementById('auHour').value=c.runHourIST!=null?c.runHourIST:6;
+    document.getElementById('auRoles').value=(c.roles||[]).join('\n');
+    document.getElementById('auCountries').value=(c.countries||[]).join(', ');
+    document.getElementById('auDate').value=c.datePosted||'3days';
+    var wm=c.workModes||['remote'];document.getElementById('auWmRemote').checked=wm.indexOf('remote')>=0;document.getElementById('auWmHybrid').checked=wm.indexOf('hybrid')>=0;document.getElementById('auWmOnsite').checked=wm.indexOf('onsite')>=0;
+    var cp=c.caps||{};document.getElementById('auCapHarvest').value=cp.harvest;document.getElementById('auCapEligible').value=cp.eligible;document.getElementById('auCapMatches').value=cp.matches;document.getElementById('auCapContacts').value=cp.contacts;document.getElementById('auCapReveals').value=cp.reveals;document.getElementById('auCapBudget').value=cp.dailyBudgetInr;
+    document.getElementById('auCostAi').value=(c.costInr||{}).aiClassify;
+    ['auEnabled','auHour','auRoles','auCountries','auDate','auWmRemote','auWmHybrid','auWmOnsite','auCapHarvest','auCapEligible','auCapMatches','auCapContacts','auCapReveals','auCapBudget','auCostAi'].forEach(function(id){document.getElementById(id).disabled=!d.canEdit});
+    document.getElementById('auSaveBtn').style.display=d.canEdit?'':'none';document.getElementById('auRunBtn').style.display=d.canRun?'':'none';
+    renderAutoRuns(d.runs||[]);
+    var active=(d.runs||[]).find(function(x){return x.status==='running'});
+    st.textContent=active?'A run is in progress (step: '+active.step+'). Press Run now to continue it from here, or wait for the scheduler.':'Next scheduled run: '+String(c.runHourIST!=null?c.runHourIST:6).padStart(2,'0')+':00 IST'+(c.enabled===false?' — DISABLED':'');
+    document.getElementById('auStopBtn').style.display=active?'':'none';_auRunning=active||null;
+  }catch(e){st.textContent='⚠️ '+e.message}
+}
+function renderAutoRuns(runs){
+  var tb=document.getElementById('auRuns');
+  if(!runs.length){tb.innerHTML='<tr><td colspan="10" style="padding:.6rem;text-align:center;color:var(--g3)">No runs yet.</td></tr>';return}
+  tb.innerHTML=runs.map(function(r){
+    var h=r.harvest||{},c=r.classify||{},s=r.select||{};
+    var notes=[];if(h.cappedAt!=null)notes.push('harvest cap hit');if(c.budgetStop)notes.push('budget stop');if(c.failed)notes.push(c.failed+' classify failed');
+    Object.keys(s.reasons||{}).forEach(function(k){notes.push(s.reasons[k]+'× '+k)});if(r.lastError)notes.push('error: '+r.lastError);(h.errors||[]).slice(0,2).forEach(function(e){notes.push(e)});
+    var sc=r.status==='done'?'#047857':(r.status==='running'?'#B45309':'#6B7280');
+    return '<tr style="border-top:1px solid var(--g1)"><td style="padding:.3rem .4rem">'+esc(r.date||'')+'</td><td style="padding:.3rem .4rem">'+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+'</td><td style="padding:.3rem .4rem;color:'+sc+';font-weight:600">'+esc(r.status||'')+(r.status==='running'?' · '+esc(r.step||''):'')+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.seen||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.newJobs||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(c.done||0)+'</td><td style="padding:.3rem .4rem;text-align:right;font-weight:700;color:#047857">'+(s.queued||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(s.skipped||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(Math.round((r.costInr||0)*100)/100)+'</td><td style="padding:.3rem .4rem;color:var(--g5)" title="'+esc(notes.join(' | '))+'">'+esc(notes.join(' · ').slice(0,160))+'</td></tr>';
+  }).join('');
+}
+async function saveAutomation(){
+  var st=document.getElementById('auStatus');
+  var wm=[];if(document.getElementById('auWmRemote').checked)wm.push('remote');if(document.getElementById('auWmHybrid').checked)wm.push('hybrid');if(document.getElementById('auWmOnsite').checked)wm.push('onsite');
+  var cfg={enabled:document.getElementById('auEnabled').value==='true',runHourIST:parseInt(document.getElementById('auHour').value)||6,
+    roles:document.getElementById('auRoles').value.split(/\n+/).map(function(x){return x.trim()}).filter(Boolean),
+    countries:document.getElementById('auCountries').value.split(/[,\s]+/).map(function(x){return x.trim().toLowerCase()}).filter(Boolean),
+    datePosted:document.getElementById('auDate').value,workModes:wm,
+    caps:{harvest:document.getElementById('auCapHarvest').value,eligible:document.getElementById('auCapEligible').value,matches:document.getElementById('auCapMatches').value,contacts:document.getElementById('auCapContacts').value,reveals:document.getElementById('auCapReveals').value,dailyBudgetInr:document.getElementById('auCapBudget').value},
+    costInr:{aiClassify:document.getElementById('auCostAi').value}};
+  st.textContent='Saving…';
+  try{var r=await authFetch('/.netlify/functions/auto-pipeline',{method:'POST',body:JSON.stringify({action:'saveConfig',config:cfg})});var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;return}st.textContent='✅ Saved';setTimeout(loadAutomation,800);
+  }catch(e){st.textContent='⚠️ '+e.message}
+}
+async function runAutomationNow(){
+  var st=document.getElementById('auStatus'),btn=document.getElementById('auRunBtn');btn.disabled=true;
+  try{
+    var r=await authFetch('/.netlify/functions/auto-pipeline',{method:'POST',body:JSON.stringify({action:'runNow'})});var d=await r.json();
+    if(d.error){st.textContent='⚠️ '+d.error;btn.disabled=false;return}
+    var run=d.run;_auRunning=run;document.getElementById('auStopBtn').style.display='';
+    // #678: the UI loop drives the same bounded slices the scheduler would — each call <= ~22 s
+    while(run&&run.status==='running'){
+      var h=run.harvest||{},c=run.classify||{};
+      st.textContent='Running — '+run.step+(run.step==='harvest'?' ('+(h.cursor||0)+'/'+(h.units||'?')+' searches, '+(h.newJobs||0)+' new jobs)':(run.step==='classify'?' ('+(c.done||0)+' classified)':''))+' · ₹'+(Math.round((run.costInr||0)*100)/100);
+      var sr=await authFetch('/.netlify/functions/auto-pipeline',{method:'POST',body:JSON.stringify({action:'step',runId:run._id})});var sd=await sr.json();
+      if(sd.error){st.textContent='⚠️ '+sd.error;break}run=sd.run;
+    }
+    st.textContent=run&&run.status==='done'?('✅ Done — '+((run.select||{}).queued||0)+' auto-queued, '+((run.select||{}).skipped||0)+' skipped, '+((run.harvest||{}).newJobs||0)+' new jobs.'):'Run '+(run?run.status:'ended');
+  }catch(e){st.textContent='⚠️ '+e.message}
+  btn.disabled=false;document.getElementById('auStopBtn').style.display='none';_auRunning=null;loadAutomation();
+}
+async function stopAutomationRun(){
+  if(!_auRunning)return;
+  try{await authFetch('/.netlify/functions/auto-pipeline',{method:'POST',body:JSON.stringify({action:'stopRun',runId:_auRunning._id})})}catch(e){}
+  _auRunning=null;document.getElementById('auStopBtn').style.display='none';loadAutomation();
+}
 function setSettingsSection(section){
-  ['global','user','users'].forEach(function(s){
+  ['global','user','users','auto'].forEach(function(s){
     var el=document.getElementById('setSection-'+s);
     var btn=document.getElementById('setNav-'+s);
     if(el)el.style.display=s===section?'block':'none';
     if(btn)btn.classList.toggle('active',s===section);
   });
   if(section==='users')loadUserList();
+  if(section==='auto')loadAutomation();   // #678
 }
 
 function updateSettingsPreview(){
@@ -7734,9 +7808,52 @@ function downloadFile(content,name,type){
     <button class="mode-btn active" id="setNav-global" onclick="setSettingsSection('global')" style="font-size:.65rem;padding:.25rem .6rem">🏢 Global Settings</button>
     <button class="mode-btn" id="setNav-user" onclick="setSettingsSection('user')" style="font-size:.65rem;padding:.25rem .6rem">👤 User Preferences</button>
     <button class="mode-btn" id="setNav-users" onclick="setSettingsSection('users')" style="font-size:.65rem;padding:.25rem .6rem">👥 User Management</button>
+    <button class="mode-btn" id="setNav-auto" onclick="setSettingsSection('auto')" style="font-size:.65rem;padding:.25rem .6rem">🤖 Automation</button>
   </div>
 
   <div id="settingsSaveStatus" style="font-size:.7rem;font-weight:600;color:#059669;text-align:center;margin-bottom:.6rem;min-height:1rem"></div>
+
+  <!-- #678 AUTOMATION (daily demand run) -->
+  <div id="setSection-auto" style="display:none">
+    <div style="display:flex;gap:.2rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap">
+      <span style="background:#7C3AED;color:#fff;font-size:.5rem;padding:.1rem .3rem;border-radius:3px;font-weight:700">SUPER ADMIN EDITS</span>
+      <span style="font-size:.6rem;color:var(--g4)">Daily run at the IST hour below: harvest → classify → auto-queue (contract + remote + offshore-possible). Nothing is emailed; queued jobs appear under Jobs → Automation: Auto-queued.</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
+      <div><label class="set-label">Automation</label><select id="auEnabled" class="set-input"><option value="true">Enabled</option><option value="false">Disabled (kill switch)</option></select></div>
+      <div><label class="set-label">Run hour (IST, 0–23)</label><input id="auHour" type="number" min="0" max="23" class="set-input"></div>
+      <div style="grid-column:1/-1"><label class="set-label">Roles (one per line)</label><textarea id="auRoles" class="set-input" rows="4" style="font-size:.62rem"></textarea></div>
+      <div><label class="set-label">Countries (codes, comma-separated: us, ca, uk, au, de…)</label><input id="auCountries" class="set-input"></div>
+      <div><label class="set-label">Posting window</label><select id="auDate" class="set-input"><option value="today">Today</option><option value="3days">Last 3 days</option><option value="week">Last week</option></select></div>
+      <div style="grid-column:1/-1"><label class="set-label">Automation scope (work modes)</label>
+        <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auWmRemote"> Remote</label>
+        <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auWmHybrid"> Hybrid</label>
+        <label style="font-size:.62rem"><input type="checkbox" id="auWmOnsite"> On-site</label>
+        <span style="font-size:.55rem;color:var(--g4);margin-left:.6rem">Hybrid / on-site: tick only when a regional partner can place in-country.</span></div>
+    </div>
+    <div style="font-size:.62rem;font-weight:700;color:var(--g5);margin:.3rem 0">Daily caps</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.6rem">
+      <div><label class="set-label">Harvest (new jobs)</label><input id="auCapHarvest" type="number" class="set-input"></div>
+      <div><label class="set-label">Eligible (auto-queued)</label><input id="auCapEligible" type="number" class="set-input"></div>
+      <div><label class="set-label">Matches per job (phase 2)</label><input id="auCapMatches" type="number" class="set-input"></div>
+      <div><label class="set-label">Contacts per company (phase 2)</label><input id="auCapContacts" type="number" class="set-input"></div>
+      <div><label class="set-label">Email reveals / day (phase 2)</label><input id="auCapReveals" type="number" class="set-input"></div>
+      <div><label class="set-label">Daily budget (₹)</label><input id="auCapBudget" type="number" class="set-input"></div>
+      <div><label class="set-label">Cost estimate: AI classify ₹/job</label><input id="auCostAi" type="number" step="0.01" class="set-input"></div>
+    </div>
+    <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem">
+      <button id="auSaveBtn" onclick="saveAutomation()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">💾 Save</button>
+      <button id="auRunBtn" onclick="runAutomationNow()" style="padding:.35rem .8rem;background:#059669;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">▶ Run now</button>
+      <button id="auStopBtn" onclick="stopAutomationRun()" style="display:none;padding:.35rem .8rem;background:#DC2626;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">■ Stop</button>
+      <span id="auStatus" style="font-size:.62rem;color:var(--g5)"></span>
+    </div>
+    <div style="font-size:.62rem;font-weight:700;color:var(--g5);margin:.3rem 0">Recent runs</div>
+    <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;overflow:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:.6rem"><thead><tr style="background:var(--g1)">
+        <th style="padding:.3rem .4rem;text-align:left">Date</th><th style="padding:.3rem .4rem;text-align:left">By</th><th style="padding:.3rem .4rem;text-align:left">Status</th><th style="padding:.3rem .4rem;text-align:right">Seen</th><th style="padding:.3rem .4rem;text-align:right">New</th><th style="padding:.3rem .4rem;text-align:right">Classified</th><th style="padding:.3rem .4rem;text-align:right">Queued</th><th style="padding:.3rem .4rem;text-align:right">Skipped</th><th style="padding:.3rem .4rem;text-align:right">₹</th><th style="padding:.3rem .4rem;text-align:left">Notes</th>
+      </tr></thead><tbody id="auRuns"><tr><td colspan="10" style="padding:.6rem;text-align:center;color:var(--g3)">—</td></tr></tbody></table>
+    </div>
+  </div>
 
   <!-- GLOBAL SETTINGS (Super Admin) -->
   <div id="setSection-global">
