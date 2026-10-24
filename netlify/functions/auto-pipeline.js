@@ -78,13 +78,16 @@ async function stepHarvest(db, run, cfg, deadline) {
     var ev = { httpMethod: 'POST', headers: {}, body: JSON.stringify({ roles: u.roles, pages: 1, datePosted: cfg.datePosted || '3days', employmentTypes: 'CONTRACTOR',
       country: u.country === 'any' ? 'us' : u.country, countryName: (u.country === 'us' || u.country === 'any') ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true }) };
     try {
-      var before = await db.collection('jobs').countDocuments({ createdAt: { $gte: run.startedAt } });
+      // #680: stamp the rows THIS search inserted (created during the call, not yet owned by any run) with the run id;
+      // every later step — cap, classify, select, "View jobs" — works on that stamp, never on a global time count.
+      var t0 = new Date();
       var r = await jobSearch.handler(ev);
       var d = {}; try { d = JSON.parse(r.body || '{}'); } catch (e) {}
-      var after = await db.collection('jobs').countDocuments({ createdAt: { $gte: run.startedAt } });
-      h.calls += (d.apiCalls || 0); h.seen += (d.totalResults || 0); h.newJobs = after;
+      var st = await db.collection('jobs').updateMany({ createdAt: { $gte: t0 }, autoRunId: { $exists: false }, searchedBy: 'automation@secvisiontech.com' }, { $set: { autoRunId: run._id } });
+      var added = st.modifiedCount || 0;
+      h.calls += (d.apiCalls || 0); h.seen += (d.totalResults || 0); h.newJobs += added;
       // #679: per-search diagnostics (country, first role of the chunk, results returned, savedToDb, new rows added)
-      h.log = (h.log || []).concat([{ c: u.country, r: u.roles[0], seen: d.totalResults || 0, saved: d.savedToDb || 0, added: after - before, err: d.error || '' }]).slice(-64);
+      h.log = (h.log || []).concat([{ c: u.country, r: u.roles[0], seen: d.totalResults || 0, saved: d.savedToDb || 0, added: added, err: d.error || '' }]).slice(-64);
       if (d.error) h.errors.push(u.country + '/' + u.roles[0] + ': ' + d.error);
     } catch (e) { h.errors.push(u.country + '/' + u.roles[0] + ': ' + String(e && e.message || e)); }
     h.cursor++;
@@ -102,7 +105,7 @@ async function stepClassify(db, run, cfg, deadline) {
   if (!process.env.ANTHROPIC_API_KEY) { c.errors.push('AI key not configured'); run.step = 'select'; return; }
   while (Date.now() < deadline - 13000) {   // a batch of 8 classifications takes up to ~12 s
     if (run.costInr >= cfg.caps.dailyBudgetInr) { c.budgetStop = true; break; }
-    var batch = await col.find({ createdAt: { $gte: run.startedAt }, engagementAI: { $ne: true }, autoClassifyFailed: { $ne: run._id } })
+    var batch = await col.find({ autoRunId: run._id, engagementAI: { $ne: true }, autoClassifyFailed: { $ne: run._id } })
       .project({ title: 1, company: 1, companyType: 1, description: 1, jobType: 1, salary: 1, contractDuration: 1, source: 1, detectedCountry: 1, location: 1, remote: 1, workType: 1, tools: 1 })
       .limit(8).toArray();
     if (!batch.length) { run.step = 'select'; return; }
@@ -128,7 +131,7 @@ async function stepClassify(db, run, cfg, deadline) {
 async function stepSelect(db, run, cfg) {
   var col = db.collection('jobs');
   if (!(run.startedAt instanceof Date)) run.startedAt = new Date(run.startedAt);
-  var jobs = await col.find({ createdAt: { $gte: run.startedAt } }).project({ jobType: 1, contractDuration: 1, workMode: 1, remote: 1, offshoreOk: 1, engagementAI: 1, engagementModel: 1, detectedCountry: 1, title: 1, company: 1 }).toArray();
+  var jobs = await col.find({ autoRunId: run._id }).project({ jobType: 1, contractDuration: 1, workMode: 1, remote: 1, offshoreOk: 1, engagementAI: 1, engagementModel: 1, detectedCountry: 1, title: 1, company: 1 }).toArray();
   var modes = (cfg.workModes && cfg.workModes.length) ? cfg.workModes : ['remote'];
   var s = run.select, ops = [];
   jobs.forEach(function (j) {

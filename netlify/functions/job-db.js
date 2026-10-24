@@ -317,7 +317,7 @@ exports.handler = async (event) => {
       // #678: automation filter — jobs the daily run queued, or skipped (with reason)
       if (body.auto === 'queued') filter['autoQueue.status'] = 'queued';
       else if (body.auto === 'skipped') filter.autoSkipReason = { $exists: true, $nin: [null, ''] };
-      else if (body.auto === 'run' && body.runId) filter.$and = (filter.$and || []).concat([{ $or: [{ 'autoQueue.runId': String(body.runId) }, { autoSkipRunId: String(body.runId) }] }]);   // #679: all jobs touched by one run
+      else if (body.auto === 'run' && body.runId) filter.$and = (filter.$and || []).concat([{ $or: [{ autoRunId: String(body.runId) }, { 'autoQueue.runId': String(body.runId) }, { autoSkipRunId: String(body.runId) }] }]);   // #679/#680: all jobs harvested or touched by one run
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
       if (body.detectedCountry && body.detectedCountry !== 'all') filter.detectedCountry = body.detectedCountry;
       if (body.location) {
