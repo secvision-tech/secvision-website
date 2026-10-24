@@ -6,7 +6,8 @@
 // every 10 minutes between 06:00 and 09:50 IST) and (b) the UI "Run now" loop. No LLM decides what
 // runs next — the step table below does.
 //
-//   steps: harvest (job-search in-process, saved roles x countries, contract only)
+//   steps: linkedin (Apify LinkedIn Jobs actor, contract only, last 24 h; async runs started in waves and collected on later ticks)
+//       -> harvest (JSearch via job-search in-process, saved roles x countries, contract only)
 //       -> classify (engagement AI on the jobs harvested in this run)
 //       -> select  (auto-queue: contract + remote + offshoreOk != no; everything else tagged with the reason)
 //       -> done    (summary persisted; shown in Settings -> Automation)
@@ -27,10 +28,14 @@ var DEFAULT_CONFIG = {
           'Cybersecurity Analyst', 'SOC Consultant', 'Security Consultant', 'SIEM Consultant', 'Cybersecurity Contractor', 'Security Operations Consultant',
           'InfoSec Consultant', 'Cloud Security Consultant', 'Cyber Contractor'],
   countries: ['any', 'ca', 'uk', 'au', 'de', 'nl', 'ie', 'sg'],   // 'any' = the manual "Any (All Countries)" search (US index, no country name)
+  sources: ['linkedin', 'jsearch'],   // #681: harvest order — LinkedIn (Apify) first, JSearch second; untick either in Settings
+  liRoles: ['Security Engineer', 'SOC Analyst', 'Security Architect', 'Security Consultant', 'Cloud Security Engineer', 'SIEM Engineer'],   // one Apify run per role x country
+  liConcurrency: 4,               // Apify runs in flight at once
+  liTimeoutMin: 45,               // give up on runs still not finished after this long
   datePosted: 'today',            // JSearch last-24-hours window; the run itself only counts jobs first seen today
   workModes: ['remote'],          // automation scope today; hybrid / onsite can be ticked when a regional partner is live
-  caps: { harvest: 100, eligible: 50, matches: 10, contacts: 10, reveals: 30, dailyBudgetInr: 800 },
-  costInr: { aiClassify: 0.10, jsearchCall: 0.00 }   // estimates used by the cost meter; adjust from Settings
+  caps: { harvest: 100, eligible: 50, matches: 10, contacts: 10, reveals: 30, dailyBudgetInr: 800, liQueries: 24 },
+  costInr: { aiClassify: 0.10, jsearchCall: 0.00, apifyQuery: 10.00 }   // estimates used by the cost meter; adjust from Settings
 };
 var COUNTRY_NAMES = { us: 'United States', ca: 'Canada', mx: 'Mexico', uk: 'United Kingdom', gb: 'United Kingdom', de: 'Germany', fr: 'France', nl: 'Netherlands', ie: 'Ireland',
   ch: 'Switzerland', se: 'Sweden', no: 'Norway', dk: 'Denmark', fi: 'Finland', be: 'Belgium', at: 'Austria', es: 'Spain', it: 'Italy', pl: 'Poland', au: 'Australia', nz: 'New Zealand',
@@ -63,6 +68,75 @@ async function loadConfig(db) {
   delete c._id; return c;
 }
 
+// ---------- step: linkedin (#681) ----------
+// One Apify "LinkedIn Jobs" actor run per (country, role), contract only, posted in the last 24 h — exactly the manual
+// Search Web → LinkedIn path (apify.js startSearch / getResults / processAndSave), called in-process. Actor runs take 1–3 min,
+// far longer than one slice, so they are started in waves and collected on later ticks; `run.linkedin.active` is the
+// persisted list of runs in flight (resumable across invocations — F1/F9).
+var APIFY_TOKEN = process.env.APIFY_API_TOKEN;
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+async function apifyCall(body) {
+  var r = await require('./apify').handler({ httpMethod: 'POST', headers: {}, body: JSON.stringify(body) });
+  var d = {}; try { d = JSON.parse(r.body || '{}'); } catch (e) {}
+  return d;
+}
+async function stepLinkedIn(db, run, cfg, deadline) {
+  var li = run.linkedin;
+  if (!APIFY_TOKEN) { li.errors.push('APIFY_API_TOKEN not configured'); run.step = (cfg.sources || []).indexOf('jsearch') >= 0 ? 'harvest' : 'classify'; return; }
+  if (!li.units) {
+    var roles = (cfg.liRoles && cfg.liRoles.length) ? cfg.liRoles : DEFAULT_CONFIG.liRoles, countries = cfg.countries.length ? cfg.countries : DEFAULT_CONFIG.countries;
+    var units = [], seen = {};
+    countries.forEach(function (c) { var loc = (c === 'any' || c === 'us') ? 'United States' : (COUNTRY_NAMES[c] || ''); if (!loc || seen[loc]) return; seen[loc] = 1;
+      roles.forEach(function (r) { units.push({ c: c, loc: loc, r: r }); }); });
+    li.units = units.slice(0, cfg.caps.liQueries || 24); li.cursor = 0; li.active = []; li.startedAt = new Date();
+  }
+  var conc = Math.max(1, Math.min(8, cfg.liConcurrency || 4)), timeoutMs = (cfg.liTimeoutMin || 45) * 60000;
+  var started = new Date(li.startedAt).getTime();
+  while (true) {
+    // 1. collect finished runs
+    for (var i = li.active.length - 1; i >= 0; i--) {
+      var a = li.active[i], cd = {};
+      try { cd = await apifyCall({ action: 'checkRun', runId: a.runId }); } catch (e) { cd = { status: 'RUNNING' }; }
+      if (cd.status === 'RUNNING' || cd.status === 'READY' || !cd.status) continue;
+      li.active.splice(i, 1);
+      if (cd.status !== 'SUCCEEDED') { li.errors.push(a.c + '/' + a.r + ': ' + cd.status); li.log.push({ c: a.c, r: a.r, seen: 0, added: 0, err: cd.status }); continue; }
+      try {
+        var gr = await apifyCall({ action: 'getResults', datasetId: cd.datasetId || a.datasetId });
+        var jobs = gr.jobs || [], added = 0;
+        for (var b = 0; b < jobs.length; b += 15) {
+          var ps = await apifyCall({ action: 'processAndSave', jobs: jobs.slice(b, b + 15), autoRunId: run._id, userEmail: 'automation@secvisiontech.com' });
+          added += (ps.inserted || 0);
+        }
+        li.seen += (gr.rawTotal || jobs.length); li.newJobs += added; li.done++;
+        li.log.push({ c: a.c, r: a.r, seen: gr.rawTotal || jobs.length, cyber: jobs.length, added: added, err: gr.error || '' });
+      } catch (e) { li.errors.push(a.c + '/' + a.r + ': ' + String(e && e.message || e)); }
+      li.log = li.log.slice(-64);
+    }
+    // 2. start the next wave (unless capped or timed out)
+    var capped = li.newJobs >= cfg.caps.harvest, timedOut = Date.now() - started > timeoutMs;
+    while (!capped && !timedOut && li.active.length < conc && li.cursor < li.units.length && Date.now() < deadline - 4000) {
+      var u = li.units[li.cursor++];
+      try {
+        var sd = await apifyCall({ action: 'startSearch', title: u.r, location: u.loc, rows: 25, datePosted: 'day', contractType: 'C' });
+        if (sd.error) { li.errors.push(u.c + '/' + u.r + ': ' + sd.error); li.log.push({ c: u.c, r: u.r, seen: 0, added: 0, err: sd.error }); if (/rented|credit|quota|payment/i.test(sd.error)) { li.cursor = li.units.length; } continue; }
+        li.active.push({ runId: sd.runId, datasetId: sd.datasetId, c: u.c, r: u.r, at: new Date() });
+        li.queries++; run.costInr += (cfg.costInr.apifyQuery || 0);
+      } catch (e) { li.errors.push(u.c + '/' + u.r + ': ' + String(e && e.message || e)); }
+    }
+    if (capped) li.cappedAt = li.cursor;
+    await persist(db, run);
+    // 3. finished?  nothing in flight and nothing left to start (or capped / timed out)
+    if (!li.active.length && (li.cursor >= li.units.length || capped || timedOut)) break;
+    if (timedOut && li.active.length) {   // abort stragglers so the run can move on
+      for (var k = 0; k < li.active.length; k++) { try { await fetch('https://api.apify.com/v2/actor-runs/' + li.active[k].runId + '/abort?token=' + APIFY_TOKEN, { method: 'POST' }); } catch (e) {} li.errors.push(li.active[k].c + '/' + li.active[k].r + ': timed out'); }
+      li.active = []; li.timedOut = true; break;
+    }
+    if (Date.now() > deadline - 7000) return;   // slice over — resume on the next tick
+    await sleep(5000);
+  }
+  run.step = (cfg.sources || DEFAULT_CONFIG.sources).indexOf('jsearch') >= 0 ? 'harvest' : 'classify';
+}
+
 // ---------- step: harvest ----------
 // Sub-steps are (country, role-chunk) pairs; the cursor is persisted after every call so a run resumes exactly where it stopped.
 async function stepHarvest(db, run, cfg, deadline) {
@@ -73,7 +147,7 @@ async function stepHarvest(db, run, cfg, deadline) {
   if (!(run.startedAt instanceof Date)) run.startedAt = new Date(run.startedAt);
   var h = run.harvest;
   while (h.cursor < units.length && Date.now() < deadline - 11000) {   // a unit (4 roles x 1 page) takes up to ~11 s
-    if (h.newJobs >= cfg.caps.harvest) { h.cappedAt = h.cursor; break; }
+    if (h.newJobs + ((run.linkedin || {}).newJobs || 0) >= cfg.caps.harvest) { h.cappedAt = h.cursor; break; }   // #681: cap is shared with the LinkedIn step
     var u = units[h.cursor];
     var ev = { httpMethod: 'POST', headers: {}, body: JSON.stringify({ roles: u.roles, pages: 1, datePosted: cfg.datePosted || '3days', employmentTypes: 'CONTRACTOR',
       country: u.country === 'any' ? 'us' : u.country, countryName: (u.country === 'us' || u.country === 'any') ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true }) };
@@ -152,8 +226,10 @@ async function stepSelect(db, run, cfg) {
   run.step = 'done'; run.finishedAt = new Date(); run.status = 'done';
 }
 
-function newRun(date, by) {
-  return { _id: 'run_' + date + '_' + Date.now().toString(36), date: date, startedAt: new Date(), finishedAt: null, status: 'running', step: 'harvest', by: by || 'schedule', costInr: 0, ticks: 0,
+function newRun(date, by, cfg) {
+  var src = (cfg && cfg.sources) || DEFAULT_CONFIG.sources;
+  return { _id: 'run_' + date + '_' + Date.now().toString(36), date: date, startedAt: new Date(), finishedAt: null, status: 'running', step: src.indexOf('linkedin') >= 0 ? 'linkedin' : 'harvest', by: by || 'schedule', costInr: 0, ticks: 0, sources: src,
+    linkedin: { units: null, cursor: 0, active: [], queries: 0, done: 0, seen: 0, newJobs: 0, errors: [], log: [], cappedAt: null },
     harvest: { cursor: 0, units: 0, calls: 0, seen: 0, newJobs: 0, errors: [], cappedAt: null },
     classify: { done: 0, failed: 0, errors: [], budgetStop: false },
     select: { total: 0, queued: 0, skipped: 0, reasons: {} } };
@@ -165,7 +241,8 @@ async function tick(db, run, cfg) {
   var deadline = Date.now() + STEP_BUDGET_MS;
   run.ticks++;
   try {
-    if (run.step === 'harvest') await stepHarvest(db, run, cfg, deadline);
+    if (run.step === 'linkedin') await stepLinkedIn(db, run, cfg, deadline);
+    if (run.step === 'harvest' && Date.now() < deadline - 12000) await stepHarvest(db, run, cfg, deadline);
     if (run.step === 'classify' && Date.now() < deadline) await stepClassify(db, run, cfg, deadline);
     if (run.step === 'select') await stepSelect(db, run, cfg);
   } catch (e) { run.lastError = String(e && e.message || e); }
@@ -185,7 +262,7 @@ async function scheduledTick() {
   if (istHour() < (cfg.runHourIST || 6)) return { skipped: 'before run hour' };
   var run = await runs.findOne({ date: today, by: 'schedule' });
   if (run && run.status === 'done') return { skipped: 'today done' };
-  if (!run) { run = newRun(today, 'schedule'); await persist(db, run); }
+  if (!run) { run = newRun(today, 'schedule', cfg); await persist(db, run); }
   run = await tick(db, run, cfg);
   return { ok: true, step: run.step, status: run.status };
 }
@@ -217,6 +294,10 @@ exports.handler = async function (event) {
     if (Array.isArray(inc.countries)) set.countries = inc.countries.map(function (s) { return String(s).toLowerCase().trim(); }).filter(function (s) { return s === 'any' || COUNTRY_NAMES[s]; }).slice(0, 16);
     if (Array.isArray(inc.workModes)) set.workModes = inc.workModes.filter(function (m) { return ['remote', 'hybrid', 'onsite'].indexOf(m) >= 0; });
     if (inc.datePosted && ['today', '3days', 'week'].indexOf(inc.datePosted) >= 0) set.datePosted = inc.datePosted;
+    if (Array.isArray(inc.sources)) set.sources = inc.sources.filter(function (m) { return ['linkedin', 'jsearch'].indexOf(m) >= 0; });   // #681
+    if (Array.isArray(inc.liRoles)) set.liRoles = inc.liRoles.map(String).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 16);
+    if (inc.liConcurrency != null) set.liConcurrency = Math.min(8, Math.max(1, parseInt(inc.liConcurrency) || 4));
+    if (inc.liTimeoutMin != null) set.liTimeoutMin = Math.min(120, Math.max(10, parseInt(inc.liTimeoutMin) || 45));
     if (inc.runHourIST != null) set.runHourIST = Math.min(23, Math.max(0, parseInt(inc.runHourIST) || 6));
     if (inc.caps) { set.caps = {}; Object.keys(DEFAULT_CONFIG.caps).forEach(function (k) { var v = parseFloat(inc.caps[k]); set.caps[k] = isNaN(v) ? DEFAULT_CONFIG.caps[k] : Math.max(0, v); }); }
     if (inc.costInr) { set.costInr = {}; Object.keys(DEFAULT_CONFIG.costInr).forEach(function (k) { var v = parseFloat(inc.costInr[k]); set.costInr[k] = isNaN(v) ? DEFAULT_CONFIG.costInr[k] : Math.max(0, v); }); }
@@ -228,7 +309,7 @@ exports.handler = async function (event) {
     if (!isAdmin) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Admin or Super Admin required' }) };
     var active = await runs.findOne({ status: 'running' });
     if (active && body.resume !== false) { active = await tick(db, active, cfg); return { statusCode: 200, headers: hdrs, body: JSON.stringify({ run: active }) }; }
-    var r2 = newRun(istDate(), user.email); await persist(db, r2); r2 = await tick(db, r2, cfg);
+    var r2 = newRun(istDate(), user.email, cfg); await persist(db, r2); r2 = await tick(db, r2, cfg);
     return { statusCode: 200, headers: hdrs, body: JSON.stringify({ run: r2 }) };
   }
   if (action === 'step') {   // UI loop: advance a running run by one slice
@@ -241,7 +322,11 @@ exports.handler = async function (event) {
   }
   if (action === 'stopRun') {
     if (!isAdmin) return { statusCode: 403, headers: hdrs, body: JSON.stringify({ error: 'Admin or Super Admin required' }) };
-    await runs.updateOne({ _id: String(body.runId || ''), status: 'running' }, { $set: { status: 'stopped', finishedAt: new Date(), stoppedBy: user.email } });
+    var rs = await runs.findOne({ _id: String(body.runId || ''), status: 'running' });
+    if (rs && rs.linkedin && rs.linkedin.active && rs.linkedin.active.length && APIFY_TOKEN) {   // #681: abort Apify runs still in flight
+      for (var ai = 0; ai < rs.linkedin.active.length; ai++) { try { await fetch('https://api.apify.com/v2/actor-runs/' + rs.linkedin.active[ai].runId + '/abort?token=' + APIFY_TOKEN, { method: 'POST' }); } catch (e) {} }
+    }
+    await runs.updateOne({ _id: String(body.runId || ''), status: 'running' }, { $set: { status: 'stopped', finishedAt: new Date(), stoppedBy: user.email, 'linkedin.active': [] } });
     return { statusCode: 200, headers: hdrs, body: JSON.stringify({ ok: true }) };
   }
   return { statusCode: 400, headers: hdrs, body: JSON.stringify({ error: 'Unknown action: ' + action }) };

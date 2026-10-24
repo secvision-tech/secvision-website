@@ -4103,7 +4103,10 @@ async function loadAutomation(){
     var wm=c.workModes||['remote'];document.getElementById('auWmRemote').checked=wm.indexOf('remote')>=0;document.getElementById('auWmHybrid').checked=wm.indexOf('hybrid')>=0;document.getElementById('auWmOnsite').checked=wm.indexOf('onsite')>=0;
     var cp=c.caps||{};document.getElementById('auCapHarvest').value=cp.harvest;document.getElementById('auCapEligible').value=cp.eligible;document.getElementById('auCapMatches').value=cp.matches;document.getElementById('auCapContacts').value=cp.contacts;document.getElementById('auCapReveals').value=cp.reveals;document.getElementById('auCapBudget').value=cp.dailyBudgetInr;
     document.getElementById('auCostAi').value=(c.costInr||{}).aiClassify;
-    ['auEnabled','auHour','auRoles','auCountries','auDate','auWmRemote','auWmHybrid','auWmOnsite','auCapHarvest','auCapEligible','auCapMatches','auCapContacts','auCapReveals','auCapBudget','auCostAi'].forEach(function(id){document.getElementById(id).disabled=!d.canEdit});
+    var src=c.sources||['linkedin','jsearch'];document.getElementById('auSrcLi').checked=src.indexOf('linkedin')>=0;document.getElementById('auSrcJs').checked=src.indexOf('jsearch')>=0;   // #681
+    document.getElementById('auLiRoles').value=(c.liRoles||[]).join('\n');document.getElementById('auLiConc').value=c.liConcurrency||4;document.getElementById('auLiTimeout').value=c.liTimeoutMin||45;
+    document.getElementById('auCapLi').value=cp.liQueries!=null?cp.liQueries:24;document.getElementById('auCostLi').value=(c.costInr||{}).apifyQuery!=null?(c.costInr||{}).apifyQuery:10;
+    ['auEnabled','auHour','auRoles','auCountries','auDate','auWmRemote','auWmHybrid','auWmOnsite','auCapHarvest','auCapEligible','auCapMatches','auCapContacts','auCapReveals','auCapBudget','auCostAi','auSrcLi','auSrcJs','auLiRoles','auLiConc','auLiTimeout','auCapLi','auCostLi'].forEach(function(id){document.getElementById(id).disabled=!d.canEdit});
     document.getElementById('auSaveBtn').style.display=d.canEdit?'':'none';document.getElementById('auRunBtn').style.display=d.canRun?'':'none';
     renderAutoRuns(d.runs||[]);
     var active=(d.runs||[]).find(function(x){return x.status==='running'});
@@ -4116,9 +4119,12 @@ var _auRunsData=[],_auSortCol='startedAt',_auSortDir=-1,_auMouseX=0,_auSelected=
 var AU_COLS=[['date','Date',10,'l'],['by','By',9,'l'],['status','Status',11,'l'],['seen','Seen',6,'r'],['newJobs','New',6,'r'],['done','Classified',8,'r'],['queued','Queued',7,'r'],['skipped','Skipped',7,'r'],['costInr','₹',6,'r'],['notes','Notes',26,'l'],['jobs','',8,'l']];
 function auRunVal(r,col){var h=r.harvest||{},c=r.classify||{},s=r.select||{};
   switch(col){case 'startedAt':return r.startedAt?new Date(r.startedAt).getTime():0;case 'date':return r.date||'';case 'by':return String(r.by||'');case 'status':return String(r.status||'');
-    case 'seen':return h.seen||0;case 'newJobs':return h.newJobs||0;case 'done':return c.done||0;case 'queued':return s.queued||0;case 'skipped':return s.skipped||0;case 'costInr':return r.costInr||0;case 'notes':return auRunNotes(r).join(' ');default:return ''}}
-function auRunNotes(r){var h=r.harvest||{},c=r.classify||{},s=r.select||{},notes=[];if(h.cappedAt!=null)notes.push('harvest cap hit');if(c.budgetStop)notes.push('budget stop');if(c.failed)notes.push(c.failed+' classify failed');
-  Object.keys(s.reasons||{}).forEach(function(k){notes.push(s.reasons[k]+'× '+k)});if(r.lastError)notes.push('error: '+r.lastError);(h.errors||[]).slice(0,2).forEach(function(e){notes.push(e)});return notes}
+    case 'seen':return (h.seen||0)+((r.linkedin||{}).seen||0);case 'newJobs':return (h.newJobs||0)+((r.linkedin||{}).newJobs||0);case 'done':return c.done||0;case 'queued':return s.queued||0;case 'skipped':return s.skipped||0;case 'costInr':return r.costInr||0;case 'notes':return auRunNotes(r).join(' ');default:return ''}}
+function auRunNotes(r){var h=r.harvest||{},c=r.classify||{},s=r.select||{},li=r.linkedin||{},notes=[];
+  if(li.queries)notes.push('LinkedIn '+li.queries+' q · '+(li.newJobs||0)+' new'+(li.active&&li.active.length?' · '+li.active.length+' running':''));if(li.cappedAt!=null)notes.push('LinkedIn cap hit');if(li.timedOut)notes.push('LinkedIn timed out');
+  if(h.calls)notes.push('JSearch '+(h.newJobs||0)+' new');if(h.cappedAt!=null)notes.push('harvest cap hit');if(c.budgetStop)notes.push('budget stop');if(c.failed)notes.push(c.failed+' classify failed');
+  Object.keys(s.reasons||{}).forEach(function(k){notes.push(s.reasons[k]+'× '+k)});if(r.lastError)notes.push('error: '+r.lastError);(li.errors||[]).slice(0,2).forEach(function(e){notes.push('LI '+e)});(h.errors||[]).slice(0,2).forEach(function(e){notes.push(e)});
+  (li.log||[]).forEach(function(l){notes.push('LI '+l.c+'/'+l.r+': '+(l.seen||0)+' seen, '+(l.added||0)+' new'+(l.err?' ('+l.err+')':''))});(h.log||[]).forEach(function(l){notes.push('JS '+l.c+'/'+l.r+': '+(l.seen||0)+' seen, '+(l.added||0)+' new'+(l.err?' ('+l.err+')':''))});return notes}
 function auHeaderDown(e){_auMouseX=e.clientX}
 function auHeaderClick(col,e){if(Math.abs(e.clientX-_auMouseX)>5)return;if(_auSortCol===col)_auSortDir*=-1;else{_auSortCol=col;_auSortDir=(col==='date'||col==='startedAt'||col==='costInr'||col==='seen'||col==='newJobs'||col==='done'||col==='queued'||col==='skipped')?-1:1}renderAutoRuns(_auRunsData)}
 // #679: open Search DB filtered to every job this run queued or skipped (time period widened to All)
@@ -4143,7 +4149,7 @@ function renderAutoRuns(runs){
     var h=r.harvest||{},c=r.classify||{},s=r.select||{};
     var notes=auRunNotes(r);
     var sc=r.status==='done'?'#047857':(r.status==='running'?'#B45309':'#6B7280');
-    return '<tr data-run="'+esc(r._id)+'" onclick="auRowClick(\''+esc(r._id)+'\',this)" style="border-top:1px solid var(--g1);cursor:pointer;'+(_auSelected===r._id?'background:#F5F3FF':'')+'"><td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis">'+esc(r.date||'')+'</td><td style="padding:.3rem .4rem">'+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+'</td><td style="padding:.3rem .4rem;color:'+sc+';font-weight:600">'+esc(r.status||'')+(r.status==='running'?' · '+esc(r.step||''):'')+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.seen||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.newJobs||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(c.done||0)+'</td><td style="padding:.3rem .4rem;text-align:right;font-weight:700;color:#047857">'+(s.queued||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(s.skipped||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(Math.round((r.costInr||0)*100)/100)+'</td><td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(notes.join(' | '))+'">'+esc(notes.join(' · '))+'</td><td style="padding:.3rem .4rem"><a href="#" onclick="event.stopPropagation();auViewRunJobs(\''+esc(r._id)+'\');return false" style="font-size:.58rem;text-decoration:none;color:var(--ac);font-weight:600">View jobs ›</a></td></tr>';
+    return '<tr data-run="'+esc(r._id)+'" onclick="auRowClick(\''+esc(r._id)+'\',this)" style="border-top:1px solid var(--g1);cursor:pointer;'+(_auSelected===r._id?'background:#F5F3FF':'')+'"><td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis">'+esc(r.date||'')+'</td><td style="padding:.3rem .4rem">'+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+'</td><td style="padding:.3rem .4rem;color:'+sc+';font-weight:600">'+esc(r.status||'')+(r.status==='running'?' · '+esc(r.step||''):'')+'</td><td style="padding:.3rem .4rem;text-align:right">'+auRunVal(r,'seen')+'</td><td style="padding:.3rem .4rem;text-align:right">'+auRunVal(r,'newJobs')+'</td><td style="padding:.3rem .4rem;text-align:right">'+(c.done||0)+'</td><td style="padding:.3rem .4rem;text-align:right;font-weight:700;color:#047857">'+(s.queued||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(s.skipped||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(Math.round((r.costInr||0)*100)/100)+'</td><td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(notes.join(' | '))+'">'+esc(notes.join(' · '))+'</td><td style="padding:.3rem .4rem"><a href="#" onclick="event.stopPropagation();auViewRunJobs(\''+esc(r._id)+'\');return false" style="font-size:.58rem;text-decoration:none;color:var(--ac);font-weight:600">View jobs ›</a></td></tr>';
   }).join('');
 }
 async function saveAutomation(){
@@ -4153,8 +4159,10 @@ async function saveAutomation(){
     roles:document.getElementById('auRoles').value.split(/\n+/).map(function(x){return x.trim()}).filter(Boolean),
     countries:document.getElementById('auCountries').value.split(/[,\s]+/).map(function(x){return x.trim().toLowerCase()}).filter(Boolean),
     datePosted:document.getElementById('auDate').value,workModes:wm,
-    caps:{harvest:document.getElementById('auCapHarvest').value,eligible:document.getElementById('auCapEligible').value,matches:document.getElementById('auCapMatches').value,contacts:document.getElementById('auCapContacts').value,reveals:document.getElementById('auCapReveals').value,dailyBudgetInr:document.getElementById('auCapBudget').value},
-    costInr:{aiClassify:document.getElementById('auCostAi').value}};
+    sources:[].concat(document.getElementById('auSrcLi').checked?['linkedin']:[],document.getElementById('auSrcJs').checked?['jsearch']:[]),   // #681
+    liRoles:document.getElementById('auLiRoles').value.split(/\n+/).map(function(x){return x.trim()}).filter(Boolean),liConcurrency:document.getElementById('auLiConc').value,liTimeoutMin:document.getElementById('auLiTimeout').value,
+    caps:{harvest:document.getElementById('auCapHarvest').value,eligible:document.getElementById('auCapEligible').value,matches:document.getElementById('auCapMatches').value,contacts:document.getElementById('auCapContacts').value,reveals:document.getElementById('auCapReveals').value,dailyBudgetInr:document.getElementById('auCapBudget').value,liQueries:document.getElementById('auCapLi').value},
+    costInr:{aiClassify:document.getElementById('auCostAi').value,apifyQuery:document.getElementById('auCostLi').value}};
   st.textContent='Saving…';
   try{var r=await authFetch('/.netlify/functions/auto-pipeline',{method:'POST',body:JSON.stringify({action:'saveConfig',config:cfg})});var d=await r.json();
     if(d.error){st.textContent='⚠️ '+d.error;return}st.textContent='✅ Saved';setTimeout(loadAutomation,800);
@@ -4169,7 +4177,7 @@ async function runAutomationNow(){
     // #678: the UI loop drives the same bounded slices the scheduler would — each call <= ~22 s
     while(run&&run.status==='running'){
       var h=run.harvest||{},c=run.classify||{};
-      st.textContent='Running — '+run.step+(run.step==='harvest'?' ('+(h.cursor||0)+'/'+(h.units||'?')+' searches, '+(h.newJobs||0)+' new jobs)':(run.step==='classify'?' ('+(c.done||0)+' classified)':''))+' · ₹'+(Math.round((run.costInr||0)*100)/100);
+      var li=run.linkedin||{};st.textContent='Running — '+run.step+(run.step==='linkedin'?' ('+(li.cursor||0)+'/'+((li.units||[]).length||'?')+' LinkedIn queries started, '+((li.active||[]).length)+' running, '+(li.newJobs||0)+' new jobs)':'')+(run.step==='harvest'?' ('+(h.cursor||0)+'/'+(h.units||'?')+' searches, '+(h.newJobs||0)+' new jobs)':(run.step==='classify'?' ('+(c.done||0)+' classified)':''))+' · ₹'+(Math.round((run.costInr||0)*100)/100);
       var sr=await authFetch('/.netlify/functions/auto-pipeline',{method:'POST',body:JSON.stringify({action:'step',runId:run._id})});var sd=await sr.json();
       if(sd.error){st.textContent='⚠️ '+sd.error;break}run=sd.run;
     }
@@ -7842,14 +7850,20 @@ function downloadFile(content,name,type){
   <div id="setSection-auto" style="display:none">
     <div style="display:flex;gap:.2rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap">
       <span style="background:#7C3AED;color:#fff;font-size:.5rem;padding:.1rem .3rem;border-radius:3px;font-weight:700">SUPER ADMIN EDITS</span>
-      <span style="font-size:.6rem;color:var(--g4)">Daily run at the IST hour below: harvest → classify → auto-queue (contract + remote + offshore-possible). Nothing is emailed; queued jobs appear under Jobs → Automation: Auto-queued.</span>
+      <span style="font-size:.6rem;color:var(--g4)">Daily run at the IST hour below: LinkedIn harvest → JSearch harvest → classify → auto-queue (contract + remote + offshore-possible). Nothing is emailed; queued jobs appear under Jobs → Automation: Auto-queued.</span>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin-bottom:.6rem">
       <div><label class="set-label">Automation</label><select id="auEnabled" class="set-input"><option value="true">Enabled</option><option value="false">Disabled (kill switch)</option></select></div>
       <div><label class="set-label">Run hour (IST, 0–23)</label><input id="auHour" type="number" min="0" max="23" class="set-input"></div>
       <div style="grid-column:1/-1"><label class="set-label">Roles (one per line)</label><textarea id="auRoles" class="set-input" rows="4" style="font-size:.62rem"></textarea></div>
       <div><label class="set-label">Countries (codes, comma-separated — <b>any</b> = the manual “Any (All Countries)” search; plus us, ca, uk, au, de, nl, ie, sg, fr, ch, se, ae, nz…; 4 JSearch calls per country per run)</label><input id="auCountries" class="set-input"></div>
-      <div><label class="set-label">Posting window</label><select id="auDate" class="set-input"><option value="today">Today (last 24 h)</option><option value="3days">Last 3 days</option><option value="week">Last week</option></select></div>
+      <div><label class="set-label">Posting window (JSearch; LinkedIn always last 24 h)</label><select id="auDate" class="set-input"><option value="today">Today (last 24 h)</option><option value="3days">Last 3 days</option><option value="week">Last week</option></select></div>
+      <div style="grid-column:1/-1"><label class="set-label">Harvest sources (in this order)</label>
+        <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auSrcLi"> LinkedIn (Apify — contract, last 24 h, one run per role × country)</label>
+        <label style="font-size:.62rem"><input type="checkbox" id="auSrcJs"> JSearch (aggregator index)</label></div>
+      <div style="grid-column:1/-1"><label class="set-label">LinkedIn roles (one per line — each is a separate Apify run per country; keep this list short)</label><textarea id="auLiRoles" class="set-input" rows="3" style="font-size:.62rem"></textarea></div>
+      <div><label class="set-label">LinkedIn runs in flight at once (1–8)</label><input id="auLiConc" type="number" min="1" max="8" class="set-input"></div>
+      <div><label class="set-label">LinkedIn step timeout (minutes)</label><input id="auLiTimeout" type="number" min="10" max="120" class="set-input"></div>
       <div style="grid-column:1/-1"><label class="set-label">Automation scope (work modes)</label>
         <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auWmRemote"> Remote</label>
         <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auWmHybrid"> Hybrid</label>
@@ -7864,7 +7878,9 @@ function downloadFile(content,name,type){
       <div><label class="set-label">Contacts per company (phase 2)</label><input id="auCapContacts" type="number" class="set-input"></div>
       <div><label class="set-label">Email reveals / day (phase 2)</label><input id="auCapReveals" type="number" class="set-input"></div>
       <div><label class="set-label">Daily budget (₹)</label><input id="auCapBudget" type="number" class="set-input"></div>
+      <div><label class="set-label">LinkedIn queries / day (Apify runs)</label><input id="auCapLi" type="number" class="set-input"></div>
       <div><label class="set-label">Cost estimate: AI classify ₹/job</label><input id="auCostAi" type="number" step="0.01" class="set-input"></div>
+      <div><label class="set-label">Cost estimate: Apify ₹/LinkedIn query</label><input id="auCostLi" type="number" step="0.5" class="set-input"></div>
     </div>
     <div style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap;margin-bottom:.6rem">
       <button id="auSaveBtn" onclick="saveAutomation()" style="padding:.35rem .8rem;background:var(--ac);color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600">💾 Save</button>

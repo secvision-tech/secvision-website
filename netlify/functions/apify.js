@@ -1117,12 +1117,12 @@ exports.handler = async function(event) {
                 detectedCountry: jobDoc.detectedCountry, dateScanned: jobDoc.dateScanned, fpKey: fpKey,
                 engagementModel: (function(){var e=require('./engagement').classifyEngagement(jobDoc);jobDoc._eng=e;return e.model})(), offshoreOk: jobDoc._eng.offshoreOk, engagementEvidence: jobDoc._eng.evidence   // #592
               },
-              $setOnInsert: {
+              $setOnInsert: Object.assign({
                 status: 'new', companyType: '', notes: '',
                 jobType: jobDoc.jobType, remote: jobDoc.remote,
                 eligibility: jobDoc.eligibility, linkedinJobId: jobDoc.linkedinJobId,
                 jobId: jobDoc.jobId
-              }
+              }, body.autoRunId ? { autoRunId: String(body.autoRunId), searchedBy: body.userEmail || 'automation@secvisiontech.com' } : {})   // #681: rows inserted by a scheduled run carry the run id
             },
             upsert: true
           }
@@ -1131,10 +1131,10 @@ exports.handler = async function(event) {
         processed.push(jobDoc);
       }
 
-      var savedCount = 0;
+      var savedCount = 0, insertedCount = 0;
       if (ops.length > 0) {
         var result = await col.bulkWrite(ops, { ordered: false });
-        savedCount = (result.upsertedCount || 0) + (result.modifiedCount || 0);
+        savedCount = (result.upsertedCount || 0) + (result.modifiedCount || 0); insertedCount = result.upsertedCount || 0;
       }
 
       // Save poster as contact if available
@@ -1157,7 +1157,7 @@ exports.handler = async function(event) {
       }
 
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({
-        saved: savedCount, total: processed.length, newJobs: ops.length
+        saved: savedCount, inserted: insertedCount, total: processed.length, newJobs: ops.length
       })};
     }
 
