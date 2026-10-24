@@ -70,6 +70,7 @@ async function stepHarvest(db, run, cfg, deadline) {
   var CH = 4, roles = cfg.roles.length ? cfg.roles : DEFAULT_CONFIG.roles, countries = cfg.countries.length ? cfg.countries : DEFAULT_CONFIG.countries;
   var units = [];
   countries.forEach(function (c) { for (var i = 0; i < roles.length; i += CH) units.push({ country: c, roles: roles.slice(i, i + CH) }); });
+  if (!(run.startedAt instanceof Date)) run.startedAt = new Date(run.startedAt);
   var h = run.harvest;
   while (h.cursor < units.length && Date.now() < deadline - 11000) {   // a unit (4 roles x 1 page) takes up to ~11 s
     if (h.newJobs >= cfg.caps.harvest) { h.cappedAt = h.cursor; break; }
@@ -82,6 +83,8 @@ async function stepHarvest(db, run, cfg, deadline) {
       var d = {}; try { d = JSON.parse(r.body || '{}'); } catch (e) {}
       var after = await db.collection('jobs').countDocuments({ createdAt: { $gte: run.startedAt } });
       h.calls += (d.apiCalls || 0); h.seen += (d.totalResults || 0); h.newJobs = after;
+      // #679: per-search diagnostics (country, first role of the chunk, results returned, savedToDb, new rows added)
+      h.log = (h.log || []).concat([{ c: u.country, r: u.roles[0], seen: d.totalResults || 0, saved: d.savedToDb || 0, added: after - before, err: d.error || '' }]).slice(-64);
       if (d.error) h.errors.push(u.country + '/' + u.roles[0] + ': ' + d.error);
     } catch (e) { h.errors.push(u.country + '/' + u.roles[0] + ': ' + String(e && e.message || e)); }
     h.cursor++;
@@ -94,6 +97,7 @@ async function stepHarvest(db, run, cfg, deadline) {
 async function stepClassify(db, run, cfg, deadline) {
   var eng = require('./engagement');
   var col = db.collection('jobs');
+  if (!(run.startedAt instanceof Date)) run.startedAt = new Date(run.startedAt);
   var c = run.classify;
   if (!process.env.ANTHROPIC_API_KEY) { c.errors.push('AI key not configured'); run.step = 'select'; return; }
   while (Date.now() < deadline - 13000) {   // a batch of 8 classifications takes up to ~12 s
@@ -123,6 +127,7 @@ async function stepClassify(db, run, cfg, deadline) {
 // Same rules the user applies by hand today: contract + remote + not offshore-barred. Nothing else is changed on the job.
 async function stepSelect(db, run, cfg) {
   var col = db.collection('jobs');
+  if (!(run.startedAt instanceof Date)) run.startedAt = new Date(run.startedAt);
   var jobs = await col.find({ createdAt: { $gte: run.startedAt } }).project({ jobType: 1, contractDuration: 1, workMode: 1, remote: 1, offshoreOk: 1, engagementAI: 1, engagementModel: 1, detectedCountry: 1, title: 1, company: 1 }).toArray();
   var modes = (cfg.workModes && cfg.workModes.length) ? cfg.workModes : ['remote'];
   var s = run.select, ops = [];

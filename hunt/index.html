@@ -983,7 +983,8 @@ async function searchDb(){
     var offshore=(document.getElementById('dbOffshore')||{}).value||'any';   // #628
   try{localStorage.setItem('huntDbOffshore',offshore)}catch(e){}   // #666: remember the last choice
     var autoF=(document.getElementById('dbAuto')||{}).value||'any';   // #678
-    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly,offshore:offshore,auto:autoF};
+    lastSearchParams={action:'search',query:q,status:status,companyType:cType,jobType:jType,detectedCountry:country,dateFrom:dateFrom,dateTo:dateTo,c2cOnly:c2cOnly,offshore:offshore,auto:window._auViewRun?'run':autoF,runId:window._auViewRun||''};   // #679: run filter from the Automation log
+    window._auViewRun=null;
     loadedBlocks=1;
     var r=await authFetch('/.netlify/functions/job-db',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(Object.assign({},lastSearchParams,{limit:BLOCK_SIZE,page:1}))});
@@ -4112,7 +4113,7 @@ async function loadAutomation(){
 }
 // #678: run log — resizable columns (attachColResizers), sortable headers (sort ignored after a resize drag), toggle-select rows
 var _auRunsData=[],_auSortCol='startedAt',_auSortDir=-1,_auMouseX=0,_auSelected=null;
-var AU_COLS=[['date','Date',10,'l'],['by','By',9,'l'],['status','Status',11,'l'],['seen','Seen',6,'r'],['newJobs','New',6,'r'],['done','Classified',8,'r'],['queued','Queued',7,'r'],['skipped','Skipped',7,'r'],['costInr','₹',6,'r'],['notes','Notes',30,'l']];
+var AU_COLS=[['date','Date',10,'l'],['by','By',9,'l'],['status','Status',11,'l'],['seen','Seen',6,'r'],['newJobs','New',6,'r'],['done','Classified',8,'r'],['queued','Queued',7,'r'],['skipped','Skipped',7,'r'],['costInr','₹',6,'r'],['notes','Notes',26,'l'],['jobs','',8,'l']];
 function auRunVal(r,col){var h=r.harvest||{},c=r.classify||{},s=r.select||{};
   switch(col){case 'startedAt':return r.startedAt?new Date(r.startedAt).getTime():0;case 'date':return r.date||'';case 'by':return String(r.by||'');case 'status':return String(r.status||'');
     case 'seen':return h.seen||0;case 'newJobs':return h.newJobs||0;case 'done':return c.done||0;case 'queued':return s.queued||0;case 'skipped':return s.skipped||0;case 'costInr':return r.costInr||0;case 'notes':return auRunNotes(r).join(' ');default:return ''}}
@@ -4120,6 +4121,15 @@ function auRunNotes(r){var h=r.harvest||{},c=r.classify||{},s=r.select||{},notes
   Object.keys(s.reasons||{}).forEach(function(k){notes.push(s.reasons[k]+'× '+k)});if(r.lastError)notes.push('error: '+r.lastError);(h.errors||[]).slice(0,2).forEach(function(e){notes.push(e)});return notes}
 function auHeaderDown(e){_auMouseX=e.clientX}
 function auHeaderClick(col,e){if(Math.abs(e.clientX-_auMouseX)>5)return;if(_auSortCol===col)_auSortDir*=-1;else{_auSortCol=col;_auSortDir=(col==='date'||col==='startedAt'||col==='costInr'||col==='seen'||col==='newJobs'||col==='done'||col==='queued'||col==='skipped')?-1:1}renderAutoRuns(_auRunsData)}
+// #679: open Search DB filtered to every job this run queued or skipped (time period widened to All)
+function auViewRunJobs(runId){
+  window._auViewRun=runId;
+  try{closeSettingsPopup()}catch(e){}
+  try{var tp=document.getElementById('dbPeriod');if(tp){tp.value='all';document.getElementById('dbCustomDates').style.display='none'}}catch(e){}
+  try{var au=document.getElementById('dbAuto');if(au)au.value='any'}catch(e){}
+  try{setMode('db')}catch(e){}
+  try{searchDb()}catch(e){}
+}
 function auRowClick(id,tr){_auSelected=(_auSelected===id)?null:id;Array.prototype.forEach.call(document.querySelectorAll('#auRuns tr[data-run]'),function(x){x.style.background=x.getAttribute('data-run')===_auSelected?'#F5F3FF':''})}
 function renderAutoRuns(runs){
   _auRunsData=runs||[];
@@ -4133,7 +4143,7 @@ function renderAutoRuns(runs){
     var h=r.harvest||{},c=r.classify||{},s=r.select||{};
     var notes=auRunNotes(r);
     var sc=r.status==='done'?'#047857':(r.status==='running'?'#B45309':'#6B7280');
-    return '<tr data-run="'+esc(r._id)+'" onclick="auRowClick(\''+esc(r._id)+'\',this)" style="border-top:1px solid var(--g1);cursor:pointer;'+(_auSelected===r._id?'background:#F5F3FF':'')+'"><td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis">'+esc(r.date||'')+'</td><td style="padding:.3rem .4rem">'+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+'</td><td style="padding:.3rem .4rem;color:'+sc+';font-weight:600">'+esc(r.status||'')+(r.status==='running'?' · '+esc(r.step||''):'')+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.seen||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.newJobs||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(c.done||0)+'</td><td style="padding:.3rem .4rem;text-align:right;font-weight:700;color:#047857">'+(s.queued||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(s.skipped||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(Math.round((r.costInr||0)*100)/100)+'</td><td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(notes.join(' | '))+'">'+esc(notes.join(' · '))+'</td></tr>';
+    return '<tr data-run="'+esc(r._id)+'" onclick="auRowClick(\''+esc(r._id)+'\',this)" style="border-top:1px solid var(--g1);cursor:pointer;'+(_auSelected===r._id?'background:#F5F3FF':'')+'"><td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis">'+esc(r.date||'')+'</td><td style="padding:.3rem .4rem">'+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+'</td><td style="padding:.3rem .4rem;color:'+sc+';font-weight:600">'+esc(r.status||'')+(r.status==='running'?' · '+esc(r.step||''):'')+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.seen||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(h.newJobs||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(c.done||0)+'</td><td style="padding:.3rem .4rem;text-align:right;font-weight:700;color:#047857">'+(s.queued||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(s.skipped||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(Math.round((r.costInr||0)*100)/100)+'</td><td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(notes.join(' | '))+'">'+esc(notes.join(' · '))+'</td><td style="padding:.3rem .4rem"><a href="#" onclick="event.stopPropagation();auViewRunJobs(\''+esc(r._id)+'\');return false" style="font-size:.58rem;text-decoration:none;color:var(--ac);font-weight:600">View jobs ›</a></td></tr>';
   }).join('');
 }
 async function saveAutomation(){

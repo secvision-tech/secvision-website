@@ -317,6 +317,7 @@ exports.handler = async (event) => {
       // #678: automation filter — jobs the daily run queued, or skipped (with reason)
       if (body.auto === 'queued') filter['autoQueue.status'] = 'queued';
       else if (body.auto === 'skipped') filter.autoSkipReason = { $exists: true, $nin: [null, ''] };
+      else if (body.auto === 'run' && body.runId) filter.$and = (filter.$and || []).concat([{ $or: [{ 'autoQueue.runId': String(body.runId) }, { autoSkipRunId: String(body.runId) }] }]);   // #679: all jobs touched by one run
       if (body.country && body.country !== 'all') filter.searchCountry = body.country;
       if (body.detectedCountry && body.detectedCountry !== 'all') filter.detectedCountry = body.detectedCountry;
       if (body.location) {
@@ -328,9 +329,12 @@ exports.handler = async (event) => {
         }
       }
       if (body.dateFrom || body.dateTo) {
-        filter.datePosted = {};
-        if (body.dateFrom) filter.datePosted.$gte = new Date(body.dateFrom);
-        if (body.dateTo) filter.datePosted.$lte = new Date(body.dateTo + 'T23:59:59Z');
+        // #679: jobs that arrive without a posted date fall back to the date they were scanned, so a time period
+        // never hides a job just because the board gave no date.
+        var dr = {};
+        if (body.dateFrom) dr.$gte = new Date(body.dateFrom);
+        if (body.dateTo) dr.$lte = new Date(body.dateTo + 'T23:59:59Z');
+        filter.$and = (filter.$and || []).concat([{ $or: [{ datePosted: dr }, { datePosted: { $in: [null, ''] }, dateScanned: dr }, { datePosted: { $exists: false }, dateScanned: dr }] }]);
       }
 
       var page = body.page || 1;
