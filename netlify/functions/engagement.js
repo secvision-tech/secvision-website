@@ -240,4 +240,18 @@ function aiSetFields(r, job) {
   return set;
 }
 
-module.exports = { classifyEngagement: classifyEngagement, classifyEngagementAI: classifyEngagementAI, aiSetFields: aiSetFields, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };
+// #682: is this posting a contract engagement? Typed Contract/Temporary/Freelance, or a contract engagement model, or an
+// explicit contract signal in the text — hourly rate, C2C / W2 / 1099, contract-to-hire, "N months contract". A plain
+// "Full-time" with none of these is a permanent role and is dropped by the automated harvest.
+var RX_CONTRACT_SIGNAL = /\b(?:c2c|corp[\s-]*to[\s-]*corp|w-?2\b|1099|contract[\s-]*(?:to[\s-]*hire|role|position|basis|opportunity|assignment|engagement|term|length|duration|rate)|on\s+(?:a\s+)?contract|(?:\d{1,2}\+?|six|twelve)\s*[-–]?\s*(?:\d{1,2})?\s*months?\s*(?:\+\s*)?(?:contract|engagement|assignment|project|extension)|hourly\s+rate|per\s+hour|\/\s*h(?:ou)?r\b|\$\s?\d{2,3}\s*(?:-|–|to)?\s*\$?\d{0,3}\s*(?:\/|per)\s*h|freelance|zzp|interim|contractor)\b/i;
+function isContractPosting(job) {
+  job = job || {};
+  var jt = String(job.jobType || job.contractType || '');
+  if (/contract|temporary|freelance|contractor/i.test(jt)) return true;
+  var m = String(job.engagementModel || '');
+  if (!m) { try { m = classifyEngagement(job).model; } catch (e) { m = ''; } }
+  if (/^(?:C2C|C2C-likely|W2-contract|Expert-gig)$/.test(m)) return true;
+  var text = [job.title, job.salary, job.contractDuration, job.eligibility, String(job.description || '').slice(0, 6000)].filter(Boolean).join(' \n ');
+  return RX_CONTRACT_SIGNAL.test(text);
+}
+module.exports = { isContractPosting: isContractPosting, classifyEngagement: classifyEngagement, classifyEngagementAI: classifyEngagementAI, aiSetFields: aiSetFields, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };

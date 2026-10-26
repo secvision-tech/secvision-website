@@ -543,6 +543,15 @@ function detectCountry(job, searchCountry) {
     if (re.test(loc)) return countryNames[cn] === 'Turkey' ? 'Türkiye' : countryNames[cn];
   }
 
+  // #683: a two-letter ISO code at the end of the board's own location ("Leipzig, DE", "Utrecht, NL") beats the API country —
+  // the 'any'/US-index searches tag German/Dutch postings job_country = US, which produced phantom United States rows.
+  var locOwn = [job.job_city, job.job_state, job.location].filter(Boolean).join(', ');
+  var isoM = locOwn.match(/,\s*([A-Z]{2})\s*$/);
+  if (isoM) {
+    var ISO = {'US':'United States','CA':'Canada','GB':'United Kingdom','UK':'United Kingdom','IN':'India','AU':'Australia','DE':'Germany','FR':'France','JP':'Japan','SG':'Singapore','NL':'Netherlands','IE':'Ireland','CH':'Switzerland','SE':'Sweden','NO':'Norway','DK':'Denmark','FI':'Finland','BE':'Belgium','AT':'Austria','ES':'Spain','IT':'Italy','PL':'Poland','PT':'Portugal','CZ':'Czech Republic','NZ':'New Zealand','AE':'United Arab Emirates','SA':'Saudi Arabia','QA':'Qatar','IL':'Israel','ZA':'South Africa','BR':'Brazil','MX':'Mexico','MY':'Malaysia','PH':'Philippines','HK':'Hong Kong','KR':'South Korea','EG':'Egypt','NG':'Nigeria','KE':'Kenya'};
+    if (ISO[isoM[1]]) return ISO[isoM[1]];
+  }
+
   // Priority 2: API structured country field
   var apiCountry = (job.job_country || '').trim();
   if (apiCountry) {
@@ -1040,6 +1049,23 @@ exports.handler = async (event) => {
 
       // #616: job-board location is only a country/"Remote" but the JD names the city -> use the JD's city
       try { var em616 = require('./engagement'); jobs.forEach(function (j) { if (em616.isBareLocation(j.location)) { var jl = em616.extractJdLocation(j.description); if (jl) { j.locationOrig = j.location || ''; j.location = jl + (j.detectedCountry && jl.toLowerCase().indexOf(j.detectedCountry.toLowerCase()) < 0 ? ', ' + j.detectedCountry : ''); } } }); } catch (e) {}
+      // #682: automated runs keep contract postings only (typed Contract, or a contract signal in the text) — the sources
+      // ignore their own employment-type filter and were filling the harvest cap with full-time jobs.
+      var dropped = 0, deduped = 0;
+      if (body.contractOnly) {
+        var isC = require('./engagement').isContractPosting;
+        var kept = jobs.filter(function (j) { return isC(j); }); dropped = jobs.length - kept.length; jobs = kept;
+      }
+      // #684: JSearch serves one posting from several boards under different ids — collapse by title|company|city inside
+      // the batch and against postings saved in the last 30 days (fpKey written below for future comparisons).
+      if (body.automation && jobs.length) {
+        var fpOf = function (j) { return 'fp_' + Math.abs(String((j.titleClean || j.title || '').toLowerCase().trim() + '|' + String(j.company || '').toLowerCase().trim() + '|' + String(j.location || '').toLowerCase().split(',')[0].trim()).split('').reduce(function (h, ch) { return ((h << 5) - h + ch.charCodeAt(0)) | 0; }, 0)).toString(36); };
+        jobs.forEach(function (j) { j.fpKey = fpOf(j); });
+        var since30 = new Date(Date.now() - 30 * 86400000);
+        var existing = await col.find({ fpKey: { $in: jobs.map(function (j) { return j.fpKey; }) }, dateScanned: { $gte: since30 } }).project({ fpKey: 1, jobId: 1 }).toArray();
+        var seenFp = {}; existing.forEach(function (e) { seenFp[e.fpKey] = e.jobId; });
+        jobs = jobs.filter(function (j) { if (seenFp[j.fpKey] && seenFp[j.fpKey] !== j.id) { deduped++; return false; } seenFp[j.fpKey] = j.id; return true; });
+      }
       var ops = jobs.map(function(j) {
         return {
           updateOne: {
@@ -1051,7 +1077,7 @@ exports.handler = async (event) => {
               location: j.location, detectedCountry: j.detectedCountry, experience: j.experience,
               skills: j.skills, certifications: j.certifications, compliance: j.compliance,
               tools: j.tools, eligibility: j.eligibility, salary: j.salary, contact: j.contact,
-              source: j.source, jobType: j.jobType, contractDuration: j.contractDuration || '', remote: j.remote, applyLink: j.applyLink,
+              source: j.source, jobType: j.jobType, contractDuration: j.contractDuration || '', remote: j.remote, applyLink: j.applyLink, fpKey: j.fpKey || undefined,
               companyType: j.companyType || '',
               description: j.description, qualifications: j.qualifications,
               responsibilities: j.responsibilities, benefits: j.benefits
@@ -1102,7 +1128,7 @@ exports.handler = async (event) => {
 
     // #594: make sure every returned job carries its engagement classification even when the DB save was skipped
     try { var _ce = require('./engagement').classifyEngagement; jobs.forEach(function (j) { if (!j.engagementModel) { var e = _ce(j); j.engagementModel = e.model; j.offshoreOk = e.offshoreOk; j.engagementEvidence = e.evidence; } }); } catch (e) {}
-    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length, apiCalls: totalApiCalls, rolesSearched: roles, savedToDb: savedCount }) };
+    return { statusCode: 200, headers: hdrs, body: JSON.stringify({ jobs: jobs, totalResults: jobs.length + (typeof dropped === 'number' ? dropped + deduped : 0), kept: jobs.length, dropped: dropped || 0, deduped: deduped || 0, apiCalls: totalApiCalls, rolesSearched: roles, savedToDb: savedCount }) };
   } catch (err) {
     console.error('Error:', err);
     return { statusCode: 500, headers: hdrs, body: JSON.stringify({ error: 'Internal server error' }) };

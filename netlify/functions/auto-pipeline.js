@@ -102,13 +102,15 @@ async function stepLinkedIn(db, run, cfg, deadline) {
       if (cd.status !== 'SUCCEEDED') { li.errors.push(a.c + '/' + a.r + ': ' + cd.status); li.log.push({ c: a.c, r: a.r, seen: 0, added: 0, err: cd.status }); continue; }
       try {
         var gr = await apifyCall({ action: 'getResults', datasetId: cd.datasetId || a.datasetId });
-        var jobs = gr.jobs || [], added = 0;
+        var all = gr.jobs || [], isC = require('./engagement').isContractPosting;
+        var jobs = all.filter(function (j) { return isC(Object.assign({}, j, { jobType: j.contractType })); }), added = 0;   // #682: contract gate
+        li.dropped = (li.dropped || 0) + (all.length - jobs.length);
         for (var b = 0; b < jobs.length; b += 15) {
           var ps = await apifyCall({ action: 'processAndSave', jobs: jobs.slice(b, b + 15), autoRunId: run._id, userEmail: 'automation@secvisiontech.com' });
           added += (ps.inserted || 0);
         }
         li.seen += (gr.rawTotal || jobs.length); li.newJobs += added; li.done++;
-        li.log.push({ c: a.c, r: a.r, seen: gr.rawTotal || jobs.length, cyber: jobs.length, added: added, err: gr.error || '' });
+        li.log.push({ c: a.c, r: a.r, seen: gr.rawTotal || all.length, cyber: all.length, dropped: all.length - jobs.length, added: added, err: gr.error || '' });
       } catch (e) { li.errors.push(a.c + '/' + a.r + ': ' + String(e && e.message || e)); }
       li.log = li.log.slice(-64);
     }
@@ -150,7 +152,7 @@ async function stepHarvest(db, run, cfg, deadline) {
     if (h.newJobs + ((run.linkedin || {}).newJobs || 0) >= cfg.caps.harvest) { h.cappedAt = h.cursor; break; }   // #681: cap is shared with the LinkedIn step
     var u = units[h.cursor];
     var ev = { httpMethod: 'POST', headers: {}, body: JSON.stringify({ roles: u.roles, pages: 1, datePosted: cfg.datePosted || '3days', employmentTypes: 'CONTRACTOR',
-      country: u.country === 'any' ? 'us' : u.country, countryName: (u.country === 'us' || u.country === 'any') ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true }) };
+      country: u.country === 'any' ? 'us' : u.country, countryName: (u.country === 'us' || u.country === 'any') ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true, contractOnly: true }) };   // #682/#684: contract gate + cross-board dedupe inside job-search
     try {
       // #680: stamp the rows THIS search inserted (created during the call, not yet owned by any run) with the run id;
       // every later step — cap, classify, select, "View jobs" — works on that stamp, never on a global time count.
@@ -159,9 +161,9 @@ async function stepHarvest(db, run, cfg, deadline) {
       var d = {}; try { d = JSON.parse(r.body || '{}'); } catch (e) {}
       var st = await db.collection('jobs').updateMany({ createdAt: { $gte: t0 }, autoRunId: { $exists: false }, searchedBy: 'automation@secvisiontech.com' }, { $set: { autoRunId: run._id } });
       var added = st.modifiedCount || 0;
-      h.calls += (d.apiCalls || 0); h.seen += (d.totalResults || 0); h.newJobs += added;
+      h.calls += (d.apiCalls || 0); h.seen += (d.totalResults || 0); h.newJobs += added; h.dropped = (h.dropped || 0) + (d.dropped || 0); h.deduped = (h.deduped || 0) + (d.deduped || 0);
       // #679: per-search diagnostics (country, first role of the chunk, results returned, savedToDb, new rows added)
-      h.log = (h.log || []).concat([{ c: u.country, r: u.roles[0], seen: d.totalResults || 0, saved: d.savedToDb || 0, added: added, err: d.error || '' }]).slice(-64);
+      h.log = (h.log || []).concat([{ c: u.country, r: u.roles[0], seen: d.totalResults || 0, dropped: d.dropped || 0, deduped: d.deduped || 0, saved: d.savedToDb || 0, added: added, err: d.error || '' }]).slice(-64);
       if (d.error) h.errors.push(u.country + '/' + u.roles[0] + ': ' + d.error);
     } catch (e) { h.errors.push(u.country + '/' + u.roles[0] + ': ' + String(e && e.message || e)); }
     h.cursor++;
