@@ -254,4 +254,24 @@ function isContractPosting(job) {
   var text = [job.title, job.salary, job.contractDuration, job.eligibility, String(job.description || '').slice(0, 6000)].filter(Boolean).join(' \n ');
   return RX_CONTRACT_SIGNAL.test(text);
 }
-module.exports = { isContractPosting: isContractPosting, classifyEngagement: classifyEngagement, classifyEngagementAI: classifyEngagementAI, aiSetFields: aiSetFields, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };
+// #687: stricter relevance for the automated harvest (precision over recall — a human never sees these before they are
+// classified and queued). The title must name a security role or technology; a generic title is admitted only when the
+// description carries 4+ operational security signals ("SOC 2" boilerplate does not count). Known AI-training / gig
+// marketplaces that flood LinkedIn with "Remote (Worldwide)" postings are excluded by company name.
+var RX_SEC_TITLE = /\b(?:soc\b|siem|xdr|edr|mdr|mssp|cyber\w*|infosec|information\s*security|security\s*(?:analyst|engineer|architect|consultant|operations|specialist|administrator|manager|director|lead|researcher|officer|expert|sme|professional|advisor|advisory|assurance|testing|tester|automation|platform|tooling|product|program)|(?:network|cloud|application|app|product|platform|endpoint|identity|data|ot|ics|iot|enterprise|it|infrastructure|offensive|defensive|email|cloud\s*native|container)\s*security|detection\s*(?:and|&)\s*response|threat\s*(?:hunt|intel|detect|analys)|incident\s*respon|forensic|dfir|penetration|pen\s*test|pentest|red\s*team|blue\s*team|purple\s*team|vulnerab|appsec|devsecops|zero\s*trust|sase|sse\b|grc\b|iam\b|pam\b|identity\s*(?:and|&)\s*access|entra|okta|sailpoint|cyberark|ping\s*identity|dlp\b|data\s*loss|crowdstrike|sentinel(?:one)?|splunk|qradar|palo\s*alto|fortinet|fortigate|zscaler|netskope|firewall|proofpoint|tenable|qualys|rapid7|wiz\b|prisma|defender|intune|ciso|security\s*clearance\s*officer|privacy\s*(?:engineer|analyst|officer)|compliance\s*(?:analyst|engineer|manager|specialist)|(?:it|cyber|information|security|technology)\s*risk|armis|nozomi|claroty|dragos|ot\s*secur|scada\s*secur|soc\s*2\s*(?:lead|analyst|auditor))\b/i;
+var EXCLUDE_COMPANIES_DEFAULT = ['remotejobsone', 'mercor', 'alignerr', 'yo ai labs', 'outlier', 'dataannotation', 'scale ai', 'micro1', 'turing'];
+function isSecurityRoleStrict(job, excludeCompanies) {
+  job = job || {};
+  var co = String(job.company || '').toLowerCase().trim();
+  var ex = (excludeCompanies && excludeCompanies.length ? excludeCompanies : EXCLUDE_COMPANIES_DEFAULT).map(function (x) { return String(x).toLowerCase().trim(); }).filter(Boolean);
+  for (var i = 0; i < ex.length; i++) { if (co && co.indexOf(ex[i]) >= 0) return false; }
+  var t = String(job.title || '').replace(/\bwith\s+security\s+clearance\b/gi, '').replace(/\bsecurity\s+clearance\b/gi, '');
+  if (RX_SEC_TITLE.test(t)) return true;
+  var d = String(job.description || '').replace(/\bsoc\s*2\b/gi, ' ').replace(/\bsocial\s+security\b/gi, ' ').replace(/\bjob\s+security\b/gi, ' ');
+  var n = 0;
+  [/\bsiem\b/i, /\bedr\b/i, /\bsecurity\s*operations\s*cent/i, /\bincident\s*response/i, /\bthreat\s*(?:hunt|detect|intel)/i, /\bfirewall/i, /\bids[\s\/]*ips\b/i, /\bmitre\s*att/i,
+   /\bcrowdstrike|sentinel(?:one)?|splunk|qradar|palo\s*alto|fortinet|zscaler\b/i, /\bmalware\b/i, /\bphishing\b/i, /\bvulnerability\s*(?:management|assessment|scan)/i, /\bpenetration\s*test/i,
+   /\bnist\s*(?:csf|800|rmf)/i, /\bcissp\b/i, /\boscp\b/i, /\bgcih\b/i, /\bconditional\s*access\b/i, /\bzero\s*trust\b/i, /\bdevsecops\b/i].forEach(function (re) { if (re.test(d)) n++; });
+  return n >= 4;
+}
+module.exports = { isSecurityRoleStrict: isSecurityRoleStrict, EXCLUDE_COMPANIES_DEFAULT: EXCLUDE_COMPANIES_DEFAULT, isContractPosting: isContractPosting, classifyEngagement: classifyEngagement, classifyEngagementAI: classifyEngagementAI, aiSetFields: aiSetFields, extractJdLocation: extractJdLocation, isBareLocation: isBareLocation };

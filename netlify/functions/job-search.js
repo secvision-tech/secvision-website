@@ -1053,8 +1053,8 @@ exports.handler = async (event) => {
       // ignore their own employment-type filter and were filling the harvest cap with full-time jobs.
       var dropped = 0, deduped = 0;
       if (body.contractOnly) {
-        var isC = require('./engagement').isContractPosting;
-        var kept = jobs.filter(function (j) { return isC(j); }); dropped = jobs.length - kept.length; jobs = kept;
+        var eng682 = require('./engagement');
+        var kept = jobs.filter(function (j) { return eng682.isContractPosting(j) && eng682.isSecurityRoleStrict(j, body.excludeCompanies); }); dropped = jobs.length - kept.length; jobs = kept;   // #682 contract gate + #687 strict relevance
       }
       // #684: JSearch serves one posting from several boards under different ids — collapse by title|company|city inside
       // the batch and against postings saved in the last 30 days (fpKey written below for future comparisons).

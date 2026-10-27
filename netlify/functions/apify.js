@@ -1319,6 +1319,9 @@ function detectCountryFromLocation(loc) {
   var US_STATE_NAMES = /\b(California|Texas|New York|Florida|Illinois|Virginia|Washington|Georgia|Massachusetts|Colorado|Arizona|Ohio|Michigan|Pennsylvania|Maryland|Minnesota|Oregon|Nevada|Utah|Missouri|Indiana|Wisconsin|Tennessee|Alabama|Connecticut|New Jersey|North Carolina|South Carolina|Kentucky|Louisiana|Oklahoma|Iowa|Kansas|Arkansas|Mississippi|Nebraska|Idaho|Hawaii|Maine|New Hampshire|Rhode Island|Montana|Delaware|South Dakota|North Dakota|Vermont|Wyoming|West Virginia|New Mexico)\b/i;
   if (US_STATES.test(loc) || US_STATE_NAMES.test(loc) || /united states|usa/i.test(loc)) return 'United States';
 
+  // #688: LinkedIn often gives only "Greater Perth Area" / "Greater Edinburgh Area" — resolve well-known cities
+  if (/\b(perth|sydney|melbourne|brisbane|adelaide|canberra|hobart|darwin|gold coast|newcastle,? nsw|wollongong|geelong)\b/i.test(l) && !/\b(scotland|uk|united kingdom|florida|\bfl\b|australia)\b/i.test(l)) return 'Australia';
+  if (/\b(london|manchester|birmingham|leeds|glasgow|edinburgh|bristol|liverpool|sheffield|newcastle upon tyne|nottingham|cardiff|belfast|cambridge|oxford|reading|southampton|brighton|leicester|coventry|milton keynes|aberdeen|dundee)\b/i.test(l) && !/\b(ontario|canada|kentucky|\bky\b|\bon\b|united states|usa)\b/i.test(l)) return 'United Kingdom';
   if (/united kingdom|\bengland\b|\bscotland\b|(?<!new south )\bwales\b/i.test(l)) return 'United Kingdom';   // #670b: not "New South Wales"
   if (/australia/i.test(l)) return 'Australia';
   if (/germany|deutschland/i.test(l)) return 'Germany';

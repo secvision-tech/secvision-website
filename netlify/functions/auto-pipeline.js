@@ -32,6 +32,7 @@ var DEFAULT_CONFIG = {
   liRoles: ['Security Engineer', 'SOC Analyst', 'Security Architect', 'Security Consultant', 'Cloud Security Engineer', 'SIEM Engineer'],   // one Apify run per role x country
   liConcurrency: 4,               // Apify runs in flight at once
   liTimeoutMin: 45,               // give up on runs still not finished after this long
+  excludeCompanies: ['RemoteJobsOne', 'Mercor', 'Alignerr', 'YO AI Labs', 'Outlier', 'DataAnnotation', 'Scale AI', 'micro1', 'Turing'],   // #687: gig / AI-training marketplaces, never real contract demand
   datePosted: 'today',            // JSearch last-24-hours window; the run itself only counts jobs first seen today
   workModes: ['remote'],          // automation scope today; hybrid / onsite can be ticked when a regional partner is live
   caps: { harvest: 100, eligible: 50, matches: 10, contacts: 10, reveals: 30, dailyBudgetInr: 800, liQueries: 24 },
@@ -102,8 +103,8 @@ async function stepLinkedIn(db, run, cfg, deadline) {
       if (cd.status !== 'SUCCEEDED') { li.errors.push(a.c + '/' + a.r + ': ' + cd.status); li.log.push({ c: a.c, r: a.r, seen: 0, added: 0, err: cd.status }); continue; }
       try {
         var gr = await apifyCall({ action: 'getResults', datasetId: cd.datasetId || a.datasetId });
-        var all = gr.jobs || [], isC = require('./engagement').isContractPosting;
-        var jobs = all.filter(function (j) { return isC(Object.assign({}, j, { jobType: j.contractType })); }), added = 0;   // #682: contract gate
+        var all = gr.jobs || [], engLi = require('./engagement');
+        var jobs = all.filter(function (j) { var jj = Object.assign({}, j, { jobType: j.contractType }); return engLi.isContractPosting(jj) && engLi.isSecurityRoleStrict(jj, cfg.excludeCompanies); }), added = 0;   // #682 contract gate + #687 strict relevance
         li.dropped = (li.dropped || 0) + (all.length - jobs.length);
         for (var b = 0; b < jobs.length; b += 15) {
           var ps = await apifyCall({ action: 'processAndSave', jobs: jobs.slice(b, b + 15), autoRunId: run._id, userEmail: 'automation@secvisiontech.com' });
@@ -152,7 +153,7 @@ async function stepHarvest(db, run, cfg, deadline) {
     if (h.newJobs + ((run.linkedin || {}).newJobs || 0) >= cfg.caps.harvest) { h.cappedAt = h.cursor; break; }   // #681: cap is shared with the LinkedIn step
     var u = units[h.cursor];
     var ev = { httpMethod: 'POST', headers: {}, body: JSON.stringify({ roles: u.roles, pages: 1, datePosted: cfg.datePosted || '3days', employmentTypes: 'CONTRACTOR',
-      country: u.country === 'any' ? 'us' : u.country, countryName: (u.country === 'us' || u.country === 'any') ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true, contractOnly: true }) };   // #682/#684: contract gate + cross-board dedupe inside job-search
+      country: u.country === 'any' ? 'us' : u.country, countryName: (u.country === 'us' || u.country === 'any') ? '' : (COUNTRY_NAMES[u.country] || ''), userEmail: 'automation@secvisiontech.com', automation: true, contractOnly: true, excludeCompanies: cfg.excludeCompanies || [] }) };   // #682/#684: contract gate + cross-board dedupe inside job-search
     try {
       // #680: stamp the rows THIS search inserted (created during the call, not yet owned by any run) with the run id;
       // every later step — cap, classify, select, "View jobs" — works on that stamp, never on a global time count.
@@ -297,6 +298,7 @@ exports.handler = async function (event) {
     if (Array.isArray(inc.workModes)) set.workModes = inc.workModes.filter(function (m) { return ['remote', 'hybrid', 'onsite'].indexOf(m) >= 0; });
     if (inc.datePosted && ['today', '3days', 'week'].indexOf(inc.datePosted) >= 0) set.datePosted = inc.datePosted;
     if (Array.isArray(inc.sources)) set.sources = inc.sources.filter(function (m) { return ['linkedin', 'jsearch'].indexOf(m) >= 0; });   // #681
+    if (Array.isArray(inc.excludeCompanies)) set.excludeCompanies = inc.excludeCompanies.map(String).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 60);   // #687
     if (Array.isArray(inc.liRoles)) set.liRoles = inc.liRoles.map(String).map(function (x) { return x.trim(); }).filter(Boolean).slice(0, 16);
     if (inc.liConcurrency != null) set.liConcurrency = Math.min(8, Math.max(1, parseInt(inc.liConcurrency) || 4));
     if (inc.liTimeoutMin != null) set.liTimeoutMin = Math.min(120, Math.max(10, parseInt(inc.liTimeoutMin) || 45));

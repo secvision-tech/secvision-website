@@ -4104,9 +4104,9 @@ async function loadAutomation(){
     var cp=c.caps||{};document.getElementById('auCapHarvest').value=cp.harvest;document.getElementById('auCapEligible').value=cp.eligible;document.getElementById('auCapMatches').value=cp.matches;document.getElementById('auCapContacts').value=cp.contacts;document.getElementById('auCapReveals').value=cp.reveals;document.getElementById('auCapBudget').value=cp.dailyBudgetInr;
     document.getElementById('auCostAi').value=(c.costInr||{}).aiClassify;
     var src=c.sources||['linkedin','jsearch'];document.getElementById('auSrcLi').checked=src.indexOf('linkedin')>=0;document.getElementById('auSrcJs').checked=src.indexOf('jsearch')>=0;   // #681
-    document.getElementById('auLiRoles').value=(c.liRoles||[]).join('\n');document.getElementById('auLiConc').value=c.liConcurrency||4;document.getElementById('auLiTimeout').value=c.liTimeoutMin||45;
+    document.getElementById('auLiRoles').value=(c.liRoles||[]).join('\n');document.getElementById('auExclude').value=(c.excludeCompanies||[]).join(', ');document.getElementById('auLiConc').value=c.liConcurrency||4;document.getElementById('auLiTimeout').value=c.liTimeoutMin||45;
     document.getElementById('auCapLi').value=cp.liQueries!=null?cp.liQueries:24;document.getElementById('auCostLi').value=(c.costInr||{}).apifyQuery!=null?(c.costInr||{}).apifyQuery:10;
-    ['auEnabled','auHour','auRoles','auCountries','auDate','auWmRemote','auWmHybrid','auWmOnsite','auCapHarvest','auCapEligible','auCapMatches','auCapContacts','auCapReveals','auCapBudget','auCostAi','auSrcLi','auSrcJs','auLiRoles','auLiConc','auLiTimeout','auCapLi','auCostLi'].forEach(function(id){document.getElementById(id).disabled=!d.canEdit});
+    ['auEnabled','auHour','auRoles','auCountries','auDate','auWmRemote','auWmHybrid','auWmOnsite','auCapHarvest','auCapEligible','auCapMatches','auCapContacts','auCapReveals','auCapBudget','auCostAi','auSrcLi','auSrcJs','auLiRoles','auLiConc','auLiTimeout','auCapLi','auCostLi','auExclude'].forEach(function(id){document.getElementById(id).disabled=!d.canEdit});
     document.getElementById('auSaveBtn').style.display=d.canEdit?'':'none';document.getElementById('auRunBtn').style.display=d.canRun?'':'none';
     renderAutoRuns(d.runs||[]);
     var active=(d.runs||[]).find(function(x){return x.status==='running'});
@@ -4163,7 +4163,7 @@ async function saveAutomation(){
     countries:document.getElementById('auCountries').value.split(/[,\s]+/).map(function(x){return x.trim().toLowerCase()}).filter(Boolean),
     datePosted:document.getElementById('auDate').value,workModes:wm,
     sources:[].concat(document.getElementById('auSrcLi').checked?['linkedin']:[],document.getElementById('auSrcJs').checked?['jsearch']:[]),   // #681
-    liRoles:document.getElementById('auLiRoles').value.split(/\n+/).map(function(x){return x.trim()}).filter(Boolean),liConcurrency:document.getElementById('auLiConc').value,liTimeoutMin:document.getElementById('auLiTimeout').value,
+    liRoles:document.getElementById('auLiRoles').value.split(/\n+/).map(function(x){return x.trim()}).filter(Boolean),excludeCompanies:document.getElementById('auExclude').value.split(/,/).map(function(x){return x.trim()}).filter(Boolean),liConcurrency:document.getElementById('auLiConc').value,liTimeoutMin:document.getElementById('auLiTimeout').value,
     caps:{harvest:document.getElementById('auCapHarvest').value,eligible:document.getElementById('auCapEligible').value,matches:document.getElementById('auCapMatches').value,contacts:document.getElementById('auCapContacts').value,reveals:document.getElementById('auCapReveals').value,dailyBudgetInr:document.getElementById('auCapBudget').value,liQueries:document.getElementById('auCapLi').value},
     costInr:{aiClassify:document.getElementById('auCostAi').value,apifyQuery:document.getElementById('auCostLi').value}};
   st.textContent='Saving…';
@@ -7872,6 +7872,7 @@ function downloadFile(content,name,type){
         <label style="font-size:.62rem;margin-right:.8rem"><input type="checkbox" id="auSrcLi"> LinkedIn (Apify — contract, last 24 h, one run per role × country)</label>
         <label style="font-size:.62rem"><input type="checkbox" id="auSrcJs"> JSearch (aggregator index)</label></div>
       <div style="grid-column:1/-1"><label class="set-label">LinkedIn roles (one per line — each is a separate Apify run per country; keep this list short)</label><textarea id="auLiRoles" class="set-input" rows="3" style="font-size:.62rem"></textarea></div>
+      <div style="grid-column:1/-1"><label class="set-label">Exclude companies (comma-separated — gig / AI-training marketplaces whose postings are never real contract demand)</label><input id="auExclude" class="set-input"></div>
       <div><label class="set-label">LinkedIn runs in flight at once (1–8)</label><input id="auLiConc" type="number" min="1" max="8" class="set-input"></div>
       <div><label class="set-label">LinkedIn step timeout (minutes)</label><input id="auLiTimeout" type="number" min="10" max="120" class="set-input"></div>
       <div style="grid-column:1/-1"><label class="set-label">Automation scope (work modes)</label>
