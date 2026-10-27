@@ -4116,7 +4116,7 @@ async function loadAutomation(){
 }
 // #678: run log — resizable columns (attachColResizers), sortable headers (sort ignored after a resize drag), toggle-select rows
 var _auRunsData=[],_auSortCol='startedAt',_auSortDir=-1,_auMouseX=0,_auSelected=null;
-var AU_COLS=[['date','Date',10,'l'],['by','By',9,'l'],['status','Status',11,'l'],['seen','Seen',6,'r'],['newJobs','New',6,'r'],['done','Classified',8,'r'],['queued','Queued',7,'r'],['skipped','Skipped',7,'r'],['costInr','₹',6,'r'],['notes','Notes',26,'l'],['jobs','',8,'l']];
+var AU_COLS=[['sel','',3,'l'],['date','Date',10,'l'],['by','By',9,'l'],['status','Status',11,'l'],['seen','Seen',6,'r'],['newJobs','New',6,'r'],['done','Classified',8,'r'],['queued','Queued',7,'r'],['skipped','Skipped',7,'r'],['costInr','₹',6,'r'],['notes','Notes',26,'l'],['jobs','',8,'l']];
 function auRunVal(r,col){var h=r.harvest||{},c=r.classify||{},s=r.select||{};
   switch(col){case 'startedAt':return r.startedAt?new Date(r.startedAt).getTime():0;case 'date':return r.date||'';case 'by':return String(r.by||'');case 'status':return String(r.status||'');
     case 'seen':return (h.seen||0)+((r.linkedin||{}).seen||0);case 'newJobs':return (h.newJobs||0)+((r.linkedin||{}).newJobs||0);case 'done':return c.done||0;case 'queued':return s.queued||0;case 'skipped':return s.skipped||0;case 'costInr':return r.costInr||0;case 'notes':return auRunNotes(r).join(' ');default:return ''}}
@@ -4126,7 +4126,7 @@ function auRunNotes(r){var h=r.harvest||{},c=r.classify||{},s=r.select||{},li=r.
   Object.keys(s.reasons||{}).forEach(function(k){notes.push(s.reasons[k]+'× '+k)});if(r.lastError)notes.push('error: '+r.lastError);(li.errors||[]).slice(0,2).forEach(function(e){notes.push('LI '+e)});(h.errors||[]).slice(0,2).forEach(function(e){notes.push(e)});
   (li.log||[]).forEach(function(l){notes.push('LI '+l.c+'/'+l.r+': '+(l.seen||0)+' seen, '+(l.dropped||0)+' dropped, '+(l.added||0)+' new'+(l.err?' ('+l.err+')':''))});(h.log||[]).forEach(function(l){notes.push('JS '+l.c+'/'+l.r+': '+(l.seen||0)+' seen, '+(l.dropped||0)+' dropped, '+(l.deduped||0)+' dupes, '+(l.added||0)+' new'+(l.err?' ('+l.err+')':''))});return notes}
 function auHeaderDown(e){_auMouseX=e.clientX}
-function auHeaderClick(col,e){if(Math.abs(e.clientX-_auMouseX)>5)return;if(_auSortCol===col)_auSortDir*=-1;else{_auSortCol=col;_auSortDir=(col==='date'||col==='startedAt'||col==='costInr'||col==='seen'||col==='newJobs'||col==='done'||col==='queued'||col==='skipped')?-1:1}renderAutoRuns(_auRunsData)}
+function auHeaderClick(col,e){if(col==='sel')return;if(Math.abs(e.clientX-_auMouseX)>5)return;if(_auSortCol===col)_auSortDir*=-1;else{_auSortCol=col;_auSortDir=(col==='date'||col==='startedAt'||col==='costInr'||col==='seen'||col==='newJobs'||col==='done'||col==='queued'||col==='skipped')?-1:1}renderAutoRuns(_auRunsData)}
 // #679: open Search DB filtered to every job this run queued or skipped (time period widened to All)
 function auViewRunJobs(runId){
   window._auViewRun=runId;
@@ -4136,20 +4136,23 @@ function auViewRunJobs(runId){
   try{setMode('db')}catch(e){}
   try{searchDb()}catch(e){}
 }
-function auRowClick(id,tr){_auSelected=(_auSelected===id)?null:id;Array.prototype.forEach.call(document.querySelectorAll('#auRuns tr[data-run]'),function(x){x.style.background=x.getAttribute('data-run')===_auSelected?'#F5F3FF':''})}
+// #682: toggle-select a run row on click — clear highlight, check mark, and a "Selected" status line (click again to clear)
+function auRowClick(id,tr){_auSelected=(_auSelected===id)?null:id;Array.prototype.forEach.call(document.querySelectorAll('#auRuns tr[data-run]'),function(x){var on=x.getAttribute('data-run')===_auSelected;x.style.background=on?'#DBEAFE':'';x.style.boxShadow=on?'inset 3px 0 0 var(--ac)':'';x.style.fontWeight=on?'600':'';var sc=x.querySelector('td.au-sel');if(sc)sc.textContent=on?'☑':'☐'});
+  var sl=document.getElementById('auSelLine');if(sl){var r=_auRunsData.find(function(x){return x._id===_auSelected});sl.innerHTML=r?'Selected: <b>'+esc(r.date||'')+'</b> · '+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+' · '+esc(r.status||'')+' · <a href="#" onclick="auViewRunJobs(\''+esc(r._id)+'\');return false" style="color:var(--ac);font-weight:600;text-decoration:none">View jobs ›</a> · <a href="#" onclick="auRowClick(\''+esc(r._id)+'\');return false" style="color:var(--g4);text-decoration:none">clear</a>':''}}
 function renderAutoRuns(runs){
   _auRunsData=runs||[];
   var head=document.getElementById('auRunsHead');
   if(head&&!head.children.length){head.innerHTML=AU_COLS.map(function(c){return '<th onmousedown="auHeaderDown(event)" onclick="auHeaderClick(\''+c[0]+'\',event)" style="padding:.3rem .4rem;text-align:'+(c[3]==='r'?'right':'left')+';cursor:pointer;white-space:nowrap;overflow:hidden;width:'+c[2]+'ch">'+c[1]+'<span class="au-arrow" data-col="'+c[0]+'" style="color:var(--ac);font-size:.5rem"></span></th>'}).join('');attachColResizers('auRunsTable')}
   Array.prototype.forEach.call(document.querySelectorAll('#auRunsHead .au-arrow'),function(a){a.textContent=a.getAttribute('data-col')===_auSortCol?(_auSortDir===1?' ▲':' ▼'):''});
   var tb=document.getElementById('auRuns');
-  if(!runs.length){tb.innerHTML='<tr><td colspan="10" style="padding:.6rem;text-align:center;color:var(--g3)">No runs yet.</td></tr>';return}
+  if(!runs.length){tb.innerHTML='<tr><td colspan="12" style="padding:.6rem;text-align:center;color:var(--g3)">No runs yet.</td></tr>';return}
   var list=runs.slice().sort(function(a,b){var va=auRunVal(a,_auSortCol),vb=auRunVal(b,_auSortCol);if(typeof va==='string')va=va.toLowerCase();if(typeof vb==='string')vb=vb.toLowerCase();if(va<vb)return -1*_auSortDir;if(va>vb)return 1*_auSortDir;return 0});
   tb.innerHTML=list.map(function(r){
     var h=r.harvest||{},c=r.classify||{},s=r.select||{};
     var notes=auRunNotes(r);
     var sc=r.status==='done'?'#047857':(r.status==='running'?'#B45309':'#6B7280');
-    return '<tr data-run="'+esc(r._id)+'" onclick="auRowClick(\''+esc(r._id)+'\',this)" style="border-top:1px solid var(--g1);cursor:pointer;'+(_auSelected===r._id?'background:#F5F3FF':'')+'"><td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis">'+esc(r.date||'')+'</td><td style="padding:.3rem .4rem">'+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+'</td><td style="padding:.3rem .4rem;color:'+sc+';font-weight:600">'+esc(r.status||'')+(r.status==='running'?' · '+esc(r.step||''):'')+'</td><td style="padding:.3rem .4rem;text-align:right">'+auRunVal(r,'seen')+'</td><td style="padding:.3rem .4rem;text-align:right">'+auRunVal(r,'newJobs')+'</td><td style="padding:.3rem .4rem;text-align:right">'+(c.done||0)+'</td><td style="padding:.3rem .4rem;text-align:right;font-weight:700;color:#047857">'+(s.queued||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(s.skipped||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(Math.round((r.costInr||0)*100)/100)+'</td><td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(notes.join(' | '))+'">'+esc(notes.join(' · '))+'</td><td style="padding:.3rem .4rem"><a href="#" onclick="event.stopPropagation();auViewRunJobs(\''+esc(r._id)+'\');return false" style="font-size:.58rem;text-decoration:none;color:var(--ac);font-weight:600">View jobs ›</a></td></tr>';
+    var on=_auSelected===r._id;
+    return '<tr data-run="'+esc(r._id)+'" onclick="auRowClick(\''+esc(r._id)+'\',this)" title="Click to select / deselect this run" style="border-top:1px solid var(--g1);cursor:pointer;'+(on?'background:#DBEAFE;box-shadow:inset 3px 0 0 var(--ac);font-weight:600':'')+'"><td class="au-sel" style="padding:.3rem .4rem;text-align:center;color:var(--ac)">'+(on?'☑':'☐')+'</td><td style="padding:.3rem .4rem;overflow:hidden;text-overflow:ellipsis">'+esc(r.date||'')+'</td><td style="padding:.3rem .4rem">'+esc(r.by==='schedule'?'schedule':String(r.by||'').split('@')[0])+'</td><td style="padding:.3rem .4rem;color:'+sc+';font-weight:600">'+esc(r.status||'')+(r.status==='running'?' · '+esc(r.step||''):'')+'</td><td style="padding:.3rem .4rem;text-align:right">'+auRunVal(r,'seen')+'</td><td style="padding:.3rem .4rem;text-align:right">'+auRunVal(r,'newJobs')+'</td><td style="padding:.3rem .4rem;text-align:right">'+(c.done||0)+'</td><td style="padding:.3rem .4rem;text-align:right;font-weight:700;color:#047857">'+(s.queued||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(s.skipped||0)+'</td><td style="padding:.3rem .4rem;text-align:right">'+(Math.round((r.costInr||0)*100)/100)+'</td><td style="padding:.3rem .4rem;color:var(--g5);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+esc(notes.join(' | '))+'">'+esc(notes.join(' · '))+'</td><td style="padding:.3rem .4rem"><a href="#" onclick="event.stopPropagation();auViewRunJobs(\''+esc(r._id)+'\');return false" style="font-size:.58rem;text-decoration:none;color:var(--ac);font-weight:600">View jobs ›</a></td></tr>';
   }).join('');
 }
 async function saveAutomation(){
@@ -7897,6 +7900,7 @@ function downloadFile(content,name,type){
     </div>
     <div style="font-size:.62rem;font-weight:700;color:var(--g5);margin:.3rem 0">Recent runs</div>
     <div style="background:var(--card);border:1px solid var(--g2);border-radius:8px;overflow:auto">
+      <div id="auSelLine" style="font-size:.6rem;color:var(--g5);margin:.2rem 0 .3rem;min-height:.9rem"></div>
       <table id="auRunsTable" style="width:100%;border-collapse:collapse;font-size:.6rem;table-layout:fixed;min-width:72ch"><thead><tr id="auRunsHead" style="background:var(--g1)"></tr></thead><tbody id="auRuns"><tr><td colspan="10" style="padding:.6rem;text-align:center;color:var(--g3)">—</td></tr></tbody></table>
     </div>
   </div>
