@@ -457,6 +457,19 @@ function applyHardGates(req, profile) {
   }
   // Availability (only a flag, never a hard fail for now)
   if (profile.availability === 'unknown') flags.push('Availability not stated, confirm');
+  // #685: consultant-side work-mode constraint (e.g. "remote only until Dec 2027") — a dated hard gate for on-site /
+  // hybrid roles; expires automatically after the date. Unknown job work mode is a flag, not a fail.
+  var wmp = String(profile.workModePref || 'any').toLowerCase();
+  if (wmp === 'remote-only') {
+    var until = profile.workModePrefUntil ? new Date(profile.workModePrefUntil) : null;
+    var active = !until || isNaN(until.getTime()) || until.getTime() > Date.now();
+    if (active) {
+      var jr = jobIsRemote(req), jwm = String(req.workMode || '').toLowerCase();
+      var untilTxt = until && !isNaN(until.getTime()) ? ' until ' + until.toISOString().slice(0, 10) : '';
+      if (jr === false || jwm === 'hybrid' || jwm === 'onsite') reasons.push('Consultant is remote-only' + untilTxt + '; role is ' + (jwm || 'on-site/hybrid'));
+      else if (jr !== true) flags.push('Consultant is remote-only' + untilTxt + ' — confirm the role is remote');
+    }
+  }
 
   return { passed: reasons.length === 0, reasons: reasons, flags: flags };
 }
@@ -1181,6 +1194,9 @@ exports.handler = async function (event) {
         // #634: a cached score whose requirement fingerprint no longer matches (job edited, offshore verdict
         // changed) is stale — re-score it instead of showing a number computed against the old requirement.
         if (mc && mc.v === SCORING_VERSION && (!mc.reqHash || mc.reqHash === req.reqHash)) {
+          // #685: a consultant-side constraint added after scoring must still gate the cached pair
+          var gNow = applyHardGates(req, p);
+          if (!gNow.passed && !mc.gated) { preScored.push({ profile: p, overall: 0, dimensions: {}, reason: 'Gated: ' + gNow.reasons.join('; '), flags: gNow.flags, gatedOut: true, locationFit: { sameCountry: false, factor: 0, profileCountry: p.country, baseScore: 0 } }); return; }
           // locationFit isn't stored in the cache entry — recompute it (cheap, deterministic)
           // so the in-country count and the UI badge work for cached results too.
           var lfC = locationFit(req, p);

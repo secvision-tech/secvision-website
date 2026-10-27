@@ -2181,7 +2181,7 @@ async function saveProfilePdf(){
   kv('Consultant',[
     ['Consultant ID',String(c._id||'')],['Current role',val(enRole(c))],['Company',val(c.currentCompany)],['Location',val(enLoc(c))],['Country',val(c.country)],
     ['Experience',c.yearsExperience?c.yearsExperience+' yrs':'—'],['Engagement type',val(c.engagementType||(c.contractorSignal&&c.contractorSignal.likely?'Contractor (likely)':''))],
-    ['Availability',val(c.availability)],['Pipeline',val(PIPELINE_LABELS[c.pipelineStatus]||c.pipelineStatus)],['Rate expectation',val(c.rateExpectation)],['Work authorisation',val(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')],
+    ['Availability',val(c.availability)],['Work mode',(c.workModePref==='remote-only'?'Remote only'+(c.workModePrefUntil?' until '+fmtDate(c.workModePrefUntil):'')+(c.workModeNote?' — '+esc(c.workModeNote):''):'Any')],['Pipeline',val(PIPELINE_LABELS[c.pipelineStatus]||c.pipelineStatus)],['Rate expectation',val(c.rateExpectation)],['Work authorisation',val(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')],
     ['Email',val(c.email)],['Phone',val(c.phone)],['LinkedIn',val(c.linkedinUrl)],['Source',val(c.source)]
   ]);
   kv('Capabilities',[['Skills',val(c.skills)],['Certifications',val(c.certifications)],['Compliance / frameworks',val(c.compliance)],['Languages',val(c.languages)]]);
@@ -5569,6 +5569,12 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.68rem;color:var(--g4)">Security Clearance</label><input id="mpClearance" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.securityClearance&&c.securityClearance!=='unknown'?c.securityClearance:'')+'" placeholder="None, Secret, TS..."></div>';
     h+='<div><label style="font-size:.68rem;color:var(--g4)">Expected Rate</label><input id="mpRate" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.rateExpectation||'')+'" placeholder="$85/hr, £450/day"></div>';
     h+='</div>';
+    // #685: work-mode constraint (dated) — hard gate for on-site / hybrid roles in matching
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:.62rem;margin-top:.4rem">';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Work mode</label><select id="mpWmPref" class="set-input" style="width:100%;font-size:.76rem"><option value="any"'+((c.workModePref||'any')==='any'?' selected':'')+'>Any (remote / hybrid / on-site)</option><option value="remote-only"'+(c.workModePref==='remote-only'?' selected':'')+'>Remote only</option></select></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Remote-only until (blank = open-ended)</label><input type="date" id="mpWmUntil" class="set-input" style="width:100%;font-size:.76rem" value="'+(c.workModePrefUntil?new Date(c.workModePrefUntil).toISOString().slice(0,10):'')+'"></div>';
+    h+='<div><label style="font-size:.68rem;color:var(--g4)">Work-mode note</label><input id="mpWmNote" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.workModeNote||'')+'" placeholder="e.g. on-site not possible until Dec 2027"></div>';
+    h+='</div>';
     h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.76rem">'
       +Object.keys(PIPELINE_LABELS).filter(function(k){return k!=='placed'||c.pipelineStatus==='placed'}).map(function(k){return '<option value="'+k+'"'+((c.pipelineStatus||'none')===k?' selected':'')+(k==='placed'?' disabled':'')+'>'+PIPELINE_LABELS[k]+(k==='placed'?' (via placement)':'')+'</option>'}).join('')+'</select>'
       +'<div style="font-size:.62rem;color:var(--g4);margin-top:.15rem">To place a consultant, fill the Placement section below and press "Mark as Placed".</div></div>';
@@ -5718,7 +5724,8 @@ async function saveProfileStatus(){
       linkedinUrl:document.getElementById('mpLinkedin')?document.getElementById('mpLinkedin').value.trim():undefined,
       workAuthorization:document.getElementById('mpWorkAuth')?document.getElementById('mpWorkAuth').value.trim():undefined,
       securityClearance:document.getElementById('mpClearance')?document.getElementById('mpClearance').value.trim():undefined,
-      rateExpectation:document.getElementById('mpRate')?document.getElementById('mpRate').value.trim():undefined})});
+      rateExpectation:document.getElementById('mpRate')?document.getElementById('mpRate').value.trim():undefined,
+      workModePref:document.getElementById('mpWmPref')?document.getElementById('mpWmPref').value:undefined,workModePrefUntil:document.getElementById('mpWmUntil')?(document.getElementById('mpWmUntil').value||null):undefined,workModeNote:document.getElementById('mpWmNote')?document.getElementById('mpWmNote').value.trim():undefined})});   // #685
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
     var d=await r.json();
     if(d.error==='placed_frozen'){mpMsg('🔒 '+d.message,'#DC2626');return}

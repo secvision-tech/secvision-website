@@ -341,7 +341,7 @@ exports.handler = async function (event) {
         availability: c.availability || 'available', availableFrom: c.availableFrom || null,
         pipelineStatus: c.pipelineStatus || 'none', claimedBy: null, claimedAt: null,
         placementInfo: c.placementInfo || null,
-        rateExpectation: c.rateExpectation || null,
+        rateExpectation: c.rateExpectation || null, workModePref: c.workModePref || 'any', workModePrefUntil: c.workModePrefUntil || null, workModeNote: c.workModeNote || '',   // #685
         workAuthorization: c.workAuthorization || 'unknown', securityClearance: c.securityClearance || 'unknown',
         notes: c.notes || '',
         createdAt: new Date(), updatedAt: new Date(), createdBy: authUser.email
@@ -485,6 +485,9 @@ exports.handler = async function (event) {
       if (body.workAuthorization !== undefined) set.workAuthorization = body.workAuthorization || 'unknown';
       if (body.securityClearance !== undefined) set.securityClearance = body.securityClearance || 'unknown';
       if (body.rateExpectation !== undefined) set.rateExpectation = body.rateExpectation;
+      if (body.workModePref !== undefined) set.workModePref = (['any', 'remote-only'].indexOf(String(body.workModePref)) >= 0) ? String(body.workModePref) : 'any';   // #685
+      if (body.workModePrefUntil !== undefined) { var wmu = body.workModePrefUntil ? new Date(body.workModePrefUntil) : null; set.workModePrefUntil = (wmu && !isNaN(wmu.getTime())) ? wmu : null; }
+      if (body.workModeNote !== undefined) set.workModeNote = String(body.workModeNote || '').slice(0, 200);
       await col.updateOne({ _id: new ObjectId(body.id) }, { $set: set });
       return { statusCode: 200, headers: hdrs, body: JSON.stringify({ updated: true }) };
     }
