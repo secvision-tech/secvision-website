@@ -4790,6 +4790,17 @@ function _enrSt(msg,color){
   var s=document.getElementById('mpEnrichStatus');if(s){s.textContent=msg||'';s.style.color=color||'var(--pri)'}
   var b=document.getElementById('mpEnrichResumeBtn');if(b){b.disabled=!!msg&&msg.indexOf('⏳')===0;b.style.opacity=b.disabled?'.5':'1'}
 }
+// #683: union of list fields that treats variant spellings of the same credential as one entry —
+// "AZ-500", "Microsoft Certified: Azure Security Engineer Associate (AZ-500)" and "Azure Security Engineer Associate"
+// collapse to one (the longer, more descriptive form is kept); punctuation, dates, IDs and "certified" noise are ignored.
+function certKey(x){return String(x||'').toLowerCase().replace(/\((?:valid|issued|expires|exp|id|credential)[^)]*\)/g,' ').replace(/\b(?:microsoft|aws|cisco|comptia|isc2|isaca|giac|sans|ec-council)\s*certified:?\s*/g,' ').replace(/\b(?:certified|certification|certificate|associate|professional|expert)\b/g,' ').replace(/\b(?:19|20)\d{2}\b/g,' ').replace(/[^a-z0-9+#]+/g,' ').trim()}
+function certCode(x){var m=String(x||'').toUpperCase().match(/\b(?:AZ|SC|MS|DP|AI|PL|MB|MD|CC|AWS|SAA|SAP|DVA|SOA|CLF)[- ]?\d{3}\b|\b(?:CISSP|CISM|CISA|CRISC|CCSP|SSCP|CEH|OSCP|OSCE|GCIH|GCIA|GCFA|GPEN|GSEC|GCED|CCNA|CCNP|CCIE|PCNSE|PCNSA|CKA|CKAD|ITIL|PMP|CISSP-ISSAP)\b/);return m?m[0].replace(/[- ]/,''):''}
+function unionSmart(a,b){var out=[],keys=[],codes=[];
+  (a||[]).concat(b||[]).forEach(function(x){var v=String(x||'').trim();if(!v)return;var k=certKey(v),c=certCode(v);
+    for(var i=0;i<out.length;i++){var same=(k&&keys[i]&&(k===keys[i]||(k.length>=4&&keys[i].length>=4&&(k.indexOf(keys[i])>=0||keys[i].indexOf(k)>=0))))||(c&&codes[i]&&c===codes[i]);
+      if(same){if(v.length>out[i].length){out[i]=v;keys[i]=k;codes[i]=c||codes[i]}return}}
+    out.push(v);keys.push(k);codes.push(c)});
+  return out}
 async function enrichFromResume(){
   var cm=manageProfileData;if(!cm){alert('Open a profile first');return}
   _enrSt('⏳ enriching...');
@@ -4828,7 +4839,7 @@ async function enrichFromResume(){
     fillIf('email',p.email,'email');fillIf('phone',p.phone,'phone');fillIf('linkedinUrl',p.linkedinUrl,'linkedin');
     fillIf('currentRole',p.role,'role');fillIf('summary',(p.summary||'').slice(0,2500),'summary');
     if(p.yearsExperience&&!cm.yearsExperience&&!cm.yearsManual){up.yearsExperience=p.yearsExperience;changed.push('years')}
-    var union=function(a,b){var s={},o=[];(a||[]).concat(b||[]).forEach(function(x){var k=String(x||'').trim();if(k&&!s[k.toLowerCase()]){s[k.toLowerCase()]=1;o.push(k)}});return o};
+    var union=unionSmart;   // #683
     var sk=union(cm.skills,p.skills);if(sk.length>(cm.skills||[]).length){up.skills=sk;changed.push('skills +'+(sk.length-(cm.skills||[]).length))}
     var ce=union(cm.certifications,p.certifications);if(ce.length>(cm.certifications||[]).length){up.certifications=ce;changed.push('certs +'+(ce.length-(cm.certifications||[]).length))}
     var co=union(cm.compliance,p.compliance);if(co.length>(cm.compliance||[]).length){up.compliance=co;changed.push('compliance +'+(co.length-(cm.compliance||[]).length))}
@@ -4865,7 +4876,7 @@ async function enrichConsFromLinkedIn(id){
       if(!c.currentRole&&(p.title||(real[0]&&real[0].title))){up.currentRole=p.title||real[0].title;changed.push('role')}
       if(!c.location){var L=isLat(p.location)?p.location:((real.filter(function(e){return isLat(e.location)})[0]||{}).location||'');if(L){up.location=normLoc(L).replace(/,\s*India$/i,'');changed.push('location')}}
       if(!c.yearsExperience&&!c.yearsManual){var months=0;real.forEach(function(e){var m=String(e.duration||'').match(/(\d+)\s*yr/),mm=String(e.duration||'').match(/(\d+)\s*mo/);months+=(m?parseInt(m[1])*12:0)+(mm?parseInt(mm[1]):0)});var yrs=months?Math.round(months/1.2)/10:0;var stated=((p.summary||'')+' '+(p.headline||'')).match(/(\d{1,2})\s*\+?\s*(?:years|yrs)/i);if(stated&&parseInt(stated[1])>yrs)yrs=parseInt(stated[1]);if(yrs){up.yearsExperience=yrs;changed.push('years')}}
-      var union=function(a,b){var s={},o=[];(a||[]).concat(b||[]).forEach(function(x){var k=String(x||'').trim();if(k&&!s[k.toLowerCase()]){s[k.toLowerCase()]=1;o.push(k)}});return o};
+      var union=unionSmart;   // #683
       if(p.skills&&p.skills.length){var sk=union(c.skills,p.skills.filter(function(s){return !/\b(school|university|college|institute)\b/i.test(s)}));if(sk.length>(c.skills||[]).length){up.skills=sk;changed.push('skills +'+(sk.length-(c.skills||[]).length))}}
       if(p.certifications&&p.certifications.length){var ce=union(c.certifications,p.certifications.map(function(x){return x.name||x}));if(ce.length>(c.certifications||[]).length){up.certifications=ce;changed.push('certs +'+(ce.length-(c.certifications||[]).length))}}
       if(!c.summary&&(p.summary||p.about)){up.summary=(p.summary||p.about).slice(0,2500);changed.push('summary')}
@@ -6876,6 +6887,7 @@ async function runMatch(page,navOnly,force){
   if(page===0&&!navOnly)_matchRenderSig='';   // #464: fresh open must render even if results are identical
   matchState._navOnly=!!navOnly;   // #456: pure navigation — never score
   if(page===0)mjResetScoredFeed();   // #432: fresh run clears the live feed
+  if(!force&&!navOnly){matchState._lastEval=0;matchState._noProg=0;matchState._stop=false}   // #684
   var st=document.getElementById('matchStatus');
   st.textContent='⏳ Scoring cached consultant profiles...';
   if(force){var ci0=document.getElementById('cacheInfo');if(ci0)ci0.innerHTML='<span style="color:#6C3FBF;font-weight:600">⏳ Scoring more… target '+(matchState.evalCap||50)+' evaluated</span>';}   // #595c
@@ -6905,14 +6917,31 @@ async function runMatch(page,navOnly,force){
     // budget remains. Once the page is full we stop — the user drives further scoring via
     // Next / "Score more" / Fetch More, so we never grind the whole cache unprompted.
     if(d.moreToScore){
+      // #684: progress guard — if two consecutive passes did not raise the evaluated count, stop the auto-continue
+      var evNow=d.evaluated||0;
+      if(evNow<=(matchState._lastEval||0)){matchState._noProg=(matchState._noProg||0)+1}else{matchState._noProg=0}
+      matchState._lastEval=evNow;
+      if(matchState._noProg>=2||matchState._stop){
+        matchState.force=false;matchState._stop=false;matchState._noProg=0;
+        renderMatches(d);
+        st.innerHTML=(matchState._stop?'⏹ Stopped.':'⚠️ Scoring stopped — the last two passes made no progress ('+evNow+' of '+(d.cachedCount||0)+' evaluated, '+(d.totalMatches||0)+' matches ≥60%).')+' <button onclick="matchState._noProg=0;scoreMoreCached()" style="padding:.1rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Try again</button>';
+        var ciS=document.getElementById('cacheInfo');if(ciS)ciS.textContent='Evaluated '+evNow+' of '+(d.cachedCount||0)+' cached profiles — '+(d.totalMatches||0)+' matches ≥60%.';
+        return;
+      }
       mjPushScoredFeed(d.justScored);
       st.innerHTML='⏳ Scoring cached profiles... ('+(d.totalMatches||0)+' matches so far)'+mjScoredFeedHtml();
-      var ciP=document.getElementById('cacheInfo');if(ciP)ciP.innerHTML='<span style="color:#6C3FBF;font-weight:600">⏳ Evaluated '+(d.evaluated||0)+' of '+(d.cachedCount||0)+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60% — scoring continues'+(force?' (target '+(matchState.evalCap||50)+')':'')+'…</span>';   // #595c
+      var ciP=document.getElementById('cacheInfo');if(ciP)ciP.innerHTML='<button onclick="matchState._stop=true" title="Stop after the current pass" style="padding:0 .4rem;margin-right:.3rem;background:#fff;color:#B91C1C;border:1px solid #FCA5A5;border-radius:3px;font-size:.55rem;cursor:pointer;font-weight:600">■ Stop</button><span style="color:#6C3FBF;font-weight:600">⏳ Evaluated '+(d.evaluated||0)+' of '+(d.cachedCount||0)+' — '+(d.totalMatches||0)+' match'+((d.totalMatches||0)===1?'':'es')+' ≥60% — scoring continues'+(force?' (target '+(matchState.evalCap||50)+')':'')+'…</span>';   // #595c
       if(d.matches&&d.matches.length)renderMatches(d);
       setTimeout(function(){runMatch(page,false,force)},400);
       return;
     }
     matchState.force=false;   // #595c: run finished (cap reached, nothing left, page filled without force)
+    if(d.stalled){   // #684: server attempted a batch and got nothing back — say so and offer a retry
+      renderMatches(d);
+      st.innerHTML='⚠️ The last scoring pass returned no usable scores for '+(d.attempted||0)+' profile'+((d.attempted||0)===1?'':'s')+' — stopped to avoid looping. <button onclick="scoreMoreCached()" style="padding:.1rem .5rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer">Try again</button>';
+      var ciX=document.getElementById('cacheInfo');if(ciX)ciX.textContent='Evaluated '+(d.evaluated||0)+' of '+(d.cachedCount||0)+' cached profiles — '+(d.totalMatches||0)+' matches ≥60%.';
+      return;
+    }
     if((!d.matches||!d.matches.length)&&d.needsTopUp){
       // #597: auto top-up ONCE per popup open. Fetch → no usable match → fetch again looped forever when
       // LinkedIn kept returning profiles that failed the strict From:<country> filter or scored <60.

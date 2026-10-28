@@ -449,8 +449,13 @@ exports.handler = async function (event) {
     if (action === 'updateConsultant') {
       var upd = body.updates || {};
       // normalize array fields if sent as strings
-      ['skills', 'certifications'].forEach(function (f) {
+      ['skills', 'certifications', 'compliance'].forEach(function (f) {
         if (typeof upd[f] === 'string') upd[f] = upd[f].split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        if (Array.isArray(upd[f])) {   // #683: never store case/punctuation variants of the same entry twice
+          var seen = {}, outA = [];
+          upd[f].forEach(function (x) { var v = String(x || '').trim(); var k = v.toLowerCase().replace(/[^a-z0-9+#]+/g, ' ').trim(); if (v && !seen[k]) { seen[k] = 1; outA.push(v); } });
+          upd[f] = outA;
+        }
       });
       upd.updatedAt = new Date(); upd.updatedBy = authUser.email;
       await col.updateOne({ _id: new ObjectId(body.id) }, { $set: upd });

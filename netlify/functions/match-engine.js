@@ -1242,9 +1242,10 @@ exports.handler = async function (event) {
       } else if (toScore.length) {
         // Only score up to what the cap allows, and never more than SCORE_CAP per request.
         var roomLeft = EVAL_CAP - evaluated;
-        var budget = Math.min(SCORE_CAP, roomLeft);
+        var budget = Math.max(0, Math.min(SCORE_CAP, roomLeft));
         if (toScore.length > budget) { moreToScore = true; toScore = toScore.slice(0, budget); }
       }
+      var attempted = toScore.length;   // #684: how many we tried to score in THIS pass
 
       if (typeof mcDbg !== 'undefined') { mcDbg.evalCap = EVAL_CAP; mcDbg.toScoreLen = toScore.length; }
       if (toScore.length) {
@@ -1316,7 +1317,12 @@ exports.handler = async function (event) {
       var pageIsFull = all.length >= (page + 1) * PAGE_SIZE;
       var unscoredLeft = cached.length - (preScored.length + newlyScored.length);
       var budgetUsed = (preScored.length + newlyScored.length) >= EVAL_CAP;
-      var keepScoring = moreToScore && (!pageIsFull || !!body.forceScore) && !budgetUsed && !scoreError;   // #595c: Score-more runs to its cap
+      // #684: a pass that attempted profiles but persisted none (model returned nothing usable for the whole batch,
+      // or every result was dropped) must NOT ask the client to continue — the next pass would try the same
+      // profiles and loop forever. Report it as stalled instead; the user can retry explicitly.
+      var stalled = attempted > 0 && newlyScored.length === 0 && !scoreError;
+      if (stalled) moreToScore = false;
+      var keepScoring = moreToScore && (!pageIsFull || !!body.forceScore) && !budgetUsed && !scoreError && !stalled;   // #595c: Score-more runs to its cap
       var canScoreMore = (unscoredLeft > 0) && !keepScoring;
 
       return {
@@ -1344,6 +1350,7 @@ exports.handler = async function (event) {
           evaluated: preScored.length + newlyScored.length, scoreError: (typeof scoreError !== 'undefined' ? scoreError : null), poolDebug: (typeof mcDbg!=="undefined"?(mcDbg.newScored=newlyScored.length,mcDbg.skippedCached=preScored.length,mcDbg):null),
           unscoredLeft: unscoredLeft > 0 ? unscoredLeft : 0,
           moreToScore: keepScoring,          // frontend auto-continues ONLY on this
+          stalled: stalled, attempted: attempted,   // #684
           canScoreMore: canScoreMore,        // offer a manual "score more" instead
           needsTopUp: all.length < PAGE_SIZE && !keepScoring && !canScoreMore
         })
