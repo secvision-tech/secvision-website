@@ -2181,7 +2181,7 @@ async function saveProfilePdf(){
   kv('Consultant',[
     ['Consultant ID',String(c._id||'')],['Current role',val(enRole(c))],['Company',val(c.currentCompany)],['Location',val(enLoc(c))],['Country',val(c.country)],
     ['Experience',c.yearsExperience?c.yearsExperience+' yrs':'—'],['Engagement type',val(c.engagementType||(c.contractorSignal&&c.contractorSignal.likely?'Contractor (likely)':''))],
-    ['Availability',val(c.availability)],['Work mode',(c.workModePref==='remote-only'?'Remote only'+(c.workModePrefUntil?' until '+fmtDate(c.workModePrefUntil):'')+(c.workModeNote?' — '+esc(c.workModeNote):''):'Any')],['Pipeline',val(PIPELINE_LABELS[c.pipelineStatus]||c.pipelineStatus)],['Rate expectation',val(c.rateExpectation)],['Work authorisation',val(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')],
+    ['Availability',val(c.availability)],['Work mode',(c.workModePref==='remote-only'?'Remote only'+(c.workModeNote?' — '+esc(c.workModeNote):''):'Any')],['Pipeline',val(PIPELINE_LABELS[c.pipelineStatus]||c.pipelineStatus)],['Rate expectation',val(c.rateExpectation)],['Work authorisation',val(c.workAuthorization&&c.workAuthorization!=='unknown'?c.workAuthorization:'')],
     ['Email',val(c.email)],['Phone',val(c.phone)],['LinkedIn',val(c.linkedinUrl)],['Source',val(c.source)]
   ]);
   kv('Capabilities',[['Skills',val(c.skills)],['Certifications',val(c.certifications)],['Compliance / frameworks',val(c.compliance)],['Languages',val(c.languages)]]);
@@ -4545,7 +4545,7 @@ function fmtDate(date){return formatDateWithSettings(date)}
 loadSettings();
 
 var scopeDialogHtml='<div id="scopeDialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1100;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:95%;max-width:480px;max-height:85vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div id="scopeDialogBody"></div></div></div>';
-var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchActions" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap"><button id="fetchMoreBtn" onclick="matchState._autoTopUps=1;topUpProfiles()" style="padding:.3rem .7rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button><select id="fetchCountry" title="Where to source consultants from" style="font-size:.58rem;padding:.25rem .3rem;border:1px solid #C4B5FD;border-radius:4px;color:var(--pri)"><option value="">From: job&#39;s country (all, priority order)</option><option value="India">From: India only</option><option value="United States">From: United States only</option><option value="United Kingdom">From: United Kingdom only</option><option value="Canada">From: Canada only</option></select><span id="cacheInfo" style="font-size:.56rem;color:var(--g5)"></span></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
+var matchPopupHtml='<div id="matchPopup" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,40,.85);z-index:1150;justify-content:center;align-items:center"><div style="background:#fff;border-radius:8px;width:96%;max-width:720px;max-height:88vh;overflow-y:auto;padding:1.2rem;box-shadow:0 8px 30px rgba(0,0,0,.5)"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem"><h3 style="margin:0;font-size:.85rem;color:var(--pri)" id="matchTitle">🎯 Match Profiles</h3><button onclick="closeMatchPopup()" style="background:none;border:none;font-size:1.2rem;cursor:pointer;color:var(--g5)">✕</button></div><div id="matchSub" style="font-size:.62rem;color:var(--g5);margin-bottom:.6rem"></div><div id="matchActions" style="display:flex;gap:.4rem;align-items:center;margin-bottom:.6rem;flex-wrap:wrap"><button id="fetchMoreBtn" onclick="matchState._autoTopUps=1;topUpProfiles()" style="padding:.3rem .7rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.62rem;cursor:pointer;font-weight:600">🔍 Fetch More from LinkedIn</button><select id="fetchCountry" title="Where to source consultants from" style="font-size:.58rem;padding:.25rem .3rem;border:1px solid #C4B5FD;border-radius:4px;color:var(--pri)"><option value="">From: job&#39;s country</option></select><span id="cacheInfo" style="font-size:.56rem;color:var(--g5)"></span></div><div id="matchStatus" style="font-size:.65rem;color:var(--pri);margin-bottom:.6rem"></div><div id="matchResults"></div><div id="matchPager" style="display:none;justify-content:space-between;align-items:center;margin-top:.8rem;border-top:1px solid #e5e7eb;padding-top:.6rem"><button onclick="matchPrevPage()" id="matchPrevBtn" style="padding:.3rem .8rem;background:var(--g2);color:var(--g5);border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">‹ Prev</button><span id="matchPageInfo" style="font-size:.6rem;color:var(--g5)"></span><button onclick="matchNextPage()" id="matchNextBtn" style="padding:.3rem .8rem;background:#6C3FBF;color:#fff;border:none;border-radius:4px;font-size:.65rem;cursor:pointer;font-weight:600">Next 10 ›</button></div></div></div>';
 document.addEventListener("DOMContentLoaded",function(){document.body.insertAdjacentHTML("beforeend",contactPopupHtml);document.body.insertAdjacentHTML("beforeend",scopeDialogHtml);document.body.insertAdjacentHTML("beforeend",matchPopupHtml)});
 
 var cfCompany='',cfDomain='',cfLinkedin='';
@@ -5584,9 +5584,8 @@ function renderManageProfile(){
     h+='<div><label style="font-size:.68rem;color:var(--g4)">Expected Rate</label><input id="mpRate" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.rateExpectation||'')+'" placeholder="$85/hr, £450/day"></div>';
     h+='</div>';
     // #685: work-mode constraint (dated) — hard gate for on-site / hybrid roles in matching
-    h+='<div style="display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:.62rem;margin-top:.4rem">';
+    h+='<div style="display:grid;grid-template-columns:1fr 1.6fr;gap:.62rem;margin-top:.4rem">';
     h+='<div><label style="font-size:.68rem;color:var(--g4)">Work mode</label><select id="mpWmPref" class="set-input" style="width:100%;font-size:.76rem"><option value="any"'+((c.workModePref||'any')==='any'?' selected':'')+'>Any (remote / hybrid / on-site)</option><option value="remote-only"'+(c.workModePref==='remote-only'?' selected':'')+'>Remote only</option></select></div>';
-    h+='<div><label style="font-size:.68rem;color:var(--g4)">Remote-only until (blank = open-ended)</label><input type="date" id="mpWmUntil" class="set-input" style="width:100%;font-size:.76rem" value="'+(c.workModePrefUntil?new Date(c.workModePrefUntil).toISOString().slice(0,10):'')+'"></div>';
     h+='<div><label style="font-size:.68rem;color:var(--g4)">Work-mode note</label><input id="mpWmNote" class="set-input" style="width:100%;font-size:.76rem" value="'+esc(c.workModeNote||'')+'" placeholder="e.g. on-site not possible until Dec 2027"></div>';
     h+='</div>';
     h+='<div style="margin-top:.4rem"><label style="font-size:.68rem;color:var(--g4)">Pipeline Stage</label><select id="mpPipeline" class="set-input" style="width:100%;font-size:.76rem">'
@@ -5739,7 +5738,7 @@ async function saveProfileStatus(){
       workAuthorization:document.getElementById('mpWorkAuth')?document.getElementById('mpWorkAuth').value.trim():undefined,
       securityClearance:document.getElementById('mpClearance')?document.getElementById('mpClearance').value.trim():undefined,
       rateExpectation:document.getElementById('mpRate')?document.getElementById('mpRate').value.trim():undefined,
-      workModePref:document.getElementById('mpWmPref')?document.getElementById('mpWmPref').value:undefined,workModePrefUntil:document.getElementById('mpWmUntil')?(document.getElementById('mpWmUntil').value||null):undefined,workModeNote:document.getElementById('mpWmNote')?document.getElementById('mpWmNote').value.trim():undefined})});   // #685
+      workModePref:document.getElementById('mpWmPref')?document.getElementById('mpWmPref').value:undefined,workModePrefUntil:null,workModeNote:document.getElementById('mpWmNote')?document.getElementById('mpWmNote').value.trim():undefined})});   // #685
     var r=await authFetch('/.netlify/functions/consultants',{method:'POST',body:JSON.stringify(body)});
     var d=await r.json();
     if(d.error==='placed_frozen'){mpMsg('🔒 '+d.message,'#DC2626');return}
@@ -6361,7 +6360,10 @@ async function contactClient(){
   var miss=[];
   var isUS=/united states|usa/i.test((j.detectedCountry||j.country||''));
   if(!has(j.salary)&&!has(j.rate))miss.push('the offered rate (per hour, currency'+(isUS?', and C2C/W2 basis':'')+')');
-  if(!/remote|yes/i.test(String(j.remote||'')+' '+String(j.workType||'')))miss.push('whether fully remote delivery from India is acceptable');
+  var wmT=String(j.workMode||'').toLowerCase(),rmT=String(j.remote||'')+' '+String(j.workType||'');   // #686: never pitch India-remote against an explicit hybrid/on-site posting
+  if(wmT==='hybrid'||wmT==='onsite'||/^(no|false)\b|on-?site|hybrid/i.test(rmT)){if(!/\b\d\s*days?\b|per week|a week/i.test(j.description||''))miss.push('the expected on-site days per week at '+(j.location||'the client location'))}
+  else if(wmT==='remote'||/remote|yes/i.test(rmT))miss.push('confirmation that remote delivery from India (with agreed working-hours overlap) is acceptable');
+  else miss.push('whether the role is remote, hybrid or on-site');
   if(!/shift|edt|est|overlap|hours/i.test(j.description||''))miss.push('the expected working-hours overlap / shift timings');
   if(!has(j.contractDuration))miss.push('the contract duration and expected start date');
   var body='Hello,\n\nThank you for sharing the '+(j.title||'requirement')+' requirement. Our understanding:\n\n'
@@ -6852,10 +6854,15 @@ function mjScoredFeedHtml(){
   return '<div style="margin-top:.4rem;border:1px solid var(--g2);border-radius:5px;padding:.3rem .5rem;background:#fff">'
     +'<div style="font-size:.52rem;color:var(--g5);margin-bottom:.15rem">Recently evaluated:</div>'+rows+'</div>';
 }
+// #687: the From selector names the job's own country as its default and lists the sourcing countries after it
+function mjSetFetchCountry(j){var sel=document.getElementById('fetchCountry');if(!sel)return;var jc=(j&&(j.detectedCountry||j.country))||'';if(/^unknown$/i.test(jc))jc='';
+  var list=['India','United States','United Kingdom','Canada','Australia','Germany','Netherlands','Ireland','Singapore'];if(jc&&list.indexOf(jc)<0)list.unshift(jc);
+  sel.innerHTML='<option value="">From: '+esc(jc||'job\'s country')+(jc?' (job\'s country)':'')+'</option>'+list.map(function(c){return '<option value="'+esc(c)+'">From: '+esc(c)+' only</option>'}).join('');sel.value=''}
 async function openMatchProfiles(idx){
   var j=allJobs[idx];if(!j)return;
   matchState={jobId:j._id||j.jobId||'',jobTitle:j.title||j.titleClean||'',company:j.company||'',page:0,polling:false,evalCap:50,_autoTopUps:0};
   document.getElementById('matchPopup').style.display='flex';
+  mjSetFetchCountry(j);   // #687
   document.getElementById('matchTitle').textContent='🎯 Match Profiles';
   document.getElementById('matchSub').innerHTML='<strong>'+esc(matchState.jobTitle)+'</strong> at '+esc(matchState.company)+' &middot; consultants scoring ≥60% shown, best first';
   document.getElementById('matchResults').innerHTML='';
