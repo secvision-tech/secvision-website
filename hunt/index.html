@@ -2017,6 +2017,9 @@ async function _viewDetCore(i){
   ov.style.zIndex=mjFromConsultant?'1300':'';
   ov.classList.add('open');
   // load the saved candidates for this job
+  // #690: the candidate filter/page are per-popup, not global - a filter typed on another job must not
+  // silently hide this job's list (it showed "No matched candidates saved" with the filter box hidden)
+  if(jobCandidatesJobId!==(j._id||j.jobId||'')){window._candFilterVal='';window._candPage=1;}
   jobCandidatesJobId=j._id||j.jobId||'';
   loadJobActivity(jobCandidatesJobId);   // #436: assignment + comments (lazy, always fresh)
   _selectedCandidates={};  // #403: selections are per-job
@@ -7206,7 +7209,15 @@ async function loadJobCandidates(){
       +'<div style="font-size:.72rem;font-weight:700;color:var(--pri)">📋 Matched Candidates'+(list.length?' ('+list.length+')':'')+'</div>'
       +(mjFromConsultant?'':'<button onclick="loadJobCandidates()" title="Refresh matched candidates" style="padding:.25rem .6rem;background:var(--pri);color:#fff;border:none;border-radius:4px;font-size:.6rem;cursor:pointer;font-weight:600">🔄 Refresh</button>')
       +'</div>';
-    if(!list.length){wrap.innerHTML=header+'<div style="font-size:.62rem;color:var(--g4);padding:.4rem 0">No matched candidates saved for this job yet. Run <strong>Match Profiles</strong> to find some.</div></div>';_candidateNav=[];return}
+    if(!list.length){
+      _candidateNav=[];
+      var _rawN=(d.candidates||[]).length;
+      if(_rawN&&window._candFilterVal){   // #690: saved candidates exist, the filter hid them - say so and let the user clear it
+        wrap.innerHTML=header+'<div style="margin-bottom:.35rem"><input id="candFilterBox" placeholder="🔎 Filter candidates (name, role, location, type, pipeline)" value="'+esc(window._candFilterVal)+'" oninput="candFilterInput(this.value)" style="width:100%;max-width:380px;padding:.28rem .45rem;font-size:.66rem;border:1px solid var(--g100);border-radius:4px"></div>'
+          +'<div style="font-size:.62rem;color:var(--g4);padding:.4rem 0">None of the '+_rawN+' saved candidates match the filter "'+esc(window._candFilterVal)+'". <button onclick="window._candFilterVal=\'\';window._candPage=1;loadJobCandidates()" style="padding:.15rem .5rem;border:1px solid var(--g2);background:#fff;border-radius:4px;font-size:.58rem;cursor:pointer">Clear filter</button></div></div>';
+        return;
+      }
+      wrap.innerHTML=header+'<div style="font-size:.62rem;color:var(--g4);padding:.4rem 0">No matched candidates saved for this job yet. Run <strong>Match Profiles</strong> to find some.</div></div>';return}
     // #400: remember the on-screen order so the Manage popup can navigate prev/next
     _candidateNav=list.filter(function(c){return c._id}).map(function(c){return {_id:c._id,name:c.name}});
     var h=header
